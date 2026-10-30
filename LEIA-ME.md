@@ -32,8 +32,13 @@ Crie um repositório e envie **o conteúdo da pasta `loja-tech`** (com `package.
 | `JWT_SECRET` | um texto longo e aleatório (40+ caracteres) |
 | `ADMIN_SENHA` | a senha do administrador |
 | `ADMIN_USUARIO` | (opcional) padrão é `admin` |
+| `MERCADO_PAGO_ACCESS_TOKEN` | token privado de produção ou teste da aplicação Mercado Pago |
+| `MERCADO_PAGO_PUBLIC_KEY` | chave pública da mesma aplicação, usada pelo formulário seguro de cartão |
+| `MERCADO_PAGO_WEBHOOK_URL` | (recomendado) URL pública `https://seu-dominio/api/webhook/mercadopago` |
 
 No plano gratuito o Render "dorme" sem uso; o primeiro acesso depois disso demora alguns segundos (as páginas avisam enquanto carregam).
+
+Configure no painel Mercado Pago o webhook de pagamentos para apontar para `MERCADO_PAGO_WEBHOOK_URL`. O servidor consulta a API do Mercado Pago e confere o pedido e o valor antes de atualizar o status; a mesma verificação também é feita durante a consulta de status da página.
 
 ## 4. A dinâmica de comissões (o "patriarca")
 **O administrador é o topo da rede: não tem pai, e todo mundo está abaixo dele.**
@@ -52,7 +57,7 @@ Só existem **duas porcentagens**, que você define na loja: entre como administ
 - Só o patrocinador **direto** ganha os 15%. Avô, bisavô etc. não ganham nada. O filho não ganha nada sobre o pai.
 - Não existe uma porcentagem para a Central: ela fica com o que sobra. Em venda de afiliado que tem pai: 50% + 15% = 65% saem, **35% ficam com a Central**. Em venda de afiliado da 1ª geração (sem pai afiliado): 50% sai, **50% fica com a Central**. Venda sem afiliado: 100% da Central.
 - A soma das duas porcentagens não pode passar de 100%. Mudar uma taxa vale só para as vendas confirmadas dali em diante.
-- As comissões são gravadas **na hora em que você confirma o pagamento**, e os totais de cada afiliado são sempre somados dos pedidos pagos (estorno e cancelamento saem da conta sozinhos).
+- As comissões são gravadas **quando o Mercado Pago confirma a aprovação** (ou quando um pedido antigo/manual é confirmado pelo administrador), e os totais de cada afiliado são somados dos pedidos pagos.
 
 Exemplo (venda de R$ 49,99 pela Neyza, indicada pelo Roll): Neyza R$ 25,00 · Roll R$ 7,50 · Central R$ 17,49.
 
@@ -84,25 +89,24 @@ A primeira tela da loja tem o **login à esquerda** (usuário e senha, ou "Crie 
 
 ## 8. Como funciona a venda
 1. O cliente entra pelo link do afiliado, escolhe o produto e vai para o checkout.
-2. No checkout preenche nome, e-mail e CPF e clica em **Finalizar Pedido**. O servidor registra um pedido **aguardando pagamento** (preço sempre vindo do catálogo do servidor). **Nenhuma comissão é gerada aqui.**
-3. **Pix:** o cliente vê a chave Pix da Central e o valor. **Cartão e débito:** a Central envia o link de pagamento por e-mail (dados de cartão nunca são digitados nem guardados no site).
-4. Você confere o recebimento, abre o **Tech Payments** (`pagamento.html`), seção "Pedidos e Confirmação de Pagamento", e clica em **Confirmar pagamento**. Só nesse momento as comissões nascem.
-5. Envie a chave de acesso para o e-mail do cliente (e-mail e CPF aparecem no card do pedido).
+2. No checkout preenche nome, e-mail e CPF e escolhe a forma de pagamento. O servidor registra um pedido **aguardando pagamento** (preço sempre vindo do catálogo do servidor). **Nenhuma comissão é gerada aqui.**
+3. **Pix:** o Mercado Pago gera o QR Code e o código Copia e Cola na própria página. **Cartão e débito:** o formulário seguro do Mercado Pago tokeniza os dados no navegador; somente o token é enviado ao servidor, que cria a cobrança.
+4. A página consulta o status a cada cinco segundos. O webhook e a consulta de status confirmam a cobrança com o Mercado Pago; só uma cobrança aprovada marca o pedido como pago, gera comissões e libera o download automaticamente.
 
-Outros botões: **Cancelar** (pedido aguardando, sem comissão) e **Estornar** (pedido pago, remove as comissões).
+O **Tech Payments** (`pagamento.html`) continua permitindo cancelar pedidos sem pagamento e estornar pedidos pagos. Não use a confirmação manual para pedidos pagos pelo Mercado Pago.
 
 Proteções: o afiliado só ganha se existir; se o CPF ou e-mail do comprador for igual ao do afiliado (auto-indicação), a venda vira venda direta; confirmar o mesmo pedido duas vezes não duplica nada.
 
 ## 9. Primeiro uso e teste
-1. Entre como `admin` na loja, abra o Tech Payments e cadastre a **Chave Pix da Central** e o **WhatsApp do suporte**.
+1. Configure as chaves de acesso e pública do Mercado Pago no Render e o webhook na aplicação Mercado Pago.
 2. Em Gerência de Afiliados, confira as duas porcentagens (50 e 15).
 3. Teste ponta a ponta (janelas anônimas):
    1. **Roll:** abra `afiliado.html?cad=admin`, crie a conta `roll` (já entra como afiliado, 1ª geração).
    2. **Neyza:** abra o Link 2 do Roll (`afiliado.html?cad=roll`) e crie a conta `neyza` (2ª geração).
-   3. **Cliente:** abra o Link 1 da Neyza, compre um produto e finalize o checkout.
-   4. **Admin:** no Tech Payments, confirme o pedido. Na Área do Afiliado você vê as duas gerações; Neyza mostra 50%, Roll mostra 15% e a Central fica com o restante. O Roll vê só a Neyza.
+   3. **Cliente:** abra o Link 1 da Neyza, compre um produto e finalize o checkout pelo Pix ou cartão.
+   4. Faça um pagamento de teste e aguarde a aprovação no Mercado Pago; a página deve atualizar o status e liberar o produto automaticamente.
 
 ## Observações
 - Senhas são guardadas com hash (bcrypt); a senha do administrador fica só nas variáveis do Render. O cadastro exige senha de pelo menos 6 caracteres.
 - Os dados antigos do `localStorage` (inclusive o antigo banco do `afiliado.html`) não são migrados: refaça os cadastros no sistema novo.
-- A confirmação do pagamento é manual pelo administrador. O botão **Confirmar pagamento** é o ponto onde o Mercado Pago entra depois, para confirmar sozinho.
+- Use as credenciais de teste do Mercado Pago antes de trocar para as credenciais de produção.

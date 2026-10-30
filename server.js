@@ -162,7 +162,7 @@ async function iniciarBanco() {
   await q('ALTER TABLE contas ADD COLUMN IF NOT EXISTS trocar_senha boolean NOT NULL DEFAULT false');
   await q('ALTER TABLE contas ADD COLUMN IF NOT EXISTS temp_expira timestamptz');
   await q("ALTER TABLE afiliados ADD COLUMN IF NOT EXISTS telefone text NOT NULL DEFAULT ''");
-  // Pedido nasce 'aguardando' no checkout; só vira 'pago' (e gera comissão) quando o administrador confirma o recebimento
+  // Pedido nasce aguardando; o pagamento confirmado gera comissões e libera o produto.
   await q(`CREATE TABLE IF NOT EXISTS pedidos (
     id text PRIMARY KEY, afiliado_usuario text, produto_id text NOT NULL,
     valor numeric(12,2) NOT NULL DEFAULT 0, comissao numeric(12,2) NOT NULL DEFAULT 0,
@@ -183,6 +183,10 @@ async function iniciarBanco() {
   await q("ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS status_comissao_patrocinador text NOT NULL DEFAULT 'PENDENTE'");
   await q('ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS data_pagamento_comissao_patrocinador timestamptz');
   await q('ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS download_token text');
+  await q('ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS payment_id text');
+  await q("ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS payment_status text NOT NULL DEFAULT ''");
+  await q("ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS payment_qr_code text NOT NULL DEFAULT ''");
+  await q("ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS payment_qr_code_base64 text NOT NULL DEFAULT ''");
   await q(`CREATE TABLE IF NOT EXISTS config (chave text PRIMARY KEY, valor jsonb NOT NULL)`);
   await q(`CREATE TABLE IF NOT EXISTS vendas_aprovadas (
     payment_id text PRIMARY KEY,
@@ -213,6 +217,7 @@ app.use(express.json({ limit: '200kb' }));
 app.use(express.static(path.join(__dirname, 'public')));
 
 const tentativas = new Map();
+const consultasStatusCheckout = new Map();
 function limitarTentativas(req, res, next) {
   const agora = Date.now();
   let r = tentativas.get(req.ip);
@@ -220,6 +225,16 @@ function limitarTentativas(req, res, next) {
   r.n++;
   tentativas.set(req.ip, r);
   if (r.n > 40) return res.status(429).json({ erro: 'Muitas tentativas. Aguarde alguns minutos.' });
+  next();
+}
+
+function limitarConsultasStatusCheckout(req, res, next) {
+  const agora = Date.now();
+  let r = consultasStatusCheckout.get(req.ip);
+  if (!r || agora > r.ate) r = { n: 0, ate: agora + 15 * 60 * 1000 };
+  r.n++;
+  consultasStatusCheckout.set(req.ip, r);
+  if (r.n > 1000) return res.status(429).json({ erro: 'Muitas consultas de status. Aguarde alguns minutos.' });
   next();
 }
 
@@ -239,6 +254,9 @@ const soAdmin = (req, res, next) =>
   req.user.perfil === 'admin' ? next() : res.status(403).json({ erro: 'Acesso exclusivo do Administrador.' });
 
 app.get('/api/saude', (req, res) => res.json({ ok: true }));
+app.get('/api/pagamento/config', (req, res) => {
+  res.json({ publicKey: process.env.MERCADO_PAGO_PUBLIC_KEY || '' });
+});
 
 // ----- Cadastro / login -----
 app.post('/api/registrar', limitarTentativas, wrap(async (req, res) => {
@@ -430,6 +448,139 @@ app.post('/api/checkout', limitarTentativas, wrap(async (req, res) => {
   });
 }));
 
+async function consultarPagamentoMercadoPago(id) {
+  const accessToken = process.env.MERCADO_PAGO_ACCESS_TOKEN;
+  if (!accessToken) throw new Error('MERCADO_PAGO_ACCESS_TOKEN não está configurado.');
+  const resposta = await fetch(`https://api.mercadopago.com/v1/payments/${encodeURIComponent(id)}`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+    signal: AbortSignal.timeout(10000)
+  });
+  const dados = await resposta.json().catch(() => ({}));
+  return { ok: resposta.ok, statusCode: resposta.status, dados };
+}
+
+app.post('/api/checkout/:id/pagar', limitarTentativas, wrap(async (req, res) => {
+  const tokenPedido = txt(req.get('x-download-token'), 64);
+  const pedido = (await q('SELECT * FROM pedidos WHERE id = $1', [req.params.id])).rows[0];
+  if (!pedido || !/^[a-f0-9]{64}$/i.test(tokenPedido) || !pedido.download_token || !igual(tokenPedido, pedido.download_token)) {
+    return res.status(404).json({ erro: 'Pedido não encontrado.' });
+  }
+  if (pedido.status === 'pago') return res.status(409).json({ erro: 'Este pedido já foi pago.' });
+  if (pedido.status !== 'aguardando') return res.status(409).json({ erro: 'Este pedido não está disponível para pagamento.' });
+  if (!process.env.MERCADO_PAGO_ACCESS_TOKEN) {
+    return res.status(503).json({ erro: 'O pagamento está temporariamente indisponível. Tente novamente mais tarde.' });
+  }
+
+  if (pedido.payment_id && ['pending', 'in_process'].includes(pedido.payment_status)) {
+    return res.json({
+      pedidoId: pedido.id, produtoNome: pedido.produto_nome, valor: Number(pedido.valor),
+      forma: pedido.forma, paymentId: pedido.payment_id, status: pedido.payment_status,
+      qrCode: pedido.payment_qr_code, qrCodeBase64: pedido.payment_qr_code_base64
+    });
+  }
+
+  const metodo = pedido.forma;
+  const pagamento = {
+    transaction_amount: Number(pedido.valor),
+    description: pedido.produto_nome,
+    external_reference: pedido.id,
+    notification_url: process.env.MERCADO_PAGO_WEBHOOK_URL || undefined,
+    payer: {
+      email: pedido.cliente_email,
+      first_name: pedido.cliente_nome.split(/\s+/)[0],
+      identification: { type: 'CPF', number: soDigitos(pedido.cliente_cpf) }
+    }
+  };
+
+  if (metodo === 'pix') {
+    pagamento.payment_method_id = 'pix';
+  } else {
+    const formData = req.body && req.body.paymentData;
+    const cardToken = txt(formData && formData.token, 200);
+    const paymentMethodId = txt(formData && formData.payment_method_id, 60);
+    const issuerId = txt(formData && formData.issuer_id, 30);
+    const installments = Number(formData && formData.installments);
+    if (!cardToken || !/^[a-zA-Z0-9_-]+$/.test(cardToken)
+      || !/^[a-zA-Z0-9_-]+$/.test(paymentMethodId)
+      || !Number.isInteger(installments) || installments < 1 || installments > 12) {
+      return res.status(400).json({ erro: 'Os dados tokenizados do cartão são inválidos. Revise os dados e tente novamente.' });
+    }
+    pagamento.token = cardToken;
+    pagamento.payment_method_id = paymentMethodId;
+    pagamento.installments = installments;
+    if (issuerId) pagamento.issuer_id = issuerId;
+  }
+
+  const accessToken = process.env.MERCADO_PAGO_ACCESS_TOKEN;
+  let resposta;
+  try {
+    resposta = await fetch('https://api.mercadopago.com/v1/payments', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+        'X-Idempotency-Key': crypto.randomUUID()
+      },
+      body: JSON.stringify(pagamento),
+      signal: AbortSignal.timeout(15000)
+    });
+  } catch (erro) {
+    console.error('Falha ao conectar com o Mercado Pago:', erro.message);
+    return res.status(502).json({ erro: 'Não foi possível conectar ao processador de pagamentos. Tente novamente.' });
+  }
+
+  const dados = await resposta.json().catch(() => ({}));
+  if (!resposta.ok || !dados.id) {
+    console.error(`Mercado Pago recusou a criação do pagamento (HTTP ${resposta.status}).`);
+    const detalhe = txt(dados.message || dados.cause?.[0]?.description, 240);
+    return res.status(502).json({ erro: detalhe || 'O Mercado Pago não conseguiu processar o pagamento.' });
+  }
+
+  const qr = dados.point_of_interaction?.transaction_data || {};
+  await q(`UPDATE pedidos
+    SET payment_id = $2, payment_status = $3, payment_qr_code = $4, payment_qr_code_base64 = $5
+    WHERE id = $1`,
+  [pedido.id, String(dados.id), txt(dados.status, 40), txt(qr.qr_code, 3000), txt(qr.qr_code_base64, 100000)]);
+
+  res.json({
+    pedidoId: pedido.id, produtoNome: pedido.produto_nome, valor: Number(pedido.valor),
+    forma: pedido.forma, paymentId: String(dados.id), status: String(dados.status || ''),
+    statusDetail: String(dados.status_detail || ''), qrCode: qr.qr_code || '',
+    qrCodeBase64: qr.qr_code_base64 || '', ticketUrl: qr.ticket_url || ''
+  });
+}));
+
+async function sincronizarPagamentoMercadoPago(idPagamento, pagamentoRecebido) {
+  const consulta = pagamentoRecebido
+    ? { ok: true, dados: pagamentoRecebido }
+    : await consultarPagamentoMercadoPago(idPagamento);
+  if (!consulta.ok) {
+    console.error(`Erro ao consultar pagamento no Mercado Pago: HTTP ${consulta.statusCode}.`);
+    return null;
+  }
+  const pagamento = consulta.dados;
+  const pedidoId = txt(pagamento.external_reference, 64);
+  const pedido = (await q('SELECT * FROM pedidos WHERE id = $1 AND payment_id = $2', [pedidoId, String(pagamento.id)])).rows[0];
+  if (!pedido || String(pagamento.currency_id || '').toUpperCase() !== 'BRL'
+    || dinheiro(pagamento.transaction_amount) !== dinheiro(pedido.valor)) {
+    console.error(`Pagamento ${idPagamento} sem pedido correspondente ou com valor divergente.`);
+    return null;
+  }
+
+  const statusPagamento = String(pagamento.status || '').toLowerCase();
+  await q('UPDATE pedidos SET payment_status = $2 WHERE id = $1', [pedido.id, statusPagamento]);
+  if (statusPagamento === 'approved' && pedido.status === 'aguardando') {
+    await confirmarPedido(pedido.id);
+  } else if (['cancelled', 'refunded', 'charged_back'].includes(statusPagamento)) {
+    if (pedido.status === 'aguardando' && statusPagamento === 'cancelled') {
+      await q("UPDATE pedidos SET status = 'cancelado' WHERE id = $1 AND status = 'aguardando'", [pedido.id]);
+    } else if (pedido.status === 'pago') {
+      await q("UPDATE pedidos SET status = 'reembolsado' WHERE id = $1 AND status = 'pago'", [pedido.id]);
+    }
+  }
+  return { pedidoId: pedido.id, statusPagamento };
+}
+
 app.get('/api/checkout/:id/download', limitarTentativas, wrap(async (req, res) => {
   const token = txt(req.get('x-download-token'), 64);
   const pedido = (await q('SELECT produto_id, status, download_token FROM pedidos WHERE id = $1', [req.params.id])).rows[0];
@@ -445,6 +596,19 @@ app.get('/api/checkout/:id/download', limitarTentativas, wrap(async (req, res) =
     return res.status(404).json({ erro: 'Arquivo do produto não configurado.' });
   }
   res.json({ ok: true, url: arquivo });
+}));
+
+app.get('/api/checkout/:id/status', limitarConsultasStatusCheckout, wrap(async (req, res) => {
+  const token = txt(req.get('x-download-token'), 64);
+  let pedido = (await q('SELECT id, status, payment_id, payment_status, download_token FROM pedidos WHERE id = $1', [req.params.id])).rows[0];
+  if (!pedido || !/^[a-f0-9]{64}$/i.test(token) || !pedido.download_token || !igual(token, pedido.download_token)) {
+    return res.status(404).json({ erro: 'Pedido não encontrado.' });
+  }
+  if (pedido.payment_id && process.env.MERCADO_PAGO_ACCESS_TOKEN) {
+    await sincronizarPagamentoMercadoPago(pedido.payment_id);
+    pedido = (await q('SELECT id, status, payment_id, payment_status FROM pedidos WHERE id = $1', [req.params.id])).rows[0];
+  }
+  res.json({ pedidoId: pedido.id, status: pedido.status, paymentStatus: pedido.payment_status || '' });
 }));
 
 // 2) Administração dos pedidos
@@ -484,9 +648,9 @@ const responder = (res, r) => res.status(r.codigo).json(r.codigo === 200 ? { ok:
 //  - patrocinador DIRETO do vendedor, se for afiliado: taxaPatrocinador % do preço (15%)
 //    (avô, bisavô etc. não ganham; o patrocinado também não ganha sobre o próprio pai)
 //  - Central (administrador): TODO o resto da venda, em qualquer geração
-app.post('/api/pedidos/:id/confirmar', auth, soAdmin, wrap(async (req, res) => {
+async function confirmarPedido(id) {
   const taxas = await lerTaxas();
-  const r = await mudarPedido(req.params.id, 'aguardando', async (client, ped) => {
+  return mudarPedido(id, 'aguardando', async (client, ped) => {
     const valor = Number(ped.valor);
     let vendedor = 0, patrocinador = 0, patrocinadorUsuario = null;
 
@@ -515,6 +679,19 @@ app.post('/api/pedidos/:id/confirmar', auth, soAdmin, wrap(async (req, res) => {
       [ped.id, vendedor, patrocinadorUsuario, patrocinador, central]);
     return { comissao: vendedor, comissaoPatrocinador: patrocinador, comissaoCentral: central };
   });
+}
+
+app.post('/api/pedidos/:id/confirmar', auth, soAdmin, wrap(async (req, res) => {
+  const pedido = (await q('SELECT payment_id FROM pedidos WHERE id = $1', [req.params.id])).rows[0];
+  if (pedido && pedido.payment_id) {
+    await sincronizarPagamentoMercadoPago(pedido.payment_id);
+    const atualizado = (await q('SELECT status FROM pedidos WHERE id = $1', [req.params.id])).rows[0];
+    if (atualizado?.status !== 'pago') {
+      return res.status(409).json({ erro: 'Este pagamento ainda não foi aprovado pelo Mercado Pago.' });
+    }
+    return res.json({ ok: true, status: 'pago' });
+  }
+  const r = await confirmarPedido(req.params.id);
   responder(res, r);
 }));
 
@@ -767,6 +944,8 @@ app.post('/api/webhook/mercadopago', async (req, res) => {
 
     const dadosPagamento = await resposta.json();
     const status = String(dadosPagamento.status || '').toLowerCase();
+    const sincronizado = await sincronizarPagamentoMercadoPago(id, dadosPagamento);
+    if (!sincronizado) return responderOk();
     const cpf = txt(
       dadosPagamento.payer?.identification?.number
         || dadosPagamento.additional_info?.payer?.identification?.number
@@ -783,7 +962,7 @@ app.post('/api/webhook/mercadopago', async (req, res) => {
     ) || 'CMV Food Light';
 
     if (status === 'approved') {
-      if (!Number.isFinite(valor) || valor < 0) {
+      if (!Number.isFinite(valor) || valor <= 0) {
         console.error(`Pagamento ${id} aprovado, mas o valor retornado é inválido.`);
         return responderOk();
       }

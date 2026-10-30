@@ -6,6 +6,7 @@
     <title>Checkout - CMV Food Pro | Tech Software</title>
     <!-- Tailwind CSS CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://sdk.mercadopago.com/js/v2"></script>
     <!-- Font Awesome Icons -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <!-- Google Fonts Inter -->
@@ -123,39 +124,19 @@
                             <i class="fa-solid fa-bolt text-emerald-600"></i>
                             <span>Pagamento via Pix com Liberação após Confirmação</span>
                         </div>
-                        <p class="text-slate-600 leading-relaxed">A chave Pix da Central será exibida após clicar no botão final. Assim que o pagamento for confirmado, sua chave de acesso é liberada.</p>
+                        <p class="text-slate-600 leading-relaxed">O QR Code Pix e o código Copia e Cola serão gerados pelo Mercado Pago nesta tela. A liberação acontece após a confirmação.</p>
                     </div>
 
-                    <!-- CARTÃO DE CRÉDITO -->
+                    <!-- FORMULÁRIO SEGURO DE CARTÃO -->
                     <div id="boxPagtoCartao" class="hidden space-y-4 text-sm font-semibold text-slate-700">
-                        <div class="bg-amber-50 p-3 rounded-2xl border border-amber-200 text-xs font-medium text-amber-800 leading-relaxed">
-                            Por segurança, <strong>não digite dados do cartão neste site</strong>. Ao finalizar, a Central envia o link de pagamento no e-mail informado, com a condição de parcelamento escolhida abaixo.
-                        </div>
-                        <div>
-                            <label class="block mb-1 uppercase tracking-wider">Número do Cartão</label>
-                            <input type="text" disabled placeholder="Não utilizado neste site" class="w-full px-4 py-3.5 rounded-xl border border-slate-200 bg-slate-50 text-slate-400 outline-none cursor-not-allowed">
-                        </div>
-                        <div class="grid grid-cols-2 gap-3">
-                            <div>
-                                <label class="block mb-1 uppercase tracking-wider">Validade</label>
-                                <input type="text" disabled placeholder="MM/AA" class="w-full px-4 py-3.5 rounded-xl border border-slate-200 bg-slate-50 text-slate-400 outline-none cursor-not-allowed">
-                            </div>
-                            <div>
-                                <label class="block mb-1 uppercase tracking-wider">CVV</label>
-                                <input type="text" disabled placeholder="123" class="w-full px-4 py-3.5 rounded-xl border border-slate-200 bg-slate-50 text-slate-400 outline-none cursor-not-allowed">
-                            </div>
-                        </div>
-                        <div>
-                            <label class="block mb-1 uppercase tracking-wider text-orange-600 font-bold">Opções de Parcelamento</label>
-                            <select id="selectParcelas" onchange="atualizarCalculoParcelas()" class="w-full px-4 py-3.5 rounded-xl border border-orange-300 bg-orange-50/30 focus:border-orange-500 outline-none font-bold text-slate-900 text-sm">
-                                <!-- Preenchido dinamicamente via JS -->
-                            </select>
-                        </div>
+                        <p id="mensagemBrick" class="text-xs text-slate-600">Preencha os campos seguros do Mercado Pago. Os dados do cartão são tokenizados e não são enviados ao nosso servidor.</p>
+                        <div id="cardPaymentBrick_container"></div>
+                        <p id="erroBrick" class="text-sm text-red-600" role="status"></p>
                     </div>
 
                     <!-- DÉBITO -->
                     <div id="boxPagtoDebito" class="hidden space-y-3 bg-slate-50 p-4 rounded-2xl border border-slate-200 text-sm">
-                        <p class="text-slate-600 leading-relaxed">Pagamento à vista no débito: ao finalizar, a Central envia o link de pagamento no e-mail informado. Não digite dados do cartão neste site.</p>
+                        <p class="text-slate-600 leading-relaxed">Informe os dados no formulário seguro do Mercado Pago para pagar no débito.</p>
                     </div>
 
                     <!-- BOTÃO -->
@@ -233,16 +214,18 @@
             <p id="modalCondicao" class="text-xs text-slate-500 text-right -mt-2"></p>
 
             <div id="modalBoxPix" class="hidden space-y-2 bg-emerald-50/60 p-4 rounded-2xl border border-emerald-200">
-                <span class="text-[10px] uppercase font-bold text-emerald-700 block">Chave Pix da Central</span>
-                <strong id="modalPixChave" class="font-mono text-sm break-all text-slate-900 block"></strong>
+                <span class="text-[10px] uppercase font-bold text-emerald-700 block">QR Code Pix do Mercado Pago</span>
+                <img id="modalPixQr" alt="QR Code Pix para pagamento" class="mx-auto max-w-[220px] rounded bg-white p-2">
+                <label for="modalPixChave" class="text-[10px] uppercase font-bold text-emerald-700 block">Pix Copia e Cola</label>
+                <textarea id="modalPixChave" readonly rows="4" class="w-full rounded-lg border border-emerald-200 p-2 font-mono text-xs text-slate-900"></textarea>
                 <button type="button" id="btnCopiarPix" onclick="copiarPixModal()" class="py-2 px-4 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-bold transition">
-                    <i class="fa-solid fa-copy mr-1"></i> Copiar chave Pix
+                    <i class="fa-solid fa-copy mr-1"></i> Copiar código Pix
                 </button>
-                <p class="text-xs text-slate-600 leading-relaxed">Pague o valor acima exatamente como mostrado e informe o número do pedido, se o seu banco permitir uma mensagem.</p>
+                <p class="text-xs text-slate-600 leading-relaxed">Pague pelo aplicativo do seu banco. Não feche esta tela enquanto aguardamos a confirmação.</p>
             </div>
 
             <div id="modalBoxOutro" class="hidden bg-slate-50 p-4 rounded-2xl border border-slate-200 text-xs text-slate-600 leading-relaxed">
-                A Central enviará o link de pagamento para o e-mail informado. Fique de olho na caixa de entrada e no spam.
+                <span id="modalStatusPagamento">Aguardando confirmação do pagamento pelo Mercado Pago...</span>
             </div>
 
             <div id="downloadProdutoBox" class="hidden space-y-2 bg-orange-50 p-4 rounded-2xl border border-orange-200">
@@ -255,8 +238,10 @@
                 </a>
             </div>
 
-            <p class="text-xs text-slate-500 leading-relaxed">Assim que a Central confirmar o pagamento, sua chave de acesso será liberada e enviada para <strong id="modalEmail" class="text-slate-700"></strong>.</p>
+            <p id="statusPedido" class="text-xs text-slate-500 leading-relaxed">Aguardando pagamento...</p>
+            <p class="text-xs text-slate-500 leading-relaxed">O arquivo será liberado automaticamente após a confirmação do pagamento para <strong id="modalEmail" class="text-slate-700"></strong>.</p>
 
+            <button type="button" onclick="fecharModalPedido()" class="block w-full text-center py-3 text-xs font-extrabold uppercase tracking-wider text-slate-700 border border-slate-200 rounded-2xl hover:bg-slate-50 transition">Voltar ao checkout</button>
             <a href="index.html" class="block w-full text-center py-3.5 text-xs font-extrabold uppercase tracking-wider text-white gradient-orange rounded-2xl shadow-orange-glow hover:opacity-95 transition">Voltar à Loja</a>
         </div>
     </div>
@@ -275,7 +260,6 @@
 
         let precoBase = 79.99; // valor de reserva; o preço oficial vem do catálogo do servidor
         let formaPagtoAtual = 'pix';
-        let valorTotalFinal = precoBase;
         let afiliadoAtivoCodigo = "";
         let enviando = false;
         let pedidoDownloadAtual = null;
@@ -283,7 +267,6 @@
 
         window.addEventListener('DOMContentLoaded', async () => {
             gerenciarRastreioAfiliado();
-            popularParcelasCartao();
             atualizarResumoTela();
             await carregarPrecoDoCatalogo();
             restaurarPedidoDownload();
@@ -301,7 +284,6 @@
                 const txt = 'R$ ' + precoBase.toFixed(2).replace('.', ',');
                 document.getElementById('chk_precoItem').innerText = txt;
                 document.getElementById('chk_subtotal').innerText = txt;
-                popularParcelasCartao();
                 atualizarResumoTela();
             } catch (e) {
                 console.warn('Usando preço de reserva:', e.message);
@@ -337,28 +319,6 @@
             }
         }
 
-        function popularParcelasCartao() {
-            const select = document.getElementById('selectParcelas');
-            const selecionada = select.value;
-            select.innerHTML = '';
-
-            for (let i = 1; i <= 12; i++) {
-                let taxaJuros = 0;
-                if (i === 1) taxaJuros = 0.0249;
-                else if (i <= 6) taxaJuros = 0.0199 * i;
-                else taxaJuros = 0.0249 * i;
-
-                let valorComJuros = precoBase * (1 + taxaJuros);
-                let valorParcela = valorComJuros / i;
-
-                let textoLabel = `${i}x de R$ ${valorParcela.toFixed(2)} (com juros)`;
-                if (i === 1) textoLabel = `1x de R$ ${valorComJuros.toFixed(2)} à vista no cartão`;
-
-                select.innerHTML += `<option value="${i}" data-total="${valorComJuros.toFixed(2)}" data-parcela="${valorParcela.toFixed(2)}">${textoLabel}</option>`;
-            }
-            if (selecionada) select.value = selecionada;
-        }
-
         function setFormaPagto(tipo) {
             formaPagtoAtual = tipo;
 
@@ -378,86 +338,135 @@
                 document.getElementById('boxPagtoCartao').classList.remove('hidden');
             } else {
                 document.getElementById('btnTabDebito').className = "py-3.5 px-2 rounded-2xl border-2 border-orange-500 bg-orange-50/40 text-orange-600 font-extrabold text-sm flex flex-col items-center gap-1 transition";
+                document.getElementById('boxPagtoCartao').classList.remove('hidden');
                 document.getElementById('boxPagtoDebito').classList.remove('hidden');
             }
 
             atualizarResumoTela();
-        }
-
-        function atualizarCalculoParcelas() {
-            atualizarResumoTela();
+            const btnFinalizar = document.getElementById('btnFinalizar');
+            btnFinalizar.classList.toggle('hidden', tipo !== 'pix');
+            if (tipo !== 'pix') inicializarBrickCartao(tipo);
         }
 
         function atualizarResumoTela() {
             const infoTaxaEl = document.getElementById('infoTaxaCartao');
-            const jurosEl = document.getElementById('chk_juros');
             const totalEl = document.getElementById('chk_totalGeral');
             const resumoParcelaEl = document.getElementById('infoParcelamentoResumo');
 
-            if (formaPagtoAtual === 'cartao') {
-                const select = document.getElementById('selectParcelas');
-                const optSelecionada = select.options[select.selectedIndex];
-                if (optSelecionada) {
-                    valorTotalFinal = parseFloat(optSelecionada.getAttribute('data-total'));
-                    const valorParcela = optSelecionada.getAttribute('data-parcela');
-                    const qtdNum = select.value;
+            infoTaxaEl.classList.add('hidden');
+            totalEl.innerText = `R$ ${precoBase.toFixed(2)}`;
+            resumoParcelaEl.innerText = formaPagtoAtual === 'pix'
+                ? 'À vista via Pix'
+                : formaPagtoAtual === 'debito' ? 'Débito via Mercado Pago' : 'Cartão via Mercado Pago';
+        }
 
-                    const jurosCalculados = valorTotalFinal - precoBase;
-                    if (jurosCalculados > 0) {
-                        infoTaxaEl.classList.remove('hidden');
-                        jurosEl.innerText = `+ R$ ${jurosCalculados.toFixed(2)}`;
-                    } else {
-                        infoTaxaEl.classList.add('hidden');
-                    }
+        let publicKeyPagamento = '';
+        let brickController = null;
+        let formaBrickAtual = '';
+        let monitorStatusTimer = null;
+        let pixChaveAtual = '';
 
-                    totalEl.innerText = `R$ ${valorTotalFinal.toFixed(2)}`;
-                    resumoParcelaEl.innerText = `Parcelado em ${qtdNum}x de R$ ${parseFloat(valorParcela).toFixed(2)}`;
+        async function carregarConfigPagamento() {
+            const resp = await fetch(API_URL + '/api/pagamento/config');
+            const dados = await resp.json().catch(() => ({}));
+            if (!resp.ok || !dados.publicKey) throw new Error('O pagamento com cartão não está configurado. Tente novamente mais tarde.');
+            publicKeyPagamento = dados.publicKey;
+        }
+
+        async function inicializarBrickCartao(forma) {
+            const erro = document.getElementById('erroBrick');
+            erro.innerText = '';
+            try {
+                if (!window.MercadoPago) throw new Error('Não foi possível carregar o formulário seguro do Mercado Pago.');
+                if (!publicKeyPagamento) await carregarConfigPagamento();
+                if (brickController) {
+                    await brickController.unmount();
+                    brickController = null;
                 }
-            } else {
-                infoTaxaEl.classList.add('hidden');
-                valorTotalFinal = precoBase;
-                totalEl.innerText = `R$ ${precoBase.toFixed(2)}`;
-                resumoParcelaEl.innerText = formaPagtoAtual === 'pix' ? 'À vista via Pix' : 'À vista no Débito';
+                formaBrickAtual = forma;
+                const mp = new MercadoPago(publicKeyPagamento, { locale: 'pt-BR' });
+                const tipos = forma === 'debito' ? ['debit_card'] : ['credit_card', 'prepaid-card'];
+                brickController = await mp.bricks().create('cardPayment', 'cardPaymentBrick_container', {
+                    initialization: { amount: precoBase },
+                    customization: {
+                        paymentMethods: {
+                            maxInstallments: 12,
+                            minInstallments: 1,
+                            types: { included: tipos }
+                        }
+                    },
+                    callbacks: {
+                        onReady: () => {},
+                        onError: () => {
+                            erro.innerText = 'Não foi possível carregar o formulário de pagamento. Atualize a página e tente novamente.';
+                        },
+                        onSubmit: formData => processarPagamentoCartao(formData, formaBrickAtual)
+                    }
+                });
+            } catch (err) {
+                erro.innerText = err.message || 'Não foi possível inicializar o pagamento.';
             }
         }
 
-        // Registra o pedido no servidor. NÃO gera comissão: ela só nasce quando a Central confirma o pagamento.
-        async function processarCheckoutFinal() {
-            if (enviando) return;
-
+        function lerDadosCliente() {
             const nome = document.getElementById('chk_nome').value.trim();
             const email = document.getElementById('chk_email').value.trim();
             const cpf = document.getElementById('chk_cpf').value.trim();
-
-            if (!nome || !email || !cpf) {
-                alert("Por favor, preencha o Nome, E-mail e CPF obrigatório para gerar a chave de acesso.");
-                return;
+            if (!nome || !email || soDigitosLocal(cpf).length !== 11) {
+                throw new Error('Preencha seu nome, e-mail válido e CPF com 11 números.');
             }
+            return { nome, email, cpf };
+        }
 
+        function soDigitosLocal(valor) {
+            return String(valor || '').replace(/\D/g, '');
+        }
+
+        async function registrarPedido(cliente, forma) {
+            const resp = await fetch(API_URL + '/api/checkout', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    produtoId: PRODUTO_ID, nome: cliente.nome, email: cliente.email,
+                    cpf: cliente.cpf, forma, afiliado: afiliadoAtivoCodigo
+                })
+            });
+            const dados = await resp.json().catch(() => ({}));
+            if (!resp.ok) throw new Error(dados.erro || 'Não foi possível registrar o pedido.');
+            return dados;
+        }
+
+        async function enviarPagamento(pedido, paymentData) {
+            const resp = await fetch(`${API_URL}/api/checkout/${encodeURIComponent(pedido.pedidoId)}/pagar`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-Download-Token': pedido.downloadToken
+                },
+                body: JSON.stringify(paymentData ? { paymentData } : {})
+            });
+            const dados = await resp.json().catch(() => ({}));
+            if (!resp.ok) throw new Error(dados.erro || 'Não foi possível iniciar o pagamento.');
+            return { ...pedido, ...dados, downloadToken: pedido.downloadToken };
+        }
+
+        async function processarCheckoutFinal() {
+            if (enviando) return;
             const btn = document.getElementById('btnFinalizar');
             const btnTexto = document.getElementById('btnFinalizarTexto');
             enviando = true;
             btn.disabled = true;
-            btnTexto.innerText = 'Registrando pedido... (o servidor pode demorar alguns segundos)';
-
+            btnTexto.innerText = 'Conectando ao Mercado Pago...';
             try {
-                let resp;
-                try {
-                    resp = await fetch(API_URL + '/api/checkout', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ produtoId: PRODUTO_ID, nome, email, cpf, forma: formaPagtoAtual, afiliado: afiliadoAtivoCodigo })
-                    });
-                } catch (e) {
-                    throw new Error('Sem conexão com o servidor. Verifique sua internet e tente novamente.');
+                const cliente = lerDadosCliente();
+                const pedido = await registrarPedido(cliente, 'pix');
+                const pagamento = await enviarPagamento(pedido);
+                if (['rejected', 'cancelled'].includes(pagamento.status)) {
+                    throw new Error('O Mercado Pago não aprovou o pagamento. Revise os dados ou tente novamente.');
                 }
-                let dados = {};
-                try { dados = await resp.json(); } catch (e) {}
-                if (!resp.ok) throw new Error(dados.erro || 'Não foi possível registrar o pedido. Tente novamente.');
-
-                mostrarPedido(dados, email);
+                mostrarPedido(pagamento, cliente.email);
             } catch (err) {
-                alert(err.message);
+                alert(err.message || 'Não foi possível concluir o pagamento. Tente novamente.');
             } finally {
                 enviando = false;
                 btn.disabled = false;
@@ -465,7 +474,91 @@
             }
         }
 
-        let pixChaveAtual = '';
+        async function processarPagamentoCartao(formData, forma) {
+            if (enviando) throw new Error('Aguarde o processamento do pagamento.');
+            enviando = true;
+            const erro = document.getElementById('erroBrick');
+            erro.innerText = '';
+            try {
+                const cliente = lerDadosCliente();
+                const pedido = await registrarPedido(cliente, forma);
+                const pagamento = await enviarPagamento(pedido, formData);
+                if (['rejected', 'cancelled'].includes(pagamento.status)) {
+                    throw new Error('O Mercado Pago não aprovou o pagamento. Confira os dados ou tente outro cartão.');
+                }
+                mostrarPedido(pagamento, cliente.email);
+            } catch (err) {
+                erro.innerText = err.message || 'Não foi possível processar o pagamento.';
+                throw err;
+            } finally {
+                enviando = false;
+            }
+        }
+
+        function atualizarStatusModal(status, paymentStatus) {
+            const titulo = document.querySelector('#modalPedido h3');
+            const statusTexto = document.getElementById('statusPedido');
+            const modalStatus = document.getElementById('modalStatusPagamento');
+            if (status === 'pago') {
+                titulo.innerText = 'Pagamento aprovado!';
+                statusTexto.innerText = 'Pagamento confirmado pelo Mercado Pago. Seu arquivo já pode ser acessado.';
+                modalStatus.innerText = 'Pagamento aprovado.';
+                return true;
+            }
+            if (['cancelado', 'reembolsado'].includes(status)
+                || ['cancelled', 'refunded', 'charged_back'].includes(paymentStatus)) {
+                titulo.innerText = 'Pagamento cancelado';
+                statusTexto.innerText = 'Este pagamento foi cancelado ou estornado. Volte ao checkout para fazer uma nova compra.';
+                modalStatus.innerText = 'Pagamento cancelado ou estornado.';
+                return false;
+            }
+            titulo.innerText = 'Aguardando pagamento';
+            if (paymentStatus === 'rejected') {
+                statusTexto.innerText = 'O Mercado Pago recusou esta tentativa. Confira os dados ou escolha outra forma de pagamento.';
+                modalStatus.innerText = 'Pagamento não aprovado. Tente novamente com outro meio de pagamento.';
+            } else {
+                statusTexto.innerText = 'Aguardando confirmação do pagamento pelo Mercado Pago...';
+                modalStatus.innerText = 'Aguardando confirmação do pagamento pelo Mercado Pago...';
+            }
+            return false;
+        }
+
+        async function consultarStatusPedido() {
+            if (!pedidoDownloadAtual) return false;
+            const resp = await fetch(`${API_URL}/api/checkout/${encodeURIComponent(pedidoDownloadAtual.pedidoId)}/status`, {
+                headers: { 'X-Download-Token': pedidoDownloadAtual.downloadToken }
+            });
+            const dados = await resp.json().catch(() => ({}));
+            if (!resp.ok) throw new Error(dados.erro || 'Não foi possível consultar o status do pagamento.');
+            const aprovado = atualizarStatusModal(dados.status, dados.paymentStatus);
+            if (!aprovado && (['cancelado', 'reembolsado'].includes(dados.status)
+                || ['rejected', 'cancelled', 'refunded', 'charged_back'].includes(dados.paymentStatus))) {
+                if (monitorStatusTimer) clearInterval(monitorStatusTimer);
+                monitorStatusTimer = null;
+            }
+            if (aprovado) {
+                if (monitorStatusTimer) clearInterval(monitorStatusTimer);
+                monitorStatusTimer = null;
+                await verificarLiberacaoDownload();
+            }
+            return aprovado;
+        }
+
+        function monitorarStatusPedido() {
+            if (monitorStatusTimer) clearInterval(monitorStatusTimer);
+            monitorStatusTimer = setInterval(() => {
+                consultarStatusPedido().catch(err => {
+                    document.getElementById('statusPedido').innerText = err.message;
+                });
+            }, 5000);
+            consultarStatusPedido().catch(err => {
+                document.getElementById('statusPedido').innerText = err.message;
+            });
+        }
+
+        function fecharModalPedido() {
+            document.getElementById('modalPedido').classList.add('hidden');
+        }
 
         function mostrarPedido(r, email) {
             pedidoDownloadAtual = { pedidoId: r.pedidoId, downloadToken: r.downloadToken };
@@ -474,24 +567,23 @@
             document.getElementById('modalProdutoNome').innerText = r.produtoNome;
             document.getElementById('modalTotal').innerText = 'R$ ' + Number(r.valor).toFixed(2);
             document.getElementById('modalEmail').innerText = email;
-            document.getElementById('modalCondicao').innerText = r.forma === 'cartao' ? 'Condição escolhida: ' + document.getElementById('infoParcelamentoResumo').innerText : '';
-
+            document.getElementById('modalCondicao').innerText = r.forma === 'cartao' ? document.getElementById('infoParcelamentoResumo').innerText : '';
             document.getElementById('modalBoxPix').classList.add('hidden');
             document.getElementById('modalBoxOutro').classList.add('hidden');
             document.getElementById('downloadProdutoBox').classList.remove('hidden');
             document.getElementById('downloadProdutoStatus').innerText = 'O arquivo será liberado após a confirmação do pagamento.';
             document.getElementById('btnVerificarDownload').classList.remove('hidden');
             document.getElementById('linkDownloadProduto').classList.add('hidden');
-
-            if (r.forma === 'pix') {
-                pixChaveAtual = r.pixChave || '';
-                document.getElementById('modalPixChave').innerText = pixChaveAtual || 'A chave Pix ainda não foi cadastrada pela Central. Você receberá os dados de pagamento por e-mail.';
-                document.getElementById('btnCopiarPix').classList.toggle('hidden', !pixChaveAtual);
-                document.getElementById('modalBoxPix').classList.remove('hidden');
-            } else {
-                document.getElementById('modalBoxOutro').classList.remove('hidden');
-            }
+            document.getElementById('modalPixQr').src = r.qrCodeBase64 ? `data:image/png;base64,${r.qrCodeBase64}` : '';
+            document.getElementById('modalPixQr').classList.toggle('hidden', !r.qrCodeBase64);
+            pixChaveAtual = r.qrCode || r.pixChave || '';
+            document.getElementById('modalPixChave').value = pixChaveAtual;
+            document.getElementById('btnCopiarPix').classList.toggle('hidden', !pixChaveAtual);
+            if (r.forma === 'pix') document.getElementById('modalBoxPix').classList.remove('hidden');
+            else document.getElementById('modalBoxOutro').classList.remove('hidden');
             document.getElementById('modalPedido').classList.remove('hidden');
+            atualizarStatusModal(r.status === 'approved' ? 'pago' : '', r.status);
+            monitorarStatusPedido();
         }
 
         function restaurarPedidoDownload() {
