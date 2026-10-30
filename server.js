@@ -182,6 +182,7 @@ async function iniciarBanco() {
   await q('ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS data_pagamento_comissao_direta timestamptz');
   await q("ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS status_comissao_patrocinador text NOT NULL DEFAULT 'PENDENTE'");
   await q('ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS data_pagamento_comissao_patrocinador timestamptz');
+  await q('ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS download_token text');
   await q(`CREATE TABLE IF NOT EXISTS config (chave text PRIMARY KEY, valor jsonb NOT NULL)`);
 }
 
@@ -399,14 +400,32 @@ app.post('/api/checkout', limitarTentativas, wrap(async (req, res) => {
   }
 
   const pedidoId = crypto.randomBytes(8).toString('hex');
-  await q(`INSERT INTO pedidos (id, afiliado_usuario, produto_id, produto_nome, valor, forma, cliente_nome, cliente_email, cliente_cpf)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
-    [pedidoId, afiliadoValido ? afiliado : null, prod.id, prod.nome, Number(prod.precoPor), forma, nome, email, cpf]);
+  const downloadToken = crypto.randomBytes(32).toString('hex');
+  await q(`INSERT INTO pedidos (id, afiliado_usuario, produto_id, produto_nome, valor, forma, cliente_nome, cliente_email, cliente_cpf, download_token)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+    [pedidoId, afiliadoValido ? afiliado : null, prod.id, prod.nome, Number(prod.precoPor), forma, nome, email, cpf, downloadToken]);
 
   res.json({
     pedidoId, produtoNome: prod.nome, valor: Number(prod.precoPor), forma,
-    pixChave: String(await lerConfig('pixChave', '')), afiliadoValido
+    pixChave: String(await lerConfig('pixChave', '')), afiliadoValido, downloadToken
   });
+}));
+
+app.get('/api/checkout/:id/download', limitarTentativas, wrap(async (req, res) => {
+  const token = txt(req.get('x-download-token'), 64);
+  const pedido = (await q('SELECT produto_id, status, download_token FROM pedidos WHERE id = $1', [req.params.id])).rows[0];
+  if (!pedido || !/^[a-f0-9]{64}$/i.test(token) || !pedido.download_token || !igual(token, pedido.download_token)) {
+    return res.status(404).json({ erro: 'Pedido não encontrado.' });
+  }
+  if (pedido.status !== 'pago') return res.status(409).json({ erro: 'Pagamento ainda não confirmado.' });
+
+  const produtos = await lerConfig('produtos', PRODUTOS_INICIAIS);
+  const produto = produtos.find(p => norm(p.id) === norm(pedido.produto_id));
+  const arquivo = produto ? txt(produto.pdf, 1000) : '';
+  if (!arquivo || (!/^https?:\/\//i.test(arquivo) && (/^[a-z][a-z0-9+.-]*:/i.test(arquivo) || /^[/\\]{2}/.test(arquivo)))) {
+    return res.status(404).json({ erro: 'Arquivo do produto não configurado.' });
+  }
+  res.json({ ok: true, url: arquivo });
 }));
 
 // 2) Administração dos pedidos
@@ -498,6 +517,11 @@ app.post('/api/pedidos/:id/estornar', auth, soAdmin, wrap(async (req, res) => {
 
 // ----- Produtos e configuração -----
 app.get('/api/produtos', wrap(async (req, res) => {
+  const produtos = await lerConfig('produtos', PRODUTOS_INICIAIS);
+  res.json(produtos.map(({ pdf, ...produto }) => produto));
+}));
+
+app.get('/api/admin/produtos', auth, soAdmin, wrap(async (req, res) => {
   res.json(await lerConfig('produtos', PRODUTOS_INICIAIS));
 }));
 
@@ -508,9 +532,12 @@ app.put('/api/produtos', auth, soAdmin, wrap(async (req, res) => {
     id: txt(p.id, 40), nome: txt(p.nome, 120), desc: txt(p.desc, 500),
     custo: Number(p.custo) || 0, precoDe: Number(p.precoDe) || 0, precoPor: Number(p.precoPor) || 0,
     imagem: /^https?:\/\//.test(txt(p.imagem, 500)) ? txt(p.imagem, 500) : '',
-    video: txt(p.video, 500), pdf: txt(p.pdf, 500)
+    video: txt(p.video, 500), pdf: txt(p.pdf, 1000)
   }));
   if (limpa.some(p => !p.id || !p.nome)) return res.status(400).json({ erro: 'Todo produto precisa de id e nome.' });
+  if (limpa.some(p => p.pdf && !/^https?:\/\//i.test(p.pdf) && (/^[a-z][a-z0-9+.-]*:/i.test(p.pdf) || /^[/\\]{2}/.test(p.pdf)))) {
+    return res.status(400).json({ erro: 'O arquivo deve ser um link HTTP(S) ou um caminho relativo válido.' });
+  }
   await gravarConfig('produtos', limpa);
   res.json({ ok: true });
 }));
@@ -684,6 +711,59 @@ app.delete('/api/afiliados/:id', auth, soAdmin, wrap(async (req, res) => {
     client.release();
   }
 }));
+
+// Recebe notificações do Mercado Pago e confirma o estado consultando a API oficial.
+app.post('/api/webhook/mercadopago', async (req, res) => {
+  const responderOk = () => res.status(200).send('OK');
+  try {
+    const idPagamento = req.query.id || req.query['data.id'] || req.body?.data?.id || req.body?.id;
+    if (!idPagamento) {
+      console.warn('Notificação de Webhook recebida sem ID de pagamento.');
+      return responderOk();
+    }
+
+    const id = String(idPagamento);
+    if (!/^\d+$/.test(id)) {
+      console.warn('Notificação de Webhook recebida com ID de pagamento inválido.');
+      return responderOk();
+    }
+
+    const accessToken = process.env.MERCADO_PAGO_ACCESS_TOKEN;
+    if (!accessToken) {
+      console.error('MERCADO_PAGO_ACCESS_TOKEN não está configurado.');
+      return responderOk();
+    }
+
+    console.log(`Notificação de pagamento recebida para o ID: ${id}`);
+    const resposta = await fetch(`https://api.mercadopago.com/v1/payments/${encodeURIComponent(id)}`, {
+      method: 'GET',
+      headers: { Authorization: `Bearer ${accessToken}` }
+    });
+
+    if (!resposta.ok) {
+      console.error(`Erro ao consultar o pagamento ${id} na API do Mercado Pago: HTTP ${resposta.status}`);
+      return responderOk();
+    }
+
+    const dadosPagamento = await resposta.json();
+    if (dadosPagamento.status === 'approved') {
+      const emailCliente = dadosPagamento.payer?.email || 'não informado';
+      const valorPago = Number(dadosPagamento.transaction_amount);
+      const moeda = dadosPagamento.currency_id;
+      const valorFormatado = Number.isFinite(valorPago) && moeda === 'BRL'
+        ? new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(valorPago)
+        : `${dadosPagamento.transaction_amount ?? 'não informado'} ${moeda || 'moeda não informada'}`;
+
+      console.log(`Pagamento APROVADO para o ID: ${id}`);
+      console.log(`Comprador: ${emailCliente} | Valor: ${valorFormatado}`);
+    } else {
+      console.log(`Status do pagamento ${id}: ${dadosPagamento.status || 'não informado'}`);
+    }
+  } catch (erro) {
+    console.error('Erro no processamento do Webhook do Mercado Pago:', erro);
+  }
+  return responderOk();
+});
 
 app.use('/api', (req, res) => res.status(404).json({ erro: 'Rota não encontrada.' }));
 app.use((err, req, res, next) => {

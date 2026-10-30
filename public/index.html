@@ -392,6 +392,11 @@
                     <input type="file" id="p_imagem_file" accept="image/*" class="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl bg-slate-50">
                 </div>
 
+                <div>
+                    <label class="block mb-1 uppercase tracking-wider">Arquivo para Download (PDF ou instalador)</label>
+                    <input type="text" id="p_pdf" placeholder="Link HTTPS ou caminho relativo do arquivo" class="w-full px-4 py-3 rounded-xl border border-slate-200 outline-none">
+                </div>
+
                 <div class="pt-2 flex gap-2">
                     <button type="submit" id="btnSalvarProduto" class="flex-1 py-3.5 text-white gradient-orange rounded-xl font-bold uppercase tracking-wider shadow-orange-glow transition">Salvar Produto</button>
                     <button type="button" id="btnDeletarProduto" onclick="deletarProdutoAtual()" class="hidden px-4 py-3.5 text-red-600 bg-red-50 hover:bg-red-100 rounded-xl font-bold transition"><i class="fa-solid fa-trash-can"></i></button>
@@ -744,8 +749,14 @@
         function fecharModalLojista() { document.getElementById('modalLojista').classList.add('hidden'); }
         function fecharModalAfiliados() { document.getElementById('modalAfiliados').classList.add('hidden'); }
 
-        function solicitarSenhaGerencial() {
+        async function solicitarSenhaGerencial() {
             if (usuarioSessaoAtual && usuarioSessaoAtual.perfil === 'admin') {
+                try {
+                    produtos = await api('GET', '/api/admin/produtos');
+                } catch (err) {
+                    alert('Não foi possível carregar os produtos para edição: ' + err.message);
+                    return;
+                }
                 document.getElementById('modalLojista').classList.remove('hidden');
                 setModoLojista('criar');
             } else {
@@ -880,6 +891,7 @@
             document.getElementById('p_custo').value = p.custo;
             document.getElementById('p_preco_de').value = p.precoDe;
             document.getElementById('p_preco_por').value = p.precoPor;
+            document.getElementById('p_pdf').value = p.pdf || '';
         }
 
         async function salvarProdutosNoServidor() {
@@ -901,13 +913,14 @@
             const custo = parseFloat(document.getElementById('p_custo').value);
             const precoDe = parseFloat(document.getElementById('p_preco_de').value);
             const precoPor = parseFloat(document.getElementById('p_preco_por').value);
+            const pdf = document.getElementById('p_pdf').value.trim();
             let imgFinal = "https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=500&auto=format&fit=crop&q=60";
 
             if (editIdx >= 0) {
-                produtos[editIdx] = { ...produtos[editIdx], id, nome, desc, custo, precoDe, precoPor };
+                produtos[editIdx] = { ...produtos[editIdx], id, nome, desc, custo, precoDe, precoPor, pdf };
                 alert("Produto atualizado!");
             } else {
-                produtos.push({ id, nome, desc, custo, precoDe, precoPor, imagem: imgFinal });
+                produtos.push({ id, nome, desc, custo, precoDe, precoPor, imagem: imgFinal, pdf });
                 alert("Produto criado!");
             }
 

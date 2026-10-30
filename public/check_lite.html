@@ -245,6 +245,16 @@
                 A Central enviará o link de pagamento para o e-mail informado. Fique de olho na caixa de entrada e no spam.
             </div>
 
+            <div id="downloadProdutoBox" class="hidden space-y-2 bg-orange-50 p-4 rounded-2xl border border-orange-200">
+                <p id="downloadProdutoStatus" class="text-xs text-slate-700">O arquivo será liberado após a confirmação do pagamento.</p>
+                <button type="button" id="btnVerificarDownload" onclick="verificarLiberacaoDownload()" class="py-2 px-4 bg-orange-600 hover:bg-orange-700 text-white rounded-lg text-xs font-bold transition">
+                    <i class="fa-solid fa-rotate mr-1"></i> Verificar pagamento e liberar arquivo
+                </button>
+                <a id="linkDownloadProduto" class="hidden block py-2 px-4 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold text-center transition" target="_blank" rel="noopener noreferrer">
+                    <i class="fa-solid fa-download mr-1"></i> Acessar arquivo para download
+                </a>
+            </div>
+
             <p class="text-xs text-slate-500 leading-relaxed">Assim que a Central confirmar o pagamento, sua chave de acesso será liberada e enviada para <strong id="modalEmail" class="text-slate-700"></strong>.</p>
 
             <a href="index.html" class="block w-full text-center py-3.5 text-xs font-extrabold uppercase tracking-wider text-white gradient-orange rounded-2xl shadow-orange-glow hover:opacity-95 transition">Voltar à Loja</a>
@@ -268,12 +278,15 @@
         let valorTotalFinal = precoBase;
         let afiliadoAtivoCodigo = "";
         let enviando = false;
+        let pedidoDownloadAtual = null;
+        const CHAVE_PEDIDO_DOWNLOAD = `tech_pedido_download_${PRODUTO_ID}`;
 
         window.addEventListener('DOMContentLoaded', async () => {
             gerenciarRastreioAfiliado();
             popularParcelasCartao();
             atualizarResumoTela();
             await carregarPrecoDoCatalogo();
+            restaurarPedidoDownload();
         });
 
         // Usa o preço atual cadastrado na loja (se o administrador mudar o preço, o checkout acompanha)
@@ -455,6 +468,8 @@
         let pixChaveAtual = '';
 
         function mostrarPedido(r, email) {
+            pedidoDownloadAtual = { pedidoId: r.pedidoId, downloadToken: r.downloadToken };
+            localStorage.setItem(CHAVE_PEDIDO_DOWNLOAD, JSON.stringify({ pedido: r, email }));
             document.getElementById('modalPedidoId').innerText = r.pedidoId;
             document.getElementById('modalProdutoNome').innerText = r.produtoNome;
             document.getElementById('modalTotal').innerText = 'R$ ' + Number(r.valor).toFixed(2);
@@ -463,6 +478,10 @@
 
             document.getElementById('modalBoxPix').classList.add('hidden');
             document.getElementById('modalBoxOutro').classList.add('hidden');
+            document.getElementById('downloadProdutoBox').classList.remove('hidden');
+            document.getElementById('downloadProdutoStatus').innerText = 'O arquivo será liberado após a confirmação do pagamento.';
+            document.getElementById('btnVerificarDownload').classList.remove('hidden');
+            document.getElementById('linkDownloadProduto').classList.add('hidden');
 
             if (r.forma === 'pix') {
                 pixChaveAtual = r.pixChave || '';
@@ -473,6 +492,47 @@
                 document.getElementById('modalBoxOutro').classList.remove('hidden');
             }
             document.getElementById('modalPedido').classList.remove('hidden');
+        }
+
+        function restaurarPedidoDownload() {
+            try {
+                const salvo = JSON.parse(localStorage.getItem(CHAVE_PEDIDO_DOWNLOAD) || 'null');
+                if (salvo && salvo.pedido && salvo.pedido.pedidoId && salvo.pedido.downloadToken && salvo.email) {
+                    mostrarPedido(salvo.pedido, salvo.email);
+                }
+            } catch (err) {
+                localStorage.removeItem(CHAVE_PEDIDO_DOWNLOAD);
+            }
+        }
+
+        async function verificarLiberacaoDownload() {
+            if (!pedidoDownloadAtual) return;
+            const botao = document.getElementById('btnVerificarDownload');
+            const status = document.getElementById('downloadProdutoStatus');
+            botao.disabled = true;
+            status.innerText = 'Verificando o status do pagamento...';
+            try {
+                const resp = await fetch(`${API_URL}/api/checkout/${encodeURIComponent(pedidoDownloadAtual.pedidoId)}/download`, {
+                    headers: { 'X-Download-Token': pedidoDownloadAtual.downloadToken }
+                });
+                let dados = {};
+                try { dados = await resp.json(); } catch (err) {}
+                if (resp.status === 409) {
+                    status.innerText = 'Pagamento ainda não confirmado. Tente novamente após a confirmação pela Central.';
+                    return;
+                }
+                if (!resp.ok) throw new Error(dados.erro || 'Não foi possível liberar o arquivo.');
+
+                const link = document.getElementById('linkDownloadProduto');
+                link.href = dados.url;
+                link.classList.remove('hidden');
+                botao.classList.add('hidden');
+                status.innerText = 'Pagamento confirmado. O arquivo do produto está liberado.';
+            } catch (err) {
+                status.innerText = err.message;
+            } finally {
+                botao.disabled = false;
+            }
         }
 
         function copiarPixModal() {
