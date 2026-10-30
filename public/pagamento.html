@@ -1,0 +1,490 @@
+<!DOCTYPE html>
+<html lang="pt-BR" class="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Página de Pagamentos - Relatório Financeiro de Afiliados</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        tech: { orange: '#FF5722', darkOrange: '#E65100', lightOrange: '#FF9800', bg: '#F8FAFC', card: '#FFFFFF', border: '#E2E8F0' }
+                    },
+                    fontFamily: { sans: ['Inter', 'sans-serif'] }
+                }
+            }
+        }
+    </script>
+    <style>
+        .gradient-orange { background: linear-gradient(135deg, #FF5722 0%, #FF9800 100%); }
+        .shadow-orange-glow { box-shadow: 0 10px 25px -5px rgba(255, 87, 34, 0.3); }
+        .glass-header { background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(10px); }
+    </style>
+</head>
+<body class="bg-slate-100 text-slate-800 font-sans antialiased min-h-screen flex flex-col justify-between text-sm">
+
+    <header class="fixed top-0 left-0 w-full z-40 glass-header border-b border-slate-200">
+        <div class="max-w-7xl mx-auto px-4 h-20 flex items-center justify-between">
+            <div class="flex items-center gap-3">
+                <div class="w-11 h-11 rounded-2xl gradient-orange flex items-center justify-center text-white shadow-orange-glow">
+                    <i class="fa-solid fa-wallet text-lg"></i>
+                </div>
+                <div>
+                    <h1 class="font-extrabold text-lg tracking-wide text-slate-900">TECH PAYMENTS</h1>
+                    <p class="text-[11px] text-slate-500 font-semibold tracking-wider uppercase -mt-1">Portal de Comissões a Pagar</p>
+                </div>
+            </div>
+            <a href="index.html" class="px-4 py-2.5 text-xs font-bold uppercase tracking-wider text-slate-700 bg-slate-100 rounded-xl hover:bg-slate-200 transition">
+                <i class="fa-solid fa-arrow-left mr-1.5 text-orange-600"></i> Voltar à Loja
+            </a>
+        </div>
+    </header>
+
+    <main class="max-w-6xl mx-auto px-4 pt-28 pb-16 w-full flex-1 space-y-6">
+        
+        <div class="bg-white rounded-3xl p-6 sm:p-8 border border-slate-200 shadow-sm flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+            <div>
+                <span class="px-3 py-1 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-black uppercase tracking-widest border border-emerald-200 inline-block mb-2">
+                    Painel Gerencial Restrito
+                </span>
+                <h2 class="text-2xl sm:text-3xl font-black text-slate-900">Relatório de Pagamentos Pix</h2>
+                <p class="text-xs text-slate-500 mt-1">Consulte os saldos calculados automaticamente e gerencie os cadastros da rede unificada.</p>
+            </div>
+            <div class="bg-emerald-50 px-5 py-3.5 rounded-2xl border border-emerald-200 text-right">
+                <span class="text-[10px] text-emerald-700 block uppercase font-bold">Total Geral a Distribuir</span>
+                <span id="lblTotalGeralPagar" class="text-xl font-black text-emerald-800">R$ 0,00</span>
+            </div>
+        </div>
+
+        <div class="bg-white rounded-3xl p-6 sm:p-8 border border-slate-200 shadow-sm space-y-4">
+            <div class="flex justify-between items-center pb-3 border-b border-slate-100">
+                <h3 class="text-base font-black text-slate-900 flex items-center gap-2">
+                    <i class="fa-solid fa-hourglass-half text-orange-500"></i>
+                    <span>Pedidos e Confirmação de Pagamento</span>
+                </h3>
+                <span id="qtdPedidosAguardando" class="bg-orange-100 text-orange-700 font-bold text-xs px-3 py-1 rounded-lg">0 aguardando</span>
+            </div>
+
+            <div class="bg-slate-50 border border-slate-200 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-end gap-3">
+                <div class="flex-1">
+                    <label class="text-slate-500 block text-[10px] uppercase font-bold mb-1">Chave Pix da Central (exibida ao cliente no checkout)</label>
+                    <input type="text" id="pixChaveInput" placeholder="CPF, CNPJ, e-mail, telefone ou chave aleatória" class="w-full px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-xs font-mono outline-none focus:border-emerald-500">
+                </div>
+                <button onclick="salvarPixChave()" class="px-4 py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold transition">
+                    <i class="fa-solid fa-floppy-disk mr-1"></i> Salvar chave
+                </button>
+            </div>
+
+            <p class="text-xs text-slate-500">A comissão do afiliado só é gerada quando você clica em <strong>Confirmar pagamento</strong>, depois de conferir o recebimento do valor.</p>
+
+            <div id="pedidosContainer" class="space-y-3"></div>
+        </div>
+
+        <div class="bg-white rounded-3xl p-6 sm:p-8 border border-slate-200 shadow-sm space-y-4">
+            <div class="flex justify-between items-center pb-3 border-b border-slate-100">
+                <h3 class="text-base font-black text-slate-900 flex items-center gap-2">
+                    <i class="fa-solid fa-headset text-orange-500"></i>
+                    <span>Suporte: Contas e Senha Temporária</span>
+                </h3>
+            </div>
+
+            <div class="bg-slate-50 border border-slate-200 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-end gap-3">
+                <div class="flex-1">
+                    <label class="text-slate-500 block text-[10px] uppercase font-bold mb-1">WhatsApp do Suporte (com DDD, só números; aparece como botão na loja)</label>
+                    <input type="text" id="whatsappSuporteInput" placeholder="Ex: 11912345678" class="w-full px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-xs font-mono outline-none focus:border-emerald-500">
+                </div>
+                <button onclick="salvarWhatsappSuporte()" class="px-4 py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold transition">
+                    <i class="fa-solid fa-floppy-disk mr-1"></i> Salvar WhatsApp
+                </button>
+            </div>
+
+            <div class="bg-amber-50 border border-amber-200 rounded-2xl p-4 text-xs text-amber-900 leading-relaxed">
+                <strong>Antes de gerar uma senha:</strong> confirme a identidade de quem pediu (CPF, e-mail e telefone do cadastro) e envie a senha <strong>somente para o telefone cadastrado</strong>, nunca para um número novo informado na conversa. A senha vale 24 horas e o cliente é obrigado a trocá-la ao entrar.
+            </div>
+
+            <div class="flex gap-2">
+                <input type="text" id="buscaContaInput" onkeydown="if(event.key==='Enter') buscarContas()" placeholder="Buscar por nome, usuário, e-mail, CPF ou telefone" class="flex-1 px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-xs outline-none focus:border-orange-500">
+                <button onclick="buscarContas()" class="px-4 py-2.5 bg-orange-600 hover:bg-orange-700 text-white rounded-xl text-xs font-bold transition"><i class="fa-solid fa-magnifying-glass mr-1"></i> Buscar</button>
+            </div>
+
+            <div id="resultadoSenhaBox" class="hidden bg-emerald-50 border border-emerald-300 rounded-2xl p-4 space-y-2 text-xs"></div>
+
+            <div id="contasContainer" class="space-y-3"></div>
+        </div>
+
+        <div class="bg-white rounded-3xl p-6 sm:p-8 border border-slate-200 shadow-sm space-y-4">
+            <div class="flex justify-between items-center pb-3 border-b border-slate-100">
+                <h3 class="text-base font-black text-slate-900 flex items-center gap-2">
+                    <i class="fa-solid fa-users-rectangle text-emerald-600"></i>
+                    <span>Extrato de Comissões por Afiliado</span>
+                </h3>
+                <span id="qtdAfiliadosRelatorio" class="bg-slate-100 text-slate-700 font-bold text-xs px-3 py-1 rounded-lg">0 Afiliados Cadastrados</span>
+            </div>
+
+            <div id="relatorioPagamentosContainer" class="space-y-4"></div>
+        </div>
+
+    </main>
+
+    <footer class="bg-white border-t border-slate-200 py-6 text-center text-xs text-slate-500">
+        <p>&copy; 2026 Tech - Software de Gestão. Todos os direitos reservados.</p>
+    </footer>
+
+    <!-- SCRIPT DA SESSÃO DE PAGAMENTOS UNIFICADA -->
+    <script>
+        window.addEventListener('DOMContentLoaded', () => {
+            // Painel restrito: exige o login de Administrador feito na loja
+            if (!localStorage.getItem('tech_token')) {
+                alert('Acesso restrito. Entre como Administrador na loja.');
+                window.location.href = 'index.html';
+                return;
+            }
+            carregarRelatorioPagamentos();
+            carregarPedidos();
+            carregarConfigPix();
+            carregarConfigSuporte();
+            buscarContas();
+        });
+
+        function normalizarTexto(txt) {
+            return txt ? txt.toString().trim().toLowerCase() : '';
+        }
+
+
+        // ===== CONEXÃO COM O SERVIDOR (Render + banco Neon) =====
+        const API_URL = ''; // vazio = mesmo endereço do site (Render serve as páginas e a API juntas)
+        const CHAVE_INDICADOR = 'tech_afiliado_indicador';
+
+        function esc(t) {
+            return String(t == null ? '' : t).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+        }
+
+        async function api(metodo, caminho, corpo) {
+            const headers = { 'Content-Type': 'application/json' };
+            const token = localStorage.getItem('tech_token');
+            if (token) headers['Authorization'] = 'Bearer ' + token;
+            let resp;
+            try {
+                resp = await fetch(API_URL + caminho, { method: metodo, headers, body: corpo !== undefined ? JSON.stringify(corpo) : undefined });
+            } catch (e) {
+                throw new Error('Sem conexão com o servidor. Tente novamente em instantes.');
+            }
+            let dados = {};
+            try { dados = await resp.json(); } catch (e) {}
+            if (resp.status === 401 || resp.status === 403) {
+                alert(dados.erro || 'Acesso restrito. Entre como Administrador na loja.');
+                window.location.href = 'index.html';
+                throw new Error(dados.erro || 'Acesso restrito.');
+            }
+            if (!resp.ok) throw new Error(dados.erro || 'Erro inesperado no servidor.');
+            return dados;
+        }
+
+        // true se "filho" tem "pai" como patrocinador (casa por id OU por usuário)
+        function ehFilhoDe(filho, pai) {
+            const ref = normalizarTexto(filho.patrocinadorId);
+            if (!ref || ref === 'admin') return false;
+            return ref === normalizarTexto(pai.id) || ref === normalizarTexto(pai.usuario);
+        }
+
+        async function carregarRelatorioPagamentos() {
+            const container = document.getElementById('relatorioPagamentosContainer');
+            const lblTotalGeral = document.getElementById('lblTotalGeralPagar');
+            const badgeQtd = document.getElementById('qtdAfiliadosRelatorio');
+
+            // Fonte única de dados: banco Neon, via API (tabela afiliados)
+            let listaAfiliados = [];
+            try {
+                listaAfiliados = await api('GET', '/api/afiliados');
+            } catch (err) {
+                container.innerHTML = `<div class="text-center py-12 text-xs font-semibold text-red-600">${esc(err.message)}</div>`;
+                return;
+            }
+            badgeQtd.innerText = `${listaAfiliados.length} Afiliado(s) Cadastrado(s)`;
+
+            if (listaAfiliados.length === 0) {
+                container.innerHTML = `
+                    <div class="text-center py-12 bg-slate-50 rounded-2xl border border-dashed border-slate-200">
+                        <i class="fa-solid fa-wallet text-slate-300 text-4xl mb-3"></i>
+                        <p class="text-xs font-semibold text-slate-500">Nenhum afiliado registrado no banco de dados.</p>
+                    </div>
+                `;
+                lblTotalGeral.innerText = "R$ 0,00";
+                return;
+            }
+
+            container.innerHTML = '';
+            let somaTotalGeral = 0;
+
+            listaAfiliados.forEach(af => {
+                let paiInfo = "Nenhum (Indicação Direta da Central)";
+                const refPai = normalizarTexto(af.patrocinadorId);
+                if (refPai && refPai !== 'admin') {
+                    const pai = listaAfiliados.find(p => normalizarTexto(p.id) === refPai || normalizarTexto(p.usuario) === refPai);
+                    if (pai) {
+                        paiInfo = `Patrocinador (Pai): ${pai.nome} (@${pai.usuario})`;
+                    } else {
+                        paiInfo = `Patrocinador: @${af.patrocinadorId}`;
+                    }
+                }
+
+                // Sub-afiliados vinculados a este afiliado (ex: a Neyza vinculada ao Roll)
+                const meusFilhos = listaAfiliados.filter(f => ehFilhoDe(f, af));
+
+                const com = { direta: af.comissaoDireta, rede: af.comissaoRede, total: af.comissaoTotal };
+                const comissaoDireta = com.direta;
+                const comissaoRede = com.rede;
+                const totalAfiliado = com.total;
+                somaTotalGeral += totalAfiliado;
+
+                container.innerHTML += `
+                    <div class="bg-slate-50 border border-slate-200 rounded-2xl p-5 space-y-4">
+                        <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b border-slate-200 pb-3">
+                            <div>
+                                <span class="bg-emerald-100 text-emerald-800 font-black text-[10px] px-2.5 py-0.5 rounded-full uppercase">${esc(paiInfo)}</span>
+                                <h4 class="text-base font-black text-slate-900 mt-1">${esc(af.nome)} <span class="text-xs text-slate-400 font-normal">(@${esc(af.usuario)})</span></h4>
+                                <p class="text-xs text-slate-500 font-mono">ID: ${esc(af.id)} | CPF: ${esc(af.cpf || 'Não informado')} · Tel: ${esc(af.telefone || 'Não informado')}</p>
+                            </div>
+                            <div class="flex items-center gap-3 w-full sm:w-auto justify-between sm:justify-end">
+                                <div class="bg-emerald-600 text-white px-4 py-2.5 rounded-xl shadow-sm text-right">
+                                    <span class="text-[10px] uppercase block font-bold text-emerald-100">Total Pix a Pagar</span>
+                                    <span class="text-base font-black">R$ ${totalAfiliado.toFixed(2)}</span>
+                                </div>
+                                <button onclick="deletarAfiliado('${esc(af.id)}')" class="px-3.5 py-3 bg-red-50 hover:bg-red-100 text-red-600 rounded-xl text-xs font-bold transition" title="Excluir Afiliado">
+                                    <i class="fa-solid fa-trash-can"></i>
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+                            <div class="bg-white p-3 rounded-xl border border-slate-200 flex flex-col justify-between">
+                                <div>
+                                    <span class="text-slate-400 block text-[10px] uppercase font-bold">Chave Pix (CPF)</span>
+                                    <strong class="text-slate-900 font-mono text-sm">${esc(af.pix || af.cpf || 'Não informada')}</strong>
+                                </div>
+                                <button onclick="copiarChavePix('${esc(af.pix || af.cpf || '')}')" class="mt-2 py-1.5 px-3 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-[11px] font-bold transition text-center">
+                                    <i class="fa-solid fa-copy mr-1"></i> Copiar Chave Pix
+                                </button>
+                            </div>
+
+                            <div class="bg-white p-3 rounded-xl border border-slate-200 space-y-1">
+                                <span class="text-slate-400 block text-[10px] uppercase font-bold">Vendas Diretas</span>
+                                <div class="text-slate-800 font-semibold">${af.vendasDiretas || 0} venda(s)</div>
+                                <div class="text-orange-600 font-black text-sm">R$ ${comissaoDireta.toFixed(2)}</div>
+                            </div>
+
+                            <div class="bg-white p-3 rounded-xl border border-slate-200 space-y-1">
+                                <span class="text-slate-400 block text-[10px] uppercase font-bold">Comissão de Rede</span>
+                                <div class="text-emerald-700 font-semibold">${meusFilhos.length} sub-afiliado(s)</div>
+                                <div class="text-emerald-600 font-black text-sm">R$ ${comissaoRede.toFixed(2)}</div>
+                            </div>
+                        </div>
+
+                        <div class="bg-white p-3 rounded-xl border border-slate-200 text-xs space-y-2">
+                            <span class="text-slate-500 font-bold uppercase tracking-wider text-[10px] flex items-center gap-1">
+                                <i class="fa-solid fa-sitemap text-emerald-600"></i> Sub-afiliados vinculados a este parceiro:
+                            </span>
+                            <div class="flex flex-wrap gap-2">
+                                ${meusFilhos.length > 0 ? meusFilhos.map(f => `<span class="bg-slate-100 border border-slate-200 px-2.5 py-1 rounded-lg text-slate-700 font-medium">${esc(f.nome)} (@${esc(f.usuario)}) — ${f.vendasDiretas || 0} venda(s)</span>`).join('') : '<span class="text-slate-400 italic">Nenhum sub-afiliado cadastrado na rede deste parceiro.</span>'}
+                            </div>
+                        </div>
+                    </div>
+                `;
+            });
+
+            lblTotalGeral.innerText = `R$ ${(Math.round(somaTotalGeral * 100) / 100).toFixed(2)}`;
+        }
+
+        // ===== SUPORTE: busca de contas e senha temporária =====
+        async function carregarConfigSuporte() {
+            try {
+                const cfg = await api('GET', '/api/config');
+                document.getElementById('whatsappSuporteInput').value = cfg.whatsappSuporte || '';
+            } catch (err) { console.warn(err.message); }
+        }
+
+        async function salvarWhatsappSuporte() {
+            const numero = document.getElementById('whatsappSuporteInput').value.trim();
+            try {
+                await api('PUT', '/api/config', { whatsappSuporte: numero });
+                alert(numero ? 'WhatsApp do suporte salvo. O botão já aparece na loja.' : 'WhatsApp do suporte removido.');
+                carregarConfigSuporte();
+            } catch (err) { alert(err.message); }
+        }
+
+        async function buscarContas() {
+            const box = document.getElementById('contasContainer');
+            const termo = document.getElementById('buscaContaInput').value.trim();
+            let contas = [];
+            try {
+                contas = await api('GET', '/api/admin/contas?q=' + encodeURIComponent(termo));
+            } catch (err) {
+                box.innerHTML = `<div class="text-xs font-semibold text-red-600">${esc(err.message)}</div>`;
+                return;
+            }
+            if (!contas.length) {
+                box.innerHTML = `<div class="text-center py-6 bg-slate-50 rounded-2xl border border-dashed border-slate-200 text-xs font-semibold text-slate-500">Nenhuma conta encontrada.</div>`;
+                return;
+            }
+            box.innerHTML = contas.map(c => `
+                <div class="bg-slate-50 border border-slate-200 rounded-2xl p-4 flex flex-wrap justify-between items-center gap-3 text-xs">
+                    <div>
+                        <strong class="text-slate-900 text-sm">${esc(c.nome)}</strong>
+                        <span class="ml-1 text-[10px] font-black uppercase px-2 py-0.5 rounded-full ${c.afiliado ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-600'}">${c.afiliado ? 'Afiliado' : 'Cliente'}</span>
+                        ${c.aguardandoTroca ? '<span class="ml-1 text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-orange-100 text-orange-700">Troca de senha pendente</span>' : ''}
+                        <div class="text-slate-500 font-mono">@${esc(c.usuario)}</div>
+                        <div class="text-slate-600">${esc(c.email)} · CPF ${esc(c.cpf || 'não informado')} · Tel ${esc(c.telefone || 'não informado')}</div>
+                    </div>
+                    <button onclick="gerarSenhaTemporaria('${esc(c.usuario)}')" class="px-3.5 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold transition"><i class="fa-solid fa-key mr-1"></i> Gerar senha temporária</button>
+                </div>`).join('');
+        }
+
+        async function gerarSenhaTemporaria(usuario) {
+            if (!confirm(`Gerar uma senha temporária para @${usuario}?\n\nA senha atual deixa de funcionar agora. Você já confirmou a identidade da pessoa?`)) return;
+            const box = document.getElementById('resultadoSenhaBox');
+            try {
+                const r = await api('POST', '/api/admin/contas/' + encodeURIComponent(usuario) + '/senha-temporaria');
+                const msg = `Olá, ${r.nome}! Sua senha temporária da Loja Tech é: ${r.senhaTemporaria}\nEla vale por ${r.validaHoras} horas e, ao entrar, você vai criar uma senha nova. Não compartilhe com ninguém.`;
+                const envio = r.whatsapp
+                    ? `<a href="https://wa.me/${esc(r.whatsapp)}?text=${encodeURIComponent(msg)}" target="_blank" rel="noopener" class="inline-block px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition"><i class="fa-brands fa-whatsapp mr-1"></i> Enviar pelo WhatsApp (telefone cadastrado)</a>`
+                    : `<span class="text-amber-800 font-semibold">Esta conta não tem telefone cadastrado. Não envie a senha para outro número sem confirmar a identidade.</span>`;
+                box.innerHTML = `
+                    <div class="font-black text-emerald-900">Senha temporária de ${esc(r.nome)} (@${esc(r.usuario)})</div>
+                    <div class="flex flex-wrap items-center gap-2">
+                        <code class="px-3 py-2 bg-white border border-emerald-300 rounded-lg text-base font-black tracking-widest text-slate-900">${esc(r.senhaTemporaria)}</code>
+                        <button onclick="copiarTextoSimples('${esc(r.senhaTemporaria)}')" class="px-3 py-2 bg-slate-900 text-white rounded-lg text-xs font-bold">Copiar</button>
+                    </div>
+                    <div class="text-emerald-800">Esta senha aparece só agora e vale ${esc(r.validaHoras)} horas. O cliente será obrigado a trocá-la ao entrar.</div>
+                    <div>${envio}</div>`;
+                box.classList.remove('hidden');
+                box.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                buscarContas();
+            } catch (err) { alert(err.message); }
+        }
+
+        function copiarTextoSimples(texto) {
+            if (navigator.clipboard) {
+                navigator.clipboard.writeText(texto).then(() => alert('Copiado!'), () => prompt('Copie:', texto));
+            } else {
+                prompt('Copie:', texto);
+            }
+        }
+
+        // ===== PEDIDOS: a comissão só nasce na confirmação do pagamento =====
+        const ROTULO_STATUS = {
+            aguardando: ['Aguardando pagamento', 'bg-orange-100 text-orange-700'],
+            pago: ['Pago', 'bg-emerald-100 text-emerald-700'],
+            cancelado: ['Cancelado', 'bg-slate-200 text-slate-600'],
+            reembolsado: ['Reembolsado', 'bg-red-100 text-red-700']
+        };
+        const ROTULO_FORMA = { pix: 'Pix', cartao: 'Cartão de crédito', debito: 'Débito / à vista' };
+
+        async function carregarConfigPix() {
+            try {
+                const cfg = await api('GET', '/api/config');
+                document.getElementById('pixChaveInput').value = cfg.pixChave || '';
+            } catch (err) { console.warn(err.message); }
+        }
+
+        async function salvarPixChave() {
+            const chave = document.getElementById('pixChaveInput').value.trim();
+            try {
+                await api('PUT', '/api/config', { pixChave: chave });
+                alert('Chave Pix salva. Ela já aparece no checkout dos clientes.');
+            } catch (err) { alert(err.message); }
+        }
+
+        async function carregarPedidos() {
+            const box = document.getElementById('pedidosContainer');
+            let pedidos = [];
+            try {
+                pedidos = await api('GET', '/api/pedidos');
+            } catch (err) {
+                box.innerHTML = `<div class="text-xs font-semibold text-red-600">${esc(err.message)}</div>`;
+                return;
+            }
+            const aguardando = pedidos.filter(p => p.status === 'aguardando').length;
+            document.getElementById('qtdPedidosAguardando').innerText = `${aguardando} aguardando`;
+
+            if (!pedidos.length) {
+                box.innerHTML = `<div class="text-center py-8 bg-slate-50 rounded-2xl border border-dashed border-slate-200 text-xs font-semibold text-slate-500">Nenhum pedido registrado ainda.</div>`;
+                return;
+            }
+
+            box.innerHTML = pedidos.map(p => {
+                const [rotulo, cor] = ROTULO_STATUS[p.status] || [p.status, 'bg-slate-100 text-slate-600'];
+                let acoes = '';
+                if (p.status === 'aguardando') {
+                    acoes = `<button onclick="confirmarPedido('${esc(p.id)}', ${p.valor})" class="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition"><i class="fa-solid fa-check mr-1"></i> Confirmar pagamento</button>
+                             <button onclick="cancelarPedido('${esc(p.id)}')" class="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition">Cancelar</button>`;
+                } else if (p.status === 'pago') {
+                    acoes = `<button onclick="estornarPedido('${esc(p.id)}')" class="px-3.5 py-2 bg-red-50 hover:bg-red-100 text-red-600 rounded-xl text-xs font-bold transition">Estornar</button>`;
+                }
+                const afiliadoTxt = p.afiliado ? `@${esc(p.afiliado)}` + (p.status === 'pago' ? ` — comissão R$ ${p.comissao.toFixed(2)}` : '') : 'Venda direta (sem afiliado)';
+                return `
+                    <div class="bg-slate-50 border border-slate-200 rounded-2xl p-4 space-y-2 text-xs">
+                        <div class="flex flex-wrap justify-between items-center gap-2">
+                            <span class="${cor} font-black text-[10px] px-2.5 py-0.5 rounded-full uppercase">${esc(rotulo)}</span>
+                            <span class="text-slate-400 font-mono">${esc(p.id)} · ${esc(new Date(p.criadoEm).toLocaleString('pt-BR'))}</span>
+                        </div>
+                        <div class="flex flex-wrap justify-between gap-2">
+                            <div>
+                                <strong class="text-slate-900 text-sm">${esc(p.clienteNome)}</strong>
+                                <div class="text-slate-500">${esc(p.clienteEmail)} · CPF ${esc(p.clienteCpf)}</div>
+                                <div class="text-slate-600 mt-1">${esc(p.produtoNome)} · ${esc(ROTULO_FORMA[p.forma] || p.forma)}</div>
+                                <div class="text-emerald-700 font-semibold">${afiliadoTxt}</div>
+                            </div>
+                            <div class="text-right"><span class="text-base font-black text-slate-900">R$ ${p.valor.toFixed(2)}</span></div>
+                        </div>
+                        <div class="flex flex-wrap gap-2 pt-1">${acoes}</div>
+                    </div>`;
+            }).join('');
+        }
+
+        async function acaoPedido(id, acao) {
+            try {
+                await api('POST', `/api/pedidos/${encodeURIComponent(id)}/${acao}`);
+            } catch (err) { alert(err.message); }
+            await carregarPedidos();
+            await carregarRelatorioPagamentos();
+        }
+
+        function confirmarPedido(id, valor) {
+            if (!confirm(`Confirme que o pagamento de R$ ${Number(valor).toFixed(2)} já foi RECEBIDO na sua conta.\n\nA comissão do afiliado será gerada agora.`)) return;
+            acaoPedido(id, 'confirmar');
+        }
+        function cancelarPedido(id) {
+            if (!confirm('Cancelar este pedido? Nenhuma comissão será gerada.')) return;
+            acaoPedido(id, 'cancelar');
+        }
+        function estornarPedido(id) {
+            if (!confirm('Estornar este pedido? A comissão do afiliado será removida.')) return;
+            acaoPedido(id, 'estornar');
+        }
+
+        async function deletarAfiliado(idAfiliado) {
+            if (!confirm("Deseja realmente excluir este afiliado? O acesso, senha e links dele serão desativados, mas os filhos vinculados a ele continuarão ativos na rede.")) return;
+            try {
+                await api('DELETE', '/api/afiliados/' + encodeURIComponent(idAfiliado));
+                alert("Afiliado excluído com sucesso! A rede de sub-afiliados foi preservada.");
+            } catch (err) {
+                alert(err.message);
+            }
+            carregarRelatorioPagamentos();
+        }
+
+        function copiarChavePix(chave) {
+            if (!chave) {
+                alert("Nenhuma chave Pix cadastrada.");
+                return;
+            }
+            navigator.clipboard.writeText(chave);
+            alert(`Chave Pix (${chave}) copiada com sucesso!`);
+        }
+    </script>
+</body>
+</html>

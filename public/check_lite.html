@@ -1,0 +1,488 @@
+<!DOCTYPE html>
+<html lang="pt-BR" class="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Checkout - CMV Food Lite | Tech Software</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Font Awesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Google Fonts Inter -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        tech: {
+                            orange: '#FF5722',
+                            darkOrange: '#E65100',
+                            lightOrange: '#FF9800',
+                            bg: '#F8FAFC',
+                            card: '#FFFFFF',
+                            border: '#E2E8F0'
+                        }
+                    },
+                    fontFamily: { sans: ['Inter', 'sans-serif'] }
+                }
+            }
+        }
+    </script>
+    <style>
+        .gradient-orange { background: linear-gradient(135deg, #FF5722 0%, #FF9800 100%); }
+        .shadow-orange-glow { box-shadow: 0 10px 25px -5px rgba(255, 87, 34, 0.3); }
+    </style>
+</head>
+<body class="bg-slate-100 text-slate-800 font-sans antialiased min-h-screen flex flex-col justify-between text-sm">
+
+    <!-- CABEÇALHO CHECKOUT LITE -->
+    <header class="bg-white border-b border-slate-200 py-4 px-4 sticky top-0 z-30 shadow-sm">
+        <div class="max-w-6xl mx-auto flex items-center justify-between">
+            <a href="index.html" class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-xl gradient-orange flex items-center justify-center text-white shadow-orange-glow">
+                    <i class="fa-solid fa-utensils text-base"></i>
+                </div>
+                <div>
+                    <span class="font-black text-lg tracking-wide text-slate-900 block">TECH</span>
+                    <span class="text-[11px] text-slate-500 font-semibold tracking-wider uppercase block -mt-1">Checkout Lite Oficial</span>
+                </div>
+            </a>
+            <div class="flex items-center gap-2 text-emerald-600 text-sm font-extrabold bg-emerald-50 px-3 py-1.5 rounded-full border border-emerald-200">
+                <i class="fa-solid fa-shield-halved"></i>
+                <span>Ambiente Seguro & Criptografado</span>
+            </div>
+        </div>
+    </header>
+
+    <!-- CORPO DO CHECKOUT -->
+    <main class="max-w-6xl mx-auto px-4 py-8 w-full flex-1">
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+
+            <!-- COLUNA ESQUERDA: FORMULÁRIO (7 COLS) -->
+            <div class="lg:col-span-7 space-y-6">
+
+                <!-- ETAPA 1: DADOS -->
+                <div class="bg-white rounded-3xl p-6 border border-slate-200 shadow-sm">
+                    <div class="flex items-center gap-3 mb-6 pb-3 border-b border-slate-100">
+                        <div class="w-8 h-8 rounded-full gradient-orange text-white flex items-center justify-center font-black text-sm">1</div>
+                        <div>
+                            <h2 class="text-base font-black text-slate-900">Identificação & Chave de Acesso</h2>
+                            <p class="text-sm text-slate-500">Dados para envio da licença do CMV Food Lite.</p>
+                        </div>
+                    </div>
+
+                    <div class="space-y-4 text-sm font-semibold text-slate-700">
+                        <div>
+                            <label class="block mb-1 uppercase tracking-wider">Nome Completo</label>
+                            <input type="text" id="chk_nome" required placeholder="Digite seu nome completo" class="w-full px-4 py-3.5 rounded-xl border border-slate-200 focus:border-orange-500 outline-none text-sm">
+                        </div>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div>
+                                <label class="block mb-1 uppercase tracking-wider">E-mail</label>
+                                <input type="email" id="chk_email" required placeholder="seu@email.com" class="w-full px-4 py-3.5 rounded-xl border border-slate-200 focus:border-orange-500 outline-none text-sm">
+                            </div>
+                            <div>
+                                <label class="block mb-1 uppercase tracking-wider text-orange-600 font-bold">CPF <span class="text-xs text-slate-400 font-normal">(Obrigatório p/ Chave)</span></label>
+                                <input type="text" id="chk_cpf" required placeholder="000.000.000-00" class="w-full px-4 py-3.5 rounded-xl border border-orange-300 bg-orange-50/30 focus:border-orange-500 outline-none text-sm font-bold">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ETAPA 2: PAGAMENTO -->
+                <div class="bg-white rounded-3xl p-6 border border-slate-200 shadow-sm">
+                    <div class="flex items-center gap-3 mb-6 pb-3 border-b border-slate-100">
+                        <div class="w-8 h-8 rounded-full gradient-orange text-white flex items-center justify-center font-black text-sm">2</div>
+                        <div>
+                            <h2 class="text-base font-black text-slate-900">Forma de Pagamento</h2>
+                            <p class="text-sm text-slate-500">Selecione a modalidade desejada.</p>
+                        </div>
+                    </div>
+
+                    <!-- Abas -->
+                    <div class="grid grid-cols-3 gap-2 mb-6">
+                        <button type="button" onclick="setFormaPagto('pix')" id="btnTabPix" class="py-3.5 px-2 rounded-2xl border-2 border-orange-500 bg-orange-50/40 text-orange-600 font-extrabold text-sm flex flex-col items-center gap-1 transition">
+                            <i class="fa-brands fa-pix text-lg"></i>
+                            <span>PIX</span>
+                        </button>
+                        <button type="button" onclick="setFormaPagto('cartao')" id="btnTabCartao" class="py-3.5 px-2 rounded-2xl border border-slate-200 bg-white text-slate-600 font-bold text-sm flex flex-col items-center gap-1 hover:border-slate-300 transition">
+                            <i class="fa-solid fa-credit-card text-lg"></i>
+                            <span>Cartão Crédito</span>
+                        </button>
+                        <button type="button" onclick="setFormaPagto('debito')" id="btnTabDebito" class="py-3.5 px-2 rounded-2xl border border-slate-200 bg-white text-slate-600 font-bold text-sm flex flex-col items-center gap-1 hover:border-slate-300 transition">
+                            <i class="fa-solid fa-money-check text-lg"></i>
+                            <span>Débito / À Vista</span>
+                        </button>
+                    </div>
+
+                    <!-- PIX -->
+                    <div id="boxPagtoPix" class="space-y-3 bg-emerald-50/60 p-4 rounded-2xl border border-emerald-200 text-sm">
+                        <div class="flex items-center gap-2 text-emerald-800 font-bold">
+                            <i class="fa-solid fa-bolt text-emerald-600"></i>
+                            <span>Pagamento via Pix com Liberação após Confirmação</span>
+                        </div>
+                        <p class="text-slate-600 leading-relaxed">A chave Pix da Central será exibida após clicar no botão final. Assim que o pagamento for confirmado, sua chave de acesso é liberada.</p>
+                    </div>
+
+                    <!-- CARTÃO DE CRÉDITO -->
+                    <div id="boxPagtoCartao" class="hidden space-y-4 text-sm font-semibold text-slate-700">
+                        <div class="bg-amber-50 p-3 rounded-2xl border border-amber-200 text-xs font-medium text-amber-800 leading-relaxed">
+                            Por segurança, <strong>não digite dados do cartão neste site</strong>. Ao finalizar, a Central envia o link de pagamento no e-mail informado, com a condição de parcelamento escolhida abaixo.
+                        </div>
+                        <div>
+                            <label class="block mb-1 uppercase tracking-wider">Número do Cartão</label>
+                            <input type="text" disabled placeholder="Não utilizado neste site" class="w-full px-4 py-3.5 rounded-xl border border-slate-200 bg-slate-50 text-slate-400 outline-none cursor-not-allowed">
+                        </div>
+                        <div class="grid grid-cols-2 gap-3">
+                            <div>
+                                <label class="block mb-1 uppercase tracking-wider">Validade</label>
+                                <input type="text" disabled placeholder="MM/AA" class="w-full px-4 py-3.5 rounded-xl border border-slate-200 bg-slate-50 text-slate-400 outline-none cursor-not-allowed">
+                            </div>
+                            <div>
+                                <label class="block mb-1 uppercase tracking-wider">CVV</label>
+                                <input type="text" disabled placeholder="123" class="w-full px-4 py-3.5 rounded-xl border border-slate-200 bg-slate-50 text-slate-400 outline-none cursor-not-allowed">
+                            </div>
+                        </div>
+                        <div>
+                            <label class="block mb-1 uppercase tracking-wider text-orange-600 font-bold">Opções de Parcelamento</label>
+                            <select id="selectParcelas" onchange="atualizarCalculoParcelas()" class="w-full px-4 py-3.5 rounded-xl border border-orange-300 bg-orange-50/30 focus:border-orange-500 outline-none font-bold text-slate-900 text-sm">
+                                <!-- Preenchido dinamicamente via JS -->
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- DÉBITO -->
+                    <div id="boxPagtoDebito" class="hidden space-y-3 bg-slate-50 p-4 rounded-2xl border border-slate-200 text-sm">
+                        <p class="text-slate-600 leading-relaxed">Pagamento à vista no débito: ao finalizar, a Central envia o link de pagamento no e-mail informado. Não digite dados do cartão neste site.</p>
+                    </div>
+
+                    <!-- BOTÃO -->
+                    <button type="button" id="btnFinalizar" onclick="processarCheckoutFinal()" class="w-full mt-6 py-4 text-sm font-extrabold uppercase tracking-wider text-white gradient-orange rounded-2xl shadow-orange-glow hover:opacity-95 transition flex items-center justify-center gap-2 disabled:opacity-60">
+                        <i class="fa-solid fa-lock"></i>
+                        <span id="btnFinalizarTexto">Finalizar Pedido</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- COLUNA DIREITA: RESUMO (5 COLS) -->
+            <div class="lg:col-span-5 space-y-6">
+                <div class="bg-white rounded-3xl p-6 border border-slate-200 shadow-sm sticky top-24">
+                    <h3 class="text-base font-black text-slate-900 pb-3 border-b border-slate-100 mb-4 flex items-center gap-2">
+                        <i class="fa-solid fa-cart-shopping text-orange-600"></i>
+                        <span>Resumo do Pedido</span>
+                    </h3>
+
+                    <div class="space-y-3">
+                        <div class="flex justify-between items-center bg-slate-50 p-3 rounded-2xl border border-slate-100 text-sm">
+                            <div>
+                                <h5 class="font-extrabold text-slate-900">CMV Food Lite</h5>
+                                <span class="text-xs text-slate-500">Licença Essencial</span>
+                            </div>
+                            <span id="chk_precoItem" class="font-black text-slate-900">R$ 49,99</span>
+                        </div>
+                    </div>
+
+                    <div class="border-t border-slate-200 pt-4 mt-4 space-y-2 text-sm font-semibold text-slate-600">
+                        <div class="flex justify-between">
+                            <span>Subtotal:</span>
+                            <span id="chk_subtotal">R$ 49,99</span>
+                        </div>
+                        <div id="infoTaxaCartao" class="hidden flex justify-between text-orange-600">
+                            <span>Encargos / Juros de Parcelamento:</span>
+                            <span id="chk_juros">R$ 0,00</span>
+                        </div>
+                        <div class="flex justify-between pt-2 border-t border-slate-100 font-black text-slate-900 text-base">
+                            <span>Total Geral:</span>
+                            <span id="chk_totalGeral" class="text-orange-600 text-xl">R$ 49,99</span>
+                        </div>
+                        <div id="infoParcelamentoResumo" class="text-right text-xs text-slate-500 font-normal">
+                            À vista no Pix ou Cartão
+                        </div>
+
+                        <!-- Rastreio do Afiliado Visível na Tela -->
+                        <div id="infoAfiliadoBox" class="hidden pt-3 border-t border-slate-100 text-xs text-emerald-700 bg-emerald-50/60 p-2.5 rounded-xl font-bold flex items-center gap-1.5">
+                            <i class="fa-solid fa-user-check"></i>
+                            <span>Indicação do parceiro: <strong id="lblCodigoAfiliado"></strong></span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </main>
+
+    <!-- CONFIRMAÇÃO DO PEDIDO -->
+    <div id="modalPedido" class="hidden fixed inset-0 z-50 bg-slate-900/60 flex items-center justify-center p-4">
+        <div class="bg-white rounded-3xl p-6 sm:p-8 max-w-md w-full border border-slate-200 shadow-xl space-y-4 text-sm max-h-[92vh] overflow-y-auto">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center">
+                    <i class="fa-solid fa-circle-check text-lg"></i>
+                </div>
+                <div>
+                    <h3 class="text-base font-black text-slate-900">Pedido registrado!</h3>
+                    <p class="text-xs text-slate-500 font-mono">Pedido <span id="modalPedidoId"></span></p>
+                </div>
+            </div>
+
+            <div class="bg-slate-50 p-3 rounded-2xl border border-slate-100 flex justify-between items-center gap-3">
+                <span id="modalProdutoNome" class="font-extrabold text-slate-900"></span>
+                <span id="modalTotal" class="font-black text-orange-600 whitespace-nowrap"></span>
+            </div>
+            <p id="modalCondicao" class="text-xs text-slate-500 text-right -mt-2"></p>
+
+            <div id="modalBoxPix" class="hidden space-y-2 bg-emerald-50/60 p-4 rounded-2xl border border-emerald-200">
+                <span class="text-[10px] uppercase font-bold text-emerald-700 block">Chave Pix da Central</span>
+                <strong id="modalPixChave" class="font-mono text-sm break-all text-slate-900 block"></strong>
+                <button type="button" id="btnCopiarPix" onclick="copiarPixModal()" class="py-2 px-4 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-bold transition">
+                    <i class="fa-solid fa-copy mr-1"></i> Copiar chave Pix
+                </button>
+                <p class="text-xs text-slate-600 leading-relaxed">Pague o valor acima exatamente como mostrado e informe o número do pedido, se o seu banco permitir uma mensagem.</p>
+            </div>
+
+            <div id="modalBoxOutro" class="hidden bg-slate-50 p-4 rounded-2xl border border-slate-200 text-xs text-slate-600 leading-relaxed">
+                A Central enviará o link de pagamento para o e-mail informado. Fique de olho na caixa de entrada e no spam.
+            </div>
+
+            <p class="text-xs text-slate-500 leading-relaxed">Assim que a Central confirmar o pagamento, sua chave de acesso será liberada e enviada para <strong id="modalEmail" class="text-slate-700"></strong>.</p>
+
+            <a href="index.html" class="block w-full text-center py-3.5 text-xs font-extrabold uppercase tracking-wider text-white gradient-orange rounded-2xl shadow-orange-glow hover:opacity-95 transition">Voltar à Loja</a>
+        </div>
+    </div>
+
+    <!-- RODAPÉ -->
+    <footer class="bg-white border-t border-slate-200 py-6 text-center text-sm text-slate-500">
+        <p>&copy; 2026 Tech - Software de Gestão. Todos os direitos reservados.</p>
+    </footer>
+
+    <!-- JAVASCRIPT: RASTREIO DE AFILIADOS (15 DIAS) + PEDIDO NO SERVIDOR -->
+    <script>
+        const PRODUTO_ID = 'lite';
+        const API_URL = ''; // vazio = mesmo endereço do site (Render serve as páginas e a API juntas)
+        const AFILIADO_KEY = 'tech_afiliado_ativo';
+        const VALIDADE_AFILIADO_MS = 15 * 24 * 60 * 60 * 1000; // 15 dias
+
+        let precoBase = 49.99; // valor de reserva; o preço oficial vem do catálogo do servidor
+        let formaPagtoAtual = 'pix';
+        let valorTotalFinal = precoBase;
+        let afiliadoAtivoCodigo = "";
+        let enviando = false;
+
+        window.addEventListener('DOMContentLoaded', async () => {
+            gerenciarRastreioAfiliado();
+            popularParcelasCartao();
+            atualizarResumoTela();
+            await carregarPrecoDoCatalogo();
+        });
+
+        // Usa o preço atual cadastrado na loja (se o administrador mudar o preço, o checkout acompanha)
+        async function carregarPrecoDoCatalogo() {
+            try {
+                const resp = await fetch(API_URL + '/api/produtos');
+                if (!resp.ok) return;
+                const lista = await resp.json();
+                const prod = (lista || []).find(p => String(p.id || '').toLowerCase() === PRODUTO_ID);
+                if (!prod || !(Number(prod.precoPor) > 0)) return;
+                precoBase = Number(prod.precoPor);
+                const txt = 'R$ ' + precoBase.toFixed(2).replace('.', ',');
+                document.getElementById('chk_precoItem').innerText = txt;
+                document.getElementById('chk_subtotal').innerText = txt;
+                popularParcelasCartao();
+                atualizarResumoTela();
+            } catch (e) {
+                console.warn('Usando preço de reserva:', e.message);
+            }
+        }
+
+        // AFILIADO: o link da loja traz ?afiliado=usuario (o parâmetro ref=admin é só a origem da Central)
+        function gerenciarRastreioAfiliado() {
+            const urlParams = new URLSearchParams(window.location.search);
+            const codigoUrl = (urlParams.get('afiliado') || '').trim().toLowerCase();
+            const agora = Date.now();
+
+            if (/^[a-z0-9_.-]{1,40}$/.test(codigoUrl)) {
+                // Link novo: passa a valer por 15 dias
+                localStorage.setItem(AFILIADO_KEY, JSON.stringify({ codigo: codigoUrl, expiracao: agora + VALIDADE_AFILIADO_MS }));
+                afiliadoAtivoCodigo = codigoUrl;
+            } else {
+                try {
+                    const salvo = JSON.parse(localStorage.getItem(AFILIADO_KEY) || 'null');
+                    if (salvo && salvo.codigo && agora < salvo.expiracao) {
+                        afiliadoAtivoCodigo = salvo.codigo;
+                    } else if (salvo) {
+                        localStorage.removeItem(AFILIADO_KEY); // expirou os 15 dias
+                    }
+                } catch (e) {
+                    localStorage.removeItem(AFILIADO_KEY);
+                }
+            }
+
+            if (afiliadoAtivoCodigo) {
+                document.getElementById('lblCodigoAfiliado').innerText = afiliadoAtivoCodigo;
+                document.getElementById('infoAfiliadoBox').classList.remove('hidden');
+            }
+        }
+
+        function popularParcelasCartao() {
+            const select = document.getElementById('selectParcelas');
+            const selecionada = select.value;
+            select.innerHTML = '';
+
+            for (let i = 1; i <= 12; i++) {
+                let taxaJuros = 0;
+                if (i === 1) taxaJuros = 0.0249;
+                else if (i <= 6) taxaJuros = 0.0199 * i;
+                else taxaJuros = 0.0249 * i;
+
+                let valorComJuros = precoBase * (1 + taxaJuros);
+                let valorParcela = valorComJuros / i;
+
+                let textoLabel = `${i}x de R$ ${valorParcela.toFixed(2)} (com juros)`;
+                if (i === 1) textoLabel = `1x de R$ ${valorComJuros.toFixed(2)} à vista no cartão`;
+
+                select.innerHTML += `<option value="${i}" data-total="${valorComJuros.toFixed(2)}" data-parcela="${valorParcela.toFixed(2)}">${textoLabel}</option>`;
+            }
+            if (selecionada) select.value = selecionada;
+        }
+
+        function setFormaPagto(tipo) {
+            formaPagtoAtual = tipo;
+
+            document.getElementById('btnTabPix').className = "py-3.5 px-2 rounded-2xl border border-slate-200 bg-white text-slate-600 font-bold text-sm flex flex-col items-center gap-1 transition";
+            document.getElementById('btnTabCartao').className = "py-3.5 px-2 rounded-2xl border border-slate-200 bg-white text-slate-600 font-bold text-sm flex flex-col items-center gap-1 transition";
+            document.getElementById('btnTabDebito').className = "py-3.5 px-2 rounded-2xl border border-slate-200 bg-white text-slate-600 font-bold text-sm flex flex-col items-center gap-1 transition";
+
+            document.getElementById('boxPagtoPix').classList.add('hidden');
+            document.getElementById('boxPagtoCartao').classList.add('hidden');
+            document.getElementById('boxPagtoDebito').classList.add('hidden');
+
+            if (tipo === 'pix') {
+                document.getElementById('btnTabPix').className = "py-3.5 px-2 rounded-2xl border-2 border-orange-500 bg-orange-50/40 text-orange-600 font-extrabold text-sm flex flex-col items-center gap-1 transition";
+                document.getElementById('boxPagtoPix').classList.remove('hidden');
+            } else if (tipo === 'cartao') {
+                document.getElementById('btnTabCartao').className = "py-3.5 px-2 rounded-2xl border-2 border-orange-500 bg-orange-50/40 text-orange-600 font-extrabold text-sm flex flex-col items-center gap-1 transition";
+                document.getElementById('boxPagtoCartao').classList.remove('hidden');
+            } else {
+                document.getElementById('btnTabDebito').className = "py-3.5 px-2 rounded-2xl border-2 border-orange-500 bg-orange-50/40 text-orange-600 font-extrabold text-sm flex flex-col items-center gap-1 transition";
+                document.getElementById('boxPagtoDebito').classList.remove('hidden');
+            }
+
+            atualizarResumoTela();
+        }
+
+        function atualizarCalculoParcelas() {
+            atualizarResumoTela();
+        }
+
+        function atualizarResumoTela() {
+            const infoTaxaEl = document.getElementById('infoTaxaCartao');
+            const jurosEl = document.getElementById('chk_juros');
+            const totalEl = document.getElementById('chk_totalGeral');
+            const resumoParcelaEl = document.getElementById('infoParcelamentoResumo');
+
+            if (formaPagtoAtual === 'cartao') {
+                const select = document.getElementById('selectParcelas');
+                const optSelecionada = select.options[select.selectedIndex];
+                if (optSelecionada) {
+                    valorTotalFinal = parseFloat(optSelecionada.getAttribute('data-total'));
+                    const valorParcela = optSelecionada.getAttribute('data-parcela');
+                    const qtdNum = select.value;
+
+                    const jurosCalculados = valorTotalFinal - precoBase;
+                    if (jurosCalculados > 0) {
+                        infoTaxaEl.classList.remove('hidden');
+                        jurosEl.innerText = `+ R$ ${jurosCalculados.toFixed(2)}`;
+                    } else {
+                        infoTaxaEl.classList.add('hidden');
+                    }
+
+                    totalEl.innerText = `R$ ${valorTotalFinal.toFixed(2)}`;
+                    resumoParcelaEl.innerText = `Parcelado em ${qtdNum}x de R$ ${parseFloat(valorParcela).toFixed(2)}`;
+                }
+            } else {
+                infoTaxaEl.classList.add('hidden');
+                valorTotalFinal = precoBase;
+                totalEl.innerText = `R$ ${precoBase.toFixed(2)}`;
+                resumoParcelaEl.innerText = formaPagtoAtual === 'pix' ? 'À vista via Pix' : 'À vista no Débito';
+            }
+        }
+
+        // Registra o pedido no servidor. NÃO gera comissão: ela só nasce quando a Central confirma o pagamento.
+        async function processarCheckoutFinal() {
+            if (enviando) return;
+
+            const nome = document.getElementById('chk_nome').value.trim();
+            const email = document.getElementById('chk_email').value.trim();
+            const cpf = document.getElementById('chk_cpf').value.trim();
+
+            if (!nome || !email || !cpf) {
+                alert("Por favor, preencha o Nome, E-mail e CPF obrigatório para gerar a chave de acesso.");
+                return;
+            }
+
+            const btn = document.getElementById('btnFinalizar');
+            const btnTexto = document.getElementById('btnFinalizarTexto');
+            enviando = true;
+            btn.disabled = true;
+            btnTexto.innerText = 'Registrando pedido... (o servidor pode demorar alguns segundos)';
+
+            try {
+                let resp;
+                try {
+                    resp = await fetch(API_URL + '/api/checkout', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ produtoId: PRODUTO_ID, nome, email, cpf, forma: formaPagtoAtual, afiliado: afiliadoAtivoCodigo })
+                    });
+                } catch (e) {
+                    throw new Error('Sem conexão com o servidor. Verifique sua internet e tente novamente.');
+                }
+                let dados = {};
+                try { dados = await resp.json(); } catch (e) {}
+                if (!resp.ok) throw new Error(dados.erro || 'Não foi possível registrar o pedido. Tente novamente.');
+
+                mostrarPedido(dados, email);
+            } catch (err) {
+                alert(err.message);
+            } finally {
+                enviando = false;
+                btn.disabled = false;
+                btnTexto.innerText = 'Finalizar Pedido';
+            }
+        }
+
+        let pixChaveAtual = '';
+
+        function mostrarPedido(r, email) {
+            document.getElementById('modalPedidoId').innerText = r.pedidoId;
+            document.getElementById('modalProdutoNome').innerText = r.produtoNome;
+            document.getElementById('modalTotal').innerText = 'R$ ' + Number(r.valor).toFixed(2);
+            document.getElementById('modalEmail').innerText = email;
+            document.getElementById('modalCondicao').innerText = r.forma === 'cartao' ? 'Condição escolhida: ' + document.getElementById('infoParcelamentoResumo').innerText : '';
+
+            document.getElementById('modalBoxPix').classList.add('hidden');
+            document.getElementById('modalBoxOutro').classList.add('hidden');
+
+            if (r.forma === 'pix') {
+                pixChaveAtual = r.pixChave || '';
+                document.getElementById('modalPixChave').innerText = pixChaveAtual || 'A chave Pix ainda não foi cadastrada pela Central. Você receberá os dados de pagamento por e-mail.';
+                document.getElementById('btnCopiarPix').classList.toggle('hidden', !pixChaveAtual);
+                document.getElementById('modalBoxPix').classList.remove('hidden');
+            } else {
+                document.getElementById('modalBoxOutro').classList.remove('hidden');
+            }
+            document.getElementById('modalPedido').classList.remove('hidden');
+        }
+
+        function copiarPixModal() {
+            if (!pixChaveAtual) return;
+            if (navigator.clipboard) {
+                navigator.clipboard.writeText(pixChaveAtual).then(() => alert('Chave Pix copiada!'), () => prompt('Copie a chave Pix:', pixChaveAtual));
+            } else {
+                prompt('Copie a chave Pix:', pixChaveAtual);
+            }
+        }
+    </script>
+</body>
+</html>

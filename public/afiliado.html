@@ -1,0 +1,629 @@
+<!DOCTYPE html>
+<html lang="pt-BR" class="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Área do Afiliado - Tech Software</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Font Awesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Google Fonts Inter -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        tech: {
+                            orange: '#FF5722',
+                            darkOrange: '#E65100',
+                            lightOrange: '#FF9800',
+                            bg: '#F8FAFC',
+                            card: '#FFFFFF',
+                            border: '#E2E8F0'
+                        }
+                    },
+                    fontFamily: { sans: ['Inter', 'sans-serif'] }
+                }
+            }
+        }
+    </script>
+    <style>
+        .gradient-orange { background: linear-gradient(135deg, #FF5722 0%, #FF9800 100%); }
+        .shadow-orange-glow { box-shadow: 0 10px 25px -5px rgba(255, 87, 34, 0.3); }
+        .glass-header { background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(10px); }
+    </style>
+</head>
+<body class="bg-slate-100 text-slate-800 font-sans antialiased min-h-screen flex flex-col justify-between text-sm">
+
+    <!-- CABEÇALHO -->
+    <header class="fixed top-0 left-0 w-full z-40 glass-header border-b border-slate-200">
+        <div class="max-w-7xl mx-auto px-4 h-20 flex items-center justify-between">
+            <a href="index.html" class="flex items-center gap-3">
+                <div class="w-11 h-11 rounded-2xl gradient-orange flex items-center justify-center text-white shadow-orange-glow">
+                    <i class="fa-solid fa-handshake text-lg"></i>
+                </div>
+                <div>
+                    <h1 class="font-extrabold text-lg tracking-wide text-slate-900">TECH</h1>
+                    <p class="text-[11px] text-slate-500 font-semibold tracking-wider uppercase -mt-1">Painel do Afiliado Oficial</p>
+                </div>
+            </a>
+
+            <div class="flex items-center gap-3">
+                <div id="statusUsuarioHeader" class="hidden text-xs text-right font-semibold">
+                    <span id="nomeAfiliadoHeader" class="block font-bold text-slate-900"></span>
+                    <button onclick="efetuarLogout()" class="text-red-500 hover:underline text-[11px]"><i class="fa-solid fa-right-from-bracket"></i> Sair da Conta</button>
+                </div>
+                <a href="index.html" class="px-4 py-2.5 text-xs font-bold uppercase tracking-wider text-slate-700 bg-slate-100 rounded-xl hover:bg-slate-200 transition">
+                    <i class="fa-solid fa-arrow-left mr-1.5 text-orange-600"></i> Voltar à Loja
+                </a>
+            </div>
+        </div>
+    </header>
+
+    <!-- CONTEÚDO PRINCIPAL -->
+    <main class="max-w-5xl mx-auto px-4 pt-28 pb-16 w-full flex-1 space-y-8">
+
+        <!-- TELA DE LOGIN / CADASTRO -->
+        <div id="secaoAutenticacao" class="hidden max-w-md mx-auto bg-white rounded-3xl p-6 sm:p-8 border border-slate-200 shadow-lg space-y-6">
+            <div class="text-center space-y-2">
+                <div class="w-12 h-12 rounded-2xl bg-orange-50 text-orange-600 flex items-center justify-center font-bold text-xl mx-auto mb-2">
+                    <i class="fa-solid fa-user-lock"></i>
+                </div>
+                <h3 id="tituloAuth" class="text-2xl font-black text-slate-900">Acessar Área do Afiliado</h3>
+                <p id="subtituloAuth" class="text-xs text-slate-500">Entre com seu apelido e senha para visualizar sua rede e comissões.</p>
+            </div>
+
+            <!-- Box Informativo de Patrocinador Detectado (Pai) -->
+            <div id="boxAvisoPatrocinador" class="hidden p-3.5 bg-emerald-50 border border-emerald-200 rounded-2xl text-xs text-emerald-800 flex items-center gap-2.5">
+                <i class="fa-solid fa-user-check text-emerald-600 text-base"></i>
+                <div>
+                    <strong class="block text-[10px] uppercase font-bold text-emerald-700">Patrocinador (Pai) Detectado:</strong>
+                    <span id="lblNomePatrocinador" class="font-bold font-mono"></span>
+                </div>
+            </div>
+
+            <form id="formAuth" onsubmit="processarAutenticacao(event)" class="space-y-4">
+
+                <div id="boxCamposCadastro" class="hidden space-y-4 pt-2 border-t border-slate-100">
+                    <div>
+                        <label class="block mb-1.5 text-xs font-bold uppercase tracking-wider text-slate-700">Nome Completo</label>
+                        <input type="text" id="auth_nome" placeholder="Ex: Neyza Nelly" class="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-orange-500 outline-none text-sm font-semibold bg-slate-50">
+                    </div>
+
+                    <div>
+                        <label class="block mb-1.5 text-xs font-bold uppercase tracking-wider text-slate-700">CPF</label>
+                        <input type="text" id="auth_cpf" placeholder="000.000.000-00" class="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-orange-500 outline-none text-sm font-semibold bg-slate-50">
+                    </div>
+
+                    <div>
+                        <label class="block mb-1.5 text-xs font-bold uppercase tracking-wider text-slate-700">Telefone / WhatsApp (com DDD)</label>
+                        <input type="tel" id="auth_telefone" placeholder="(11) 91234-5678" class="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-orange-500 outline-none text-sm font-semibold bg-slate-50">
+                    </div>
+                    <div>
+                        <label class="block mb-1.5 text-xs font-bold uppercase tracking-wider text-slate-700">Chave Pix</label>
+                        <input type="text" id="auth_pix" placeholder="Digite sua chave Pix" class="w-full px-4 py-3 rounded-xl border border-emerald-300 focus:border-emerald-500 outline-none text-sm font-bold bg-emerald-50/40 text-slate-900">
+                    </div>
+
+                    <div>
+                        <label class="block mb-1.5 text-xs font-bold uppercase tracking-wider text-slate-700">E-mail</label>
+                        <input type="email" id="auth_email" placeholder="email@exemplo.com" class="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-orange-500 outline-none text-sm font-semibold bg-slate-50">
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block mb-1.5 text-xs font-bold uppercase tracking-wider text-slate-700">Seu Apelido / Usuário</label>
+                    <input type="text" id="auth_usuario" required placeholder="Ex: neyza" class="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-orange-500 outline-none text-sm font-semibold bg-slate-50">
+                </div>
+
+                <div>
+                    <label class="block mb-1.5 text-xs font-bold uppercase tracking-wider text-slate-700">Senha</label>
+                    <input type="password" id="auth_senha" required placeholder="••••••••" class="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-orange-500 outline-none text-sm font-semibold bg-slate-50">
+                </div>
+
+                <button type="submit" id="btnAuthSubmit" class="w-full py-4 text-xs font-extrabold uppercase tracking-wider text-white gradient-orange rounded-xl shadow-orange-glow hover:opacity-95 transition disabled:opacity-60">
+                    Entrar no Painel
+                </button>
+            </form>
+
+            <div class="text-center pt-2 border-t border-slate-100">
+                <button type="button" id="btnAlternarModoAuth" onclick="alternarModoAuth()" class="text-xs font-bold text-orange-600 hover:underline">
+                    Ainda não tem conta? Crie sua Conta aqui
+                </button>
+                <p class="text-[11px] text-slate-500 mt-3">
+                    Esqueceu a senha?
+                    <a id="linkEsqueciSenha" href="#" target="_blank" rel="noopener" class="hidden font-bold text-orange-600 hover:underline">Fale com o suporte</a>
+                    <span id="textoEsqueciSemZap" class="font-semibold">Entre em contato com o suporte da loja.</span>
+                </p>
+            </div>
+        </div>
+
+        <!-- CARREGANDO -->
+        <div id="secaoCarregando" class="text-center py-16 text-xs font-semibold text-slate-500">
+            <i class="fa-solid fa-circle-notch fa-spin text-orange-500 text-2xl mb-3 block"></i>
+            Carregando seu painel... (o servidor pode demorar alguns segundos para acordar)
+        </div>
+
+        <!-- DASHBOARD DO AFILIADO -->
+        <div id="secaoDashboardAfiliado" class="hidden space-y-8">
+
+            <div class="bg-white rounded-3xl p-6 sm:p-8 border border-slate-200 shadow-sm flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                <div>
+                    <span id="lblPortal" class="px-3 py-1 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-black uppercase tracking-widest border border-emerald-200 inline-block mb-2">
+                        Portal do Afiliado
+                    </span>
+                    <h2 class="text-2xl sm:text-3xl font-black text-slate-900">Olá, <span id="lblBoasVindasNome" class="text-orange-600"></span>!</h2>
+                    <p id="lblSubtitulo" class="text-xs text-slate-500 mt-1">Acompanhe o desempenho da sua rede de indicados (filhos).</p>
+                    <p id="lblRegras" class="text-xs text-emerald-700 font-semibold mt-2"></p>
+                </div>
+                <div class="bg-slate-50 p-3.5 rounded-2xl border border-slate-200 text-xs text-slate-600">
+                    <span class="text-slate-400 block uppercase font-bold text-[10px]">Identificador Único:</span>
+                    <span id="lblChaveCriptografada" class="font-mono text-slate-900 font-extrabold"></span>
+                </div>
+            </div>
+
+            <!-- CARDS DE DESEMPENHO -->
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-6">
+                <div class="bg-white rounded-3xl p-6 border border-slate-200 shadow-sm space-y-2">
+                    <span id="lblCard1" class="text-xs font-black uppercase tracking-wider text-slate-400">Vendas Diretas</span>
+                    <h4 id="dashVendasDiretas" class="text-2xl font-black text-slate-900">R$ 0,00</h4>
+                    <p id="subCard1" class="text-xs text-slate-500 font-semibold"><span id="qtdVendasDiretas">0</span> venda(s)</p>
+                </div>
+                <div class="bg-white rounded-3xl p-6 border border-slate-200 shadow-sm space-y-2">
+                    <span id="lblCard2" class="text-xs font-black uppercase tracking-wider text-emerald-600">Comissão de Rede (Filhos)</span>
+                    <h4 id="dashComissaoRede" class="text-2xl font-black text-emerald-600">R$ 0,00</h4>
+                    <p id="subCard2" class="text-xs text-emerald-700 font-semibold"><span id="qtdFilhosEquipe">0</span> parceiro(s) na sua rede</p>
+                </div>
+                <div class="bg-white rounded-3xl p-6 border border-slate-200 shadow-sm space-y-2">
+                    <span id="lblCard3" class="text-xs font-black uppercase tracking-wider text-orange-600">Total a Receber</span>
+                    <h4 id="dashTotalGeral" class="text-2xl font-black text-orange-600">R$ 0,00</h4>
+                    <p id="subCard3" class="text-xs text-slate-400 font-semibold">Repasse via Pix</p>
+                </div>
+            </div>
+
+            <!-- LINKS DE DIVULGAÇÃO -->
+            <div class="bg-white rounded-3xl p-6 sm:p-8 border border-slate-200 shadow-sm space-y-6">
+                <h3 class="text-lg font-black text-slate-900 pb-3 border-b border-slate-100 flex items-center gap-2">
+                    <i class="fa-solid fa-link text-orange-600"></i>
+                    <span>Seus Links Exclusivos</span>
+                </h3>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div class="bg-orange-50/60 p-5 rounded-2xl border border-orange-200 space-y-3">
+                        <label class="block text-xs font-black uppercase tracking-wider text-orange-900">1. Link para Venda de Softwares</label>
+                        <div class="flex items-center gap-2">
+                            <input type="text" id="linkVendaInput" readonly class="w-full px-3.5 py-3 bg-white rounded-xl border border-orange-300 text-xs font-mono text-slate-700 outline-none">
+                            <button type="button" onclick="copiarTexto('linkVendaInput', 'Link de Vendas')" class="px-4 py-3 bg-slate-900 text-white rounded-xl text-xs font-bold transition">Copiar</button>
+                        </div>
+                    </div>
+
+                    <div class="bg-blue-50/60 p-5 rounded-2xl border border-blue-200 space-y-3">
+                        <label class="block text-xs font-black uppercase tracking-wider text-blue-900">2. Link para Cadastrar na sua Rede (Filhos)</label>
+                        <div class="flex items-center gap-2">
+                            <input type="text" id="linkConviteInput" readonly class="w-full px-3.5 py-3 bg-white rounded-xl border border-blue-300 text-xs font-mono text-slate-700 outline-none">
+                            <button type="button" onclick="copiarTexto('linkConviteInput', 'Link de Cadastro')" class="px-4 py-3 bg-blue-600 text-white rounded-xl text-xs font-bold transition">Copiar</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- LISTA DE FILHOS DIRETOS (afiliado) / TODA A REDE (administrador) -->
+            <div class="bg-white rounded-3xl p-6 sm:p-8 border border-slate-200 shadow-sm space-y-4">
+                <div class="flex justify-between items-center pb-3 border-b border-slate-100 gap-3">
+                    <h3 class="text-lg font-black text-slate-900 flex items-center gap-2">
+                        <i class="fa-solid fa-sitemap text-emerald-600"></i>
+                        <span id="tituloListaRede">Minha Rede de Indicados Diretos (Filhos)</span>
+                    </h3>
+                    <span id="badgeQtdEquipe" class="bg-emerald-50 text-emerald-700 border border-emerald-200 font-bold text-xs px-3 py-1 rounded-lg whitespace-nowrap">0 Parceiro(s)</span>
+                </div>
+
+                <div id="listaFilhosContainer" class="space-y-3"></div>
+            </div>
+
+        </div>
+
+    </main>
+
+    <!-- BOTÃO DE SUPORTE (WhatsApp) -->
+    <a id="btnSuporteWhats" href="#" target="_blank" rel="noopener" class="hidden fixed bottom-5 right-5 z-[70] items-center gap-2 px-4 py-3 rounded-full bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-extrabold shadow-xl transition">
+        <i class="fa-brands fa-whatsapp text-lg"></i>
+        <span>Suporte</span>
+    </a>
+
+    <!-- TROCA OBRIGATÓRIA DE SENHA (entrou com senha temporária) -->
+    <div id="modalTrocarSenha" class="hidden fixed inset-0 z-[80] bg-slate-900/80 flex items-center justify-center p-4">
+        <form onsubmit="confirmarTrocaSenha(event)" class="bg-white rounded-3xl max-w-sm w-full p-6 sm:p-8 space-y-4 shadow-2xl border border-slate-200">
+            <div class="text-center space-y-2">
+                <div class="w-12 h-12 rounded-2xl bg-orange-50 text-orange-600 flex items-center justify-center text-xl mx-auto"><i class="fa-solid fa-key"></i></div>
+                <h3 class="text-lg font-black text-slate-900">Defina sua nova senha</h3>
+                <p class="text-xs text-slate-500">Você entrou com uma senha temporária. Escolha uma senha nova e definitiva para continuar.</p>
+            </div>
+            <div>
+                <label class="block mb-1 text-[11px] font-bold uppercase tracking-wider text-slate-700">Nova senha (mínimo 6 caracteres)</label>
+                <input type="password" id="nova_senha_1" minlength="6" required class="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-orange-500 outline-none text-xs font-semibold bg-slate-50">
+            </div>
+            <div>
+                <label class="block mb-1 text-[11px] font-bold uppercase tracking-wider text-slate-700">Repita a nova senha</label>
+                <input type="password" id="nova_senha_2" minlength="6" required class="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-orange-500 outline-none text-xs font-semibold bg-slate-50">
+            </div>
+            <button type="submit" class="w-full py-3.5 text-xs font-extrabold uppercase tracking-wider text-white gradient-orange rounded-xl shadow-orange-glow hover:opacity-95 transition">Salvar nova senha e entrar</button>
+            <button type="button" onclick="cancelarTrocaSenha()" class="w-full text-xs font-bold text-slate-500 hover:underline">Cancelar</button>
+        </form>
+    </div>
+
+    <!-- RODAPÉ -->
+    <footer class="bg-white border-t border-slate-200 py-6 text-center text-xs text-slate-500">
+        <p>&copy; 2026 Tech - Software de Gestão. Todos os direitos reservados.</p>
+    </footer>
+
+    <!-- SCRIPT: MESMO LOGIN E MESMO BANCO (Neon) DA LOJA, VIA API -->
+    <script>
+        const API_URL = ''; // vazio = mesmo endereço do site (Render serve as páginas e a API juntas)
+
+        let modoCadastro = false;
+        let patrocinadorCad = null; // usuário do patrocinador vindo de ?cad=
+        let whatsappSuporte = '';
+
+        // ===== SUPORTE (WhatsApp) E TROCA OBRIGATÓRIA DE SENHA =====
+        async function carregarConfigSuporte() {
+            try {
+                const cfg = await api('GET', '/api/config');
+                whatsappSuporte = cfg.whatsappSuporte || '';
+            } catch (e) { return; }
+            if (!whatsappSuporte) return;
+            const botao = document.getElementById('btnSuporteWhats');
+            botao.href = `https://wa.me/${whatsappSuporte}?text=${encodeURIComponent('Olá! Preciso de ajuda com a Loja Tech.')}`;
+            botao.classList.remove('hidden');
+            botao.classList.add('flex');
+            const link = document.getElementById('linkEsqueciSenha');
+            link.href = `https://wa.me/${whatsappSuporte}?text=${encodeURIComponent('Olá! Esqueci minha senha da Loja Tech. Meu usuário é: ')}`;
+            link.classList.remove('hidden');
+            document.getElementById('textoEsqueciSemZap').classList.add('hidden');
+        }
+
+        function cancelarTrocaSenha() {
+            localStorage.removeItem('tech_token');
+            document.getElementById('modalTrocarSenha').classList.add('hidden');
+            document.getElementById('nova_senha_1').value = '';
+            document.getElementById('nova_senha_2').value = '';
+        }
+
+        async function confirmarTrocaSenha(e) {
+            e.preventDefault();
+            const a = document.getElementById('nova_senha_1').value;
+            const b = document.getElementById('nova_senha_2').value;
+            if (a.length < 6) { alert('A senha precisa ter pelo menos 6 caracteres.'); return; }
+            if (a !== b) { alert('As duas senhas não são iguais.'); return; }
+            try {
+                const r = await api('POST', '/api/senha/alterar', { novaSenha: a });
+                salvarSessao(r.token, r.user);
+                document.getElementById('modalTrocarSenha').classList.add('hidden');
+                document.getElementById('nova_senha_1').value = '';
+                document.getElementById('nova_senha_2').value = '';
+                alert('Senha alterada com sucesso!');
+                document.getElementById('secaoAutenticacao').classList.add('hidden');
+                document.getElementById('secaoCarregando').classList.remove('hidden');
+                await carregarDashboard();
+            } catch (err) {
+                alert(err.message);
+            }
+        }
+
+        function esc(t) {
+            return String(t == null ? '' : t).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+        }
+        function normalizarTexto(texto) {
+            return texto ? texto.toString().trim().toLowerCase() : '';
+        }
+        function brl(n) {
+            return 'R$ ' + (Number(n) || 0).toFixed(2).replace('.', ',');
+        }
+        function dataBr(iso) {
+            const d = new Date(iso);
+            return isNaN(d) ? '' : d.toLocaleDateString('pt-BR');
+        }
+
+        async function api(metodo, caminho, corpo) {
+            const headers = { 'Content-Type': 'application/json' };
+            const token = localStorage.getItem('tech_token');
+            if (token) headers['Authorization'] = 'Bearer ' + token;
+            let resp;
+            try {
+                resp = await fetch(API_URL + caminho, { method: metodo, headers, body: corpo !== undefined ? JSON.stringify(corpo) : undefined });
+            } catch (e) {
+                throw new Error('Sem conexão com o servidor. Tente novamente em instantes.');
+            }
+            let dados = {};
+            try { dados = await resp.json(); } catch (e) {}
+            if (!resp.ok) {
+                const erro = new Error(dados.erro || 'Erro inesperado no servidor.');
+                erro.status = resp.status;
+                throw erro;
+            }
+            return dados;
+        }
+
+        function salvarSessao(token, user) {
+            localStorage.setItem('tech_token', token);
+            localStorage.setItem('tech_sessao_ativa', JSON.stringify(user)); // a loja reconhece a mesma sessão
+        }
+
+        window.addEventListener('DOMContentLoaded', async () => {
+            carregarConfigSuporte();
+            await verificarUrlParaPatrocinador();
+            if (localStorage.getItem('tech_token')) {
+                await carregarDashboard();
+            } else {
+                mostrarAutenticacao();
+            }
+        });
+
+        function mostrarAutenticacao() {
+            document.getElementById('secaoCarregando').classList.add('hidden');
+            document.getElementById('secaoDashboardAfiliado').classList.add('hidden');
+            document.getElementById('secaoAutenticacao').classList.remove('hidden');
+        }
+
+        // Identifica o "Pai" pelo parâmetro ?cad= (link "Cadastrar na sua Rede")
+        async function verificarUrlParaPatrocinador() {
+            const cad = normalizarTexto(new URLSearchParams(window.location.search).get('cad')).replace(/[^a-z0-9_.-]/g, '');
+            if (!cad) return;
+            const box = document.getElementById('boxAvisoPatrocinador');
+            try {
+                const pat = await api('GET', '/api/patrocinador/' + encodeURIComponent(cad));
+                patrocinadorCad = pat.usuario;
+                document.getElementById('lblNomePatrocinador').innerText = `${pat.nome} (@${pat.usuario})`;
+            } catch (e) {
+                document.getElementById('lblNomePatrocinador').innerText = 'Link não reconhecido: você será vinculado diretamente à Central.';
+            }
+            box.classList.remove('hidden');
+            if (!localStorage.getItem('tech_token') && !modoCadastro) alternarModoAuth();
+        }
+
+        function alternarModoAuth() {
+            modoCadastro = !modoCadastro;
+            const titulo = document.getElementById('tituloAuth');
+            const subtitulo = document.getElementById('subtituloAuth');
+            const btnSubmit = document.getElementById('btnAuthSubmit');
+            const btnAlternar = document.getElementById('btnAlternarModoAuth');
+            const boxCampos = document.getElementById('boxCamposCadastro');
+
+            if (modoCadastro) {
+                titulo.innerText = "Criar sua Conta";
+                subtitulo.innerText = "Preencha seus dados para conectar-se à rede de afiliados.";
+                btnSubmit.innerText = "Concluir Cadastro";
+                btnAlternar.innerText = "Já possui uma conta? Faça Login";
+                boxCampos.classList.remove('hidden');
+            } else {
+                titulo.innerText = "Acessar Área do Afiliado";
+                subtitulo.innerText = "Entre com seu apelido e senha.";
+                btnSubmit.innerText = "Entrar no Painel";
+                btnAlternar.innerText = "Ainda não tem conta? Crie sua Conta";
+                boxCampos.classList.add('hidden');
+            }
+        }
+
+        async function processarAutenticacao(e) {
+            e.preventDefault();
+            const usuario = normalizarTexto(document.getElementById('auth_usuario').value);
+            const senha = document.getElementById('auth_senha').value;
+            const nome = document.getElementById('auth_nome').value.trim();
+            const cpf = document.getElementById('auth_cpf').value.trim();
+            const pix = document.getElementById('auth_pix').value.trim();
+            const email = document.getElementById('auth_email').value.trim();
+            const telefone = document.getElementById('auth_telefone').value.trim();
+
+            const btn = document.getElementById('btnAuthSubmit');
+            const textoBtn = btn.innerText;
+
+            if (modoCadastro && (!nome || !cpf || !pix || !email || !telefone || !usuario)) {
+                alert("Preencha todos os campos obrigatórios.");
+                return;
+            }
+
+            btn.disabled = true;
+            btn.innerText = 'Aguarde...';
+            try {
+                if (modoCadastro) {
+                    // 1) cria a conta; 2) torna afiliado já vinculado ao patrocinador do link
+                    const conta = await api('POST', '/api/registrar', { usuario, nome, email, cpf, pix, telefone, senha });
+                    salvarSessao(conta.token, conta.user);
+                    try {
+                        const af = await api('POST', '/api/afiliar', { nome, email, cpf, pix, telefone, indicador: patrocinadorCad || '' });
+                        salvarSessao(conta.token, { ...conta.user, perfil: 'afiliado' });
+                        const origem = af.patrocinadorUsuario ? `na rede de @${af.patrocinadorUsuario}` : 'diretamente na Central';
+                        alert(`Cadastro realizado com sucesso ${origem}!`);
+                    } catch (err) {
+                        alert(`Sua conta foi criada, mas a afiliação não foi concluída: ${err.message}\nEntre na loja e use o botão "Afilia-se".`);
+                        window.location.href = 'index.html';
+                        return;
+                    }
+                } else {
+                    const login = await api('POST', '/api/login', { usuario, senha });
+                    if (login.trocarSenha) {
+                        localStorage.setItem('tech_token', login.token);
+                        document.getElementById('modalTrocarSenha').classList.remove('hidden');
+                        return;
+                    }
+                    salvarSessao(login.token, login.user);
+                }
+                document.getElementById('secaoAutenticacao').classList.add('hidden');
+                document.getElementById('secaoCarregando').classList.remove('hidden');
+                await carregarDashboard();
+            } catch (err) {
+                alert(err.message);
+            } finally {
+                btn.disabled = false;
+                btn.innerText = textoBtn;
+            }
+        }
+
+        function efetuarLogout() {
+            localStorage.removeItem('tech_token');
+            localStorage.removeItem('tech_sessao_ativa');
+            window.location.href = 'afiliado.html';
+        }
+
+        async function carregarDashboard() {
+            let rede;
+            try {
+                rede = await api('GET', '/api/rede');
+            } catch (err) {
+                if (err.status === 401) {
+                    localStorage.removeItem('tech_token');
+                    localStorage.removeItem('tech_sessao_ativa');
+                    mostrarAutenticacao();
+                    return;
+                }
+                if (err.status === 404) {
+                    alert(err.message);
+                    window.location.href = 'index.html';
+                    return;
+                }
+                document.getElementById('secaoCarregando').innerHTML = `<span class="text-red-600">${esc(err.message)}</span>`;
+                return;
+            }
+
+            let sessao = {};
+            try { sessao = JSON.parse(localStorage.getItem('tech_sessao_ativa') || '{}'); } catch (e) {}
+
+            const baseUrl = window.location.href.substring(0, window.location.href.lastIndexOf('/') + 1);
+
+            if (rede.visao === 'admin') {
+                montarVisaoAdmin(rede, baseUrl);
+                document.getElementById('nomeAfiliadoHeader').innerText = sessao.nome || 'Administrador';
+            } else {
+                montarVisaoAfiliado(rede, baseUrl);
+                document.getElementById('nomeAfiliadoHeader').innerText = rede.eu.nome;
+            }
+
+            document.getElementById('statusUsuarioHeader').classList.remove('hidden');
+            document.getElementById('secaoCarregando').classList.add('hidden');
+            document.getElementById('secaoAutenticacao').classList.add('hidden');
+            document.getElementById('secaoDashboardAfiliado').classList.remove('hidden');
+        }
+
+        // ====== AFILIADO: vê só os indicados diretos (filhos) ======
+        function montarVisaoAfiliado(rede, baseUrl) {
+            const eu = rede.eu;
+            document.getElementById('lblBoasVindasNome').innerText = eu.nome;
+            document.getElementById('lblChaveCriptografada').innerText = eu.id;
+            document.getElementById('lblRegras').innerText =
+                `Você ganha ${rede.taxas.taxaComissao}% de cada venda que fizer e ${rede.taxas.taxaPatrocinador}% das vendas dos parceiros que você indicar. Seu patrocinador: ${eu.patrocinadorNome}.`;
+
+            document.getElementById('dashVendasDiretas').innerText = brl(eu.comissaoDireta);
+            document.getElementById('qtdVendasDiretas').innerText = eu.vendasDiretas;
+            document.getElementById('dashComissaoRede').innerText = brl(eu.comissaoRede);
+            document.getElementById('qtdFilhosEquipe').innerText = eu.filhosDiretos;
+            document.getElementById('dashTotalGeral').innerText = brl(eu.comissaoTotal);
+
+            document.getElementById('linkVendaInput').value = `${baseUrl}index.html?ref=admin&afiliado=${encodeURIComponent(eu.usuario)}`;
+            document.getElementById('linkConviteInput').value = `${baseUrl}afiliado.html?cad=${encodeURIComponent(eu.usuario)}`;
+
+            const container = document.getElementById('listaFilhosContainer');
+            document.getElementById('badgeQtdEquipe').innerText = `${rede.filhos.length} Parceiro(s)`;
+
+            if (rede.filhos.length === 0) {
+                container.innerHTML = `
+                    <div class="text-center py-8 bg-slate-50 rounded-2xl border border-dashed border-slate-200">
+                        <i class="fa-solid fa-users text-slate-300 text-3xl mb-2"></i>
+                        <p class="text-xs font-semibold text-slate-500">Sua rede de indicados está vazia.</p>
+                        <p class="text-[11px] text-slate-400 mt-1">Compartilhe o seu <strong>Link 2</strong> para cadastrar novos membros!</p>
+                    </div>`;
+                return;
+            }
+
+            container.innerHTML = rede.filhos.map(filho => `
+                <div class="bg-slate-50 border border-slate-200 p-4 rounded-2xl flex items-center justify-between gap-3">
+                    <div class="flex items-center gap-3">
+                        <div class="w-9 h-9 rounded-xl bg-blue-100 text-blue-700 flex items-center justify-center font-bold text-xs">
+                            <i class="fa-solid fa-user"></i>
+                        </div>
+                        <div>
+                            <h5 class="text-xs font-bold text-slate-900">${esc(filho.nome)}</h5>
+                            <span class="text-[10px] text-slate-400 font-mono">@${esc(filho.usuario)} | entrou em ${esc(dataBr(filho.criadoEm))}</span>
+                        </div>
+                    </div>
+                    <div class="text-right">
+                        <span class="text-[10px] text-slate-400 uppercase block font-bold">Desempenho</span>
+                        <span class="text-xs font-extrabold text-emerald-600 block">${filho.vendas} venda(s)</span>
+                        <span class="text-[11px] font-bold text-slate-600">Você ganhou ${esc(brl(filho.minhaComissao))}</span>
+                    </div>
+                </div>`).join('');
+        }
+
+        // ====== ADMINISTRADOR: vê TODAS as gerações ======
+        function montarVisaoAdmin(rede, baseUrl) {
+            const r = rede.resumo;
+            document.getElementById('lblPortal').innerText = 'Central - Visão do Administrador';
+            document.getElementById('lblBoasVindasNome').innerText = 'Administrador';
+            document.getElementById('lblSubtitulo').innerText = 'Visão completa da rede: todos os afiliados, de todas as gerações.';
+            document.getElementById('lblChaveCriptografada').innerText = 'ADMIN-CENTRAL';
+            document.getElementById('lblRegras').innerText =
+                `Regras atuais: vendedor ${rede.taxas.taxaComissao}% · patrocinador direto ${rede.taxas.taxaPatrocinador}% · todo o resto da venda fica com a Central. Altere em Gerência de Afiliados, na loja.`;
+
+            document.getElementById('lblCard1').innerText = 'Vendas Pagas (Faturado)';
+            document.getElementById('dashVendasDiretas').innerText = brl(r.faturado);
+            document.getElementById('subCard1').innerText = `${r.vendasPagas} venda(s) confirmada(s)`;
+
+            document.getElementById('lblCard2').innerText = 'A Central Fica com';
+            document.getElementById('dashComissaoRede').innerText = brl(r.comissaoCentral);
+            document.getElementById('subCard2').innerText = `${r.totalAfiliados} afiliado(s) em ${r.geracoes} geração(ões)`;
+
+            document.getElementById('lblCard3').innerText = 'Total a Distribuir';
+            document.getElementById('dashTotalGeral').innerText = brl(r.totalADistribuir);
+            document.getElementById('subCard3').innerText = 'Comissões dos afiliados (Pix)';
+
+            document.getElementById('linkVendaInput').value = `${baseUrl}index.html?ref=admin`;
+            document.getElementById('linkConviteInput').value = `${baseUrl}afiliado.html?cad=admin`;
+
+            document.getElementById('tituloListaRede').innerText = 'Toda a Rede de Afiliados (todas as gerações)';
+            document.getElementById('badgeQtdEquipe').innerText = `${rede.afiliados.length} Afiliado(s)`;
+
+            const container = document.getElementById('listaFilhosContainer');
+            if (rede.afiliados.length === 0) {
+                container.innerHTML = `
+                    <div class="text-center py-8 bg-slate-50 rounded-2xl border border-dashed border-slate-200">
+                        <i class="fa-solid fa-users text-slate-300 text-3xl mb-2"></i>
+                        <p class="text-xs font-semibold text-slate-500">Nenhum afiliado cadastrado ainda.</p>
+                        <p class="text-[11px] text-slate-400 mt-1">Compartilhe o <strong>Link 2</strong> para cadastrar o primeiro afiliado!</p>
+                    </div>`;
+                return;
+            }
+
+            container.innerHTML = rede.afiliados.map(a => `
+                <div style="margin-left:${Math.min(a.nivel - 1, 8) * 18}px" class="bg-slate-50 border border-slate-200 p-4 rounded-2xl flex flex-wrap items-center justify-between gap-3">
+                    <div class="flex items-center gap-3">
+                        <div class="w-9 h-9 rounded-xl ${a.nivel === 1 ? 'bg-emerald-100 text-emerald-700' : 'bg-blue-100 text-blue-700'} flex items-center justify-center font-bold text-xs">
+                            <i class="fa-solid fa-user"></i>
+                        </div>
+                        <div>
+                            <h5 class="text-xs font-bold text-slate-900">${esc(a.nome)}
+                                <span class="ml-1 text-[10px] font-black uppercase px-2 py-0.5 rounded-full ${a.nivel === 1 ? 'bg-emerald-100 text-emerald-700' : 'bg-blue-100 text-blue-700'}">${a.nivel}ª geração</span>
+                            </h5>
+                            <span class="text-[10px] text-slate-400 font-mono">@${esc(a.usuario)} | patrocinador: ${a.patrocinadorUsuario === 'admin' ? 'Central' : '@' + esc(a.patrocinadorUsuario)} | ${esc(dataBr(a.criadoEm))}</span>
+                        </div>
+                    </div>
+                    <div class="text-right">
+                        <span class="text-xs font-extrabold text-emerald-600 block">${a.vendasDiretas} venda(s) · ${a.filhosDiretos} indicado(s)</span>
+                        <span class="text-[11px] font-semibold text-slate-500 block">Direta ${esc(brl(a.comissaoDireta))} · Rede ${esc(brl(a.comissaoRede))}</span>
+                        <span class="text-[11px] font-bold text-slate-700 block">Total ${esc(brl(a.comissaoTotal))} · Sobra p/ Central ${esc(brl(a.comissaoCentral))}</span>
+                    </div>
+                </div>`).join('');
+        }
+
+        function copiarTexto(inputId, tipo) {
+            const input = document.getElementById(inputId);
+            input.select();
+            if (navigator.clipboard) {
+                navigator.clipboard.writeText(input.value).then(() => alert(`${tipo} copiado para a área de transferência!`), () => document.execCommand('copy'));
+            } else {
+                document.execCommand('copy');
+                alert(`${tipo} copiado para a área de transferência!`);
+            }
+        }
+    </script>
+</body>
+</html>

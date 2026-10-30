@@ -1,0 +1,930 @@
+<!DOCTYPE html>
+<html lang="pt-BR" class="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tech - Sistema de Gestão para o Seu Negócio</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Font Awesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Google Fonts Inter -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+    
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        tech: {
+                            orange: '#FF5722',
+                            darkOrange: '#E65100',
+                            lightOrange: '#FF9800',
+                            bg: '#F8FAFC',
+                            card: '#FFFFFF',
+                            border: '#E2E8F0'
+                        }
+                    },
+                    fontFamily: { sans: ['Inter', 'sans-serif'] }
+                }
+            }
+        }
+    </script>
+    <style>
+        .gradient-orange { background: linear-gradient(135deg, #FF5722 0%, #FF9800 100%); }
+        .shadow-orange-glow { box-shadow: 0 10px 25px -5px rgba(255, 87, 34, 0.3); }
+        .glass-header { background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(10px); }
+    </style>
+</head>
+<body class="bg-slate-100 text-slate-800 font-sans antialiased min-h-screen flex flex-col justify-between">
+
+    <!-- PORTÃO DE ENTRADA: login à esquerda, boas-vindas à direita -->
+    <div id="telaPortaoEntrada" class="fixed inset-0 z-50 overflow-y-auto bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900">
+        <!-- brilhos decorativos -->
+        <div class="pointer-events-none absolute -top-32 -right-32 w-96 h-96 rounded-full bg-orange-500/20 blur-3xl"></div>
+        <div class="pointer-events-none absolute -bottom-40 -left-32 w-96 h-96 rounded-full bg-amber-400/10 blur-3xl"></div>
+
+        <div class="relative max-w-6xl mx-auto min-h-full grid grid-cols-1 lg:grid-cols-2 gap-8 lg:gap-14 items-center px-4 py-8 sm:px-8 sm:py-12">
+
+            <!-- ESQUERDA: LOGIN / CADASTRO -->
+            <div class="order-2 lg:order-1 flex justify-center lg:justify-start">
+                <div class="bg-white rounded-3xl w-full max-w-md p-6 sm:p-8 shadow-2xl border border-slate-200">
+                    <div class="text-center space-y-3 mb-6">
+                        <div class="w-14 h-14 rounded-2xl gradient-orange flex items-center justify-center text-white shadow-orange-glow mx-auto">
+                            <i class="fa-solid fa-utensils text-2xl"></i>
+                        </div>
+                        <div>
+                            <h2 class="text-2xl font-black text-slate-900 tracking-tight">LOJA TECH</h2>
+                            <p id="portaoSubtitulo" class="text-xs text-slate-500 font-semibold uppercase tracking-wider">Identifique-se para acessar a plataforma</p>
+                        </div>
+                    </div>
+
+        <form id="formPortaoEntrada" onsubmit="processarLoginPortao(event)" class="space-y-4">
+            <div id="boxCamposNovoCliente" class="hidden space-y-3 pt-2 border-t border-slate-100">
+                <div>
+                    <label class="block mb-1 text-[11px] font-bold uppercase tracking-wider text-slate-700">Nome Completo</label>
+                    <input type="text" id="portao_nome" placeholder="Seu nome completo" class="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-orange-500 outline-none text-xs font-semibold bg-slate-50">
+                </div>
+                <div>
+                    <label class="block mb-1 text-[11px] font-bold uppercase tracking-wider text-slate-700">E-mail</label>
+                    <input type="email" id="portao_email" placeholder="seu@email.com" class="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-orange-500 outline-none text-xs font-semibold bg-slate-50">
+                </div>
+                <div>
+                    <label class="block mb-1 text-[11px] font-bold uppercase tracking-wider text-slate-700">Telefone / WhatsApp (com DDD)</label>
+                    <input type="tel" id="portao_telefone" placeholder="(11) 91234-5678" class="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-orange-500 outline-none text-xs font-semibold bg-slate-50">
+                </div>
+                <div>
+                    <label class="block mb-1 text-[11px] font-bold uppercase tracking-wider text-slate-700">CPF</label>
+                    <input type="text" id="portao_cpf" placeholder="000.000.000-00" class="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-orange-500 outline-none text-xs font-semibold bg-slate-50">
+                </div>
+                <div>
+                    <label class="block mb-1 text-[11px] font-bold uppercase tracking-wider text-slate-700">Chave Pix</label>
+                    <input type="text" id="portao_pix" placeholder="Sua chave Pix" class="w-full px-4 py-3 rounded-xl border border-emerald-300 focus:border-emerald-500 outline-none text-xs font-bold bg-emerald-50/40 text-slate-900">
+                </div>
+            </div>
+
+            <div>
+                <label class="block mb-1 text-[11px] font-bold uppercase tracking-wider text-slate-700">Usuário / Apelido</label>
+                <input type="text" id="portao_usuario" required placeholder="Digite seu usuário ou admin" class="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-orange-500 outline-none text-xs font-semibold bg-slate-50">
+            </div>
+
+            <div>
+                <label class="block mb-1 text-[11px] font-bold uppercase tracking-wider text-slate-700">Senha</label>
+                <input type="password" id="portao_senha" required placeholder="••••••••" class="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-orange-500 outline-none text-xs font-semibold bg-slate-50">
+            </div>
+
+            <button type="submit" id="btnPortaoSubmit" class="w-full py-4 text-xs font-extrabold uppercase tracking-wider text-white gradient-orange rounded-xl shadow-orange-glow hover:opacity-95 transition">
+                Entrar na Loja Tech
+            </button>
+        </form>
+
+                    <div class="mt-6 pt-4 border-t border-slate-100 text-center space-y-2">
+                        <button type="button" onclick="alternarModoPortao()" id="btnPortaoAlternar" class="text-xs font-bold text-orange-600 hover:underline">
+                            Primeiro acesso? Crie sua conta de cliente
+                        </button>
+                        <div class="text-[11px] text-slate-500 pt-1">
+                            Esqueceu a senha?
+                            <a id="linkEsqueciSenha" href="#" target="_blank" rel="noopener" class="hidden font-bold text-orange-600 hover:underline">Fale com o suporte</a>
+                            <span id="textoEsqueciSemZap" class="font-semibold">Entre em contato com o suporte da loja.</span>
+                        </div>
+                        <div class="text-[10px] text-slate-400">
+                            <i class="fa-solid fa-shield-halved mr-1"></i> Central & Filiais - Sistema Integrado
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- DIREITA: MENSAGEM DE BOAS-VINDAS -->
+            <div class="order-1 lg:order-2 text-center lg:text-left space-y-6 text-white">
+                <span class="inline-block px-4 py-1.5 rounded-full bg-orange-500/15 text-orange-300 text-xs font-extrabold uppercase tracking-widest border border-orange-400/30">
+                    Tecnologia Profissional para Food Service
+                </span>
+
+                <h2 class="text-3xl sm:text-5xl font-black tracking-tight leading-tight">
+                    Sistemas de Gestão, Ficha Técnica e CMV <span class="text-orange-500">Sob Medida</span>
+                </h2>
+
+                <p class="text-slate-300 text-base sm:text-lg max-w-xl mx-auto lg:mx-0 font-normal">
+                    Confira o catálogo oficial dos softwares da Tech e escolha a versão ideal para multiplicar o lucro do seu restaurante ou delivery.
+                </p>
+
+                <div class="bg-white/5 border border-white/10 rounded-3xl p-5 sm:p-6 max-w-xl mx-auto lg:mx-0 text-left space-y-4 backdrop-blur-sm">
+                    <h3 class="text-xl font-black text-white flex items-center gap-2">
+                        <i class="fa-solid fa-hand-sparkles text-orange-400"></i>
+                        <span>Seja bem-vindo à Loja Tech!</span>
+                    </h3>
+                    <ul class="space-y-3 text-sm text-slate-200">
+                        <li class="flex gap-3">
+                            <span class="w-7 h-7 shrink-0 rounded-full gradient-orange text-white flex items-center justify-center text-xs font-black">1</span>
+                            <span><strong class="text-white">Já tem conta?</strong> Digite seu usuário e senha ao lado e entre para ver o catálogo.</span>
+                        </li>
+                        <li class="flex gap-3">
+                            <span class="w-7 h-7 shrink-0 rounded-full gradient-orange text-white flex items-center justify-center text-xs font-black">2</span>
+                            <span><strong class="text-white">Primeira vez por aqui?</strong> Clique em <em>"Crie sua conta de cliente"</em>. É rápido e gratuito.</span>
+                        </li>
+                        <li class="flex gap-3">
+                            <span class="w-7 h-7 shrink-0 rounded-full gradient-orange text-white flex items-center justify-center text-xs font-black">3</span>
+                            <span><strong class="text-white">Quer ganhar indicando?</strong> Depois de entrar, clique em <em>"Afilia-se"</em> e faça parte da nossa rede de afiliados.</span>
+                        </li>
+                    </ul>
+                </div>
+
+                <div class="flex flex-wrap justify-center lg:justify-start gap-3 text-xs font-bold text-slate-200">
+                    <span class="px-3 py-2 rounded-xl bg-white/5 border border-white/10"><i class="fa-solid fa-clipboard-list text-orange-400 mr-1.5"></i> Ficha Técnica</span>
+                    <span class="px-3 py-2 rounded-xl bg-white/5 border border-white/10"><i class="fa-solid fa-chart-line text-orange-400 mr-1.5"></i> CMV e Lucro</span>
+                    <span class="px-3 py-2 rounded-xl bg-white/5 border border-white/10"><i class="fa-solid fa-handshake text-orange-400 mr-1.5"></i> Programa de Afiliados</span>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- BOTÃO DE SUPORTE (WhatsApp) -->
+    <a id="btnSuporteWhats" href="#" target="_blank" rel="noopener" class="hidden fixed bottom-5 right-5 z-[70] items-center gap-2 px-4 py-3 rounded-full bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-extrabold shadow-xl transition">
+        <i class="fa-brands fa-whatsapp text-lg"></i>
+        <span>Suporte</span>
+    </a>
+
+    <!-- TROCA OBRIGATÓRIA DE SENHA (entrou com senha temporária) -->
+    <div id="modalTrocarSenha" class="hidden fixed inset-0 z-[80] bg-slate-900/80 flex items-center justify-center p-4">
+        <form onsubmit="confirmarTrocaSenha(event)" class="bg-white rounded-3xl max-w-sm w-full p-6 sm:p-8 space-y-4 shadow-2xl border border-slate-200">
+            <div class="text-center space-y-2">
+                <div class="w-12 h-12 rounded-2xl bg-orange-50 text-orange-600 flex items-center justify-center text-xl mx-auto"><i class="fa-solid fa-key"></i></div>
+                <h3 class="text-lg font-black text-slate-900">Defina sua nova senha</h3>
+                <p class="text-xs text-slate-500">Você entrou com uma senha temporária. Escolha uma senha nova e definitiva para continuar.</p>
+            </div>
+            <div>
+                <label class="block mb-1 text-[11px] font-bold uppercase tracking-wider text-slate-700">Nova senha (mínimo 6 caracteres)</label>
+                <input type="password" id="nova_senha_1" minlength="6" required class="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-orange-500 outline-none text-xs font-semibold bg-slate-50">
+            </div>
+            <div>
+                <label class="block mb-1 text-[11px] font-bold uppercase tracking-wider text-slate-700">Repita a nova senha</label>
+                <input type="password" id="nova_senha_2" minlength="6" required class="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-orange-500 outline-none text-xs font-semibold bg-slate-50">
+            </div>
+            <button type="submit" class="w-full py-3.5 text-xs font-extrabold uppercase tracking-wider text-white gradient-orange rounded-xl shadow-orange-glow hover:opacity-95 transition">Salvar nova senha e entrar</button>
+            <button type="button" onclick="cancelarTrocaSenha()" class="w-full text-xs font-bold text-slate-500 hover:underline">Cancelar</button>
+        </form>
+    </div>
+
+    <!-- CONTEÚDO PRINCIPAL -->
+    <div id="conteudoSistemaLoja" class="hidden flex-1 flex flex-col">
+        <header class="fixed top-0 left-0 w-full z-40 glass-header border-b border-slate-200 transition-all">
+            <div class="max-w-7xl mx-auto px-4 h-20 flex items-center justify-between">
+                <div class="flex items-center gap-3">
+                    <div class="w-11 h-11 rounded-2xl gradient-orange flex items-center justify-center text-white shadow-orange-glow">
+                        <i class="fa-solid fa-utensils text-lg"></i>
+                    </div>
+                    <div>
+                        <h1 class="font-extrabold text-xl tracking-wide text-slate-900">TECH</h1>
+                        <p class="text-[10px] text-slate-500 font-semibold tracking-wider uppercase -mt-1">Software de Gestão para o Seu Negócio</p>
+                    </div>
+                </div>
+
+                <div class="hidden md:flex items-center gap-3">
+                    <a href="#produtos" class="px-4 py-2 text-xs font-bold uppercase tracking-wider text-slate-700 bg-slate-100 rounded-xl hover:bg-slate-200 transition">
+                        <i class="fa-solid fa-box-open mr-1.5 text-orange-600"></i> Softwares
+                    </a>
+
+                    <a href="#afiliase" id="menuBtnAfiliase" class="px-4 py-2 text-xs font-bold uppercase tracking-wider text-slate-700 bg-slate-100 rounded-xl hover:bg-slate-200 transition">
+                        <i class="fa-solid fa-handshake mr-1.5 text-green-600"></i> Afilie-se
+                    </a>
+
+                    <button id="menuBtnAreaAfiliado" onclick="window.location.href='afiliado.html'" class="hidden px-4 py-2 text-xs font-bold uppercase tracking-wider text-orange-700 bg-orange-50 border border-orange-200 rounded-xl hover:bg-orange-100 transition shadow-sm">
+                        <i class="fa-solid fa-users mr-1.5 text-orange-600"></i> Área do Afiliado
+                    </button>
+
+                    <button id="menuBtnGerenciaAfiliados" onclick="solicitarSenhaGerenciaAfiliados()" class="hidden px-4 py-2 text-xs font-bold uppercase tracking-wider text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-xl hover:bg-emerald-100 transition shadow-sm">
+                        <i class="fa-solid fa-users-gear mr-1.5 text-emerald-600"></i> Gerência de Afiliados
+                    </button>
+
+                    <button id="menuBtnAreaGerencial" onclick="solicitarSenhaGerencial()" class="hidden px-4 py-2 text-xs font-bold uppercase tracking-wider text-white bg-slate-900 rounded-xl hover:bg-slate-800 transition shadow-md">
+                        <i class="fa-solid fa-user-gear mr-1.5 text-orange-500"></i> Área Gerencial (Restrito)
+                    </button>
+
+                    <div class="pl-2 flex items-center gap-2 border-l border-slate-200">
+                        <div class="text-right">
+                            <span id="labelNomeUsuarioLogado" class="block text-xs font-black text-slate-900"></span>
+                            <span id="labelPerfilUsuarioLogado" class="block text-[9px] uppercase font-bold text-orange-600"></span>
+                        </div>
+                        <button onclick="efetuarLogoutGeral()" title="Encerrar Sessão" class="p-2.5 rounded-xl bg-red-50 text-red-600 hover:bg-red-100 transition text-xs font-bold">
+                            <i class="fa-solid fa-power-off"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <section class="pt-32 pb-12 px-4 bg-gradient-to-b from-orange-50/60 to-slate-100 border-b border-slate-200">
+            <div class="max-w-4xl mx-auto text-center space-y-4">
+                <span class="inline-block px-4 py-1.5 rounded-full bg-orange-100 text-orange-700 text-xs font-extrabold uppercase tracking-widest border border-orange-200 shadow-sm">
+                    Tecnologia Profissional para Food Service
+                </span>
+                <h2 class="text-3xl sm:text-5xl font-black text-slate-900 tracking-tight leading-tight">
+                    Sistemas de Gestão, Ficha Técnica e CMV <span class="text-orange-600">Sob Medida</span>
+                </h2>
+                <p class="text-slate-600 text-base sm:text-lg max-w-2xl mx-auto font-normal">
+                    Confira o catálogo oficial dos softwares da Tech e escolha a versão ideal para multiplicar o lucro do seu restaurante ou delivery.
+                </p>
+            </div>
+        </section>
+
+        <section id="produtos" class="py-12 max-w-7xl mx-auto px-4 w-full">
+            <div class="flex justify-between items-center mb-8">
+                <h3 class="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">Softwares e Produtos em Destaque</h3>
+                <span id="qtdProdutosLabel" class="text-xs font-semibold text-slate-500 bg-white px-3 py-1.5 rounded-lg border border-slate-200">0 Produtos Ativos</span>
+            </div>
+            <div id="gridProdutos" class="grid grid-cols-1 md:grid-cols-3 gap-8"></div>
+        </section>
+
+        <section id="afiliase" class="py-16 bg-white border-t border-b border-slate-200 my-8">
+            <div class="max-w-5xl mx-auto px-4 text-center space-y-6">
+                <span class="px-4 py-1.5 rounded-full bg-green-100 text-green-800 text-xs font-black uppercase tracking-widest border border-green-200 inline-block">
+                    Oportunidade de Parceria Comercial
+                </span>
+                <h3 class="text-2xl sm:text-4xl font-black text-slate-900">Seja um Afiliado dos Produtos <span class="text-orange-600">Tech</span></h3>
+                <p class="text-slate-600 text-sm sm:text-base max-w-2xl mx-auto leading-relaxed">
+                    Recomende nossos softwares para estabelecimentos comerciais e ganhe comissões diretas gerenciadas pela Central.
+                </p>
+                <div class="pt-2 flex flex-wrap justify-center gap-4">
+                    <button onclick="solicitarAfiliacaoModalCompleto()" class="px-8 py-4 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs sm:text-sm uppercase tracking-wider rounded-2xl shadow-lg transition transform hover:-translate-y-0.5">
+                        <i class="fa-solid fa-user-plus mr-2"></i> Solicitar Afiliação
+                    </button>
+                </div>
+            </div>
+        </section>
+
+        <footer class="bg-white border-t border-slate-200 py-8 mt-auto text-center text-xs text-slate-500">
+            <p>&copy; 2026 Tech - Software de Gestão. Todos os direitos reservados.</p>
+        </footer>
+    </div>
+
+    <!-- MODAL: GERÊNCIA DE AFILIADOS (CENTRAL) -->
+    <div id="modalAfiliados" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm hidden flex items-center justify-center p-4 z-50">
+        <div class="bg-white rounded-3xl max-w-2xl w-full p-6 sm:p-8 relative shadow-2xl border border-slate-200 max-h-[90vh] overflow-y-auto">
+            <button onclick="fecharModalAfiliados()" class="absolute top-5 right-5 text-slate-400 hover:text-slate-700">
+                <i class="fa-solid fa-xmark text-xl"></i>
+            </button>
+            <div class="flex justify-between items-center mb-6">
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center font-bold">
+                        <i class="fa-solid fa-users-gear"></i>
+                    </div>
+                    <div>
+                        <h3 class="text-lg font-black text-slate-900">Gerência de Afiliados (Controle Central)</h3>
+                        <p class="text-xs text-slate-500">Acompanhe e gerencie todas as filiais cadastradas.</p>
+                    </div>
+                </div>
+                <a href="pagamento.html" class="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold uppercase tracking-wider rounded-xl shadow-md transition flex items-center gap-2">
+                    <i class="fa-solid fa-wallet"></i> Sessão de Pagamentos
+                </a>
+            </div>
+
+            <div class="bg-emerald-50/60 p-4 rounded-2xl border border-emerald-100 space-y-4 mb-6">
+                <h4 class="text-xs font-black uppercase tracking-wider text-emerald-800"><i class="fa-solid fa-sliders"></i> Regra Geral de Comissões e Pagamentos</h4>
+                <div class="grid grid-cols-2 gap-3 text-xs font-semibold text-slate-700">
+                    <div>
+                        <label class="block mb-1 uppercase tracking-wider text-emerald-900">Comissão Direta do Afiliado (%)</label>
+                        <input type="number" id="af_comissao_direta" min="0" max="100" step="0.5" value="50" onchange="salvarTaxasComissao()" class="w-full px-3 py-2.5 rounded-xl border border-emerald-300 bg-white font-bold text-emerald-700">
+                    </div>
+                    <div>
+                        <label class="block mb-1 uppercase tracking-wider text-emerald-900">Comissão do Patrocinador (%)</label>
+                        <input type="number" id="af_comissao_patrocinador" min="0" max="100" step="0.5" value="15" onchange="salvarTaxasComissao()" class="w-full px-3 py-2.5 rounded-xl border border-emerald-300 bg-white font-bold text-emerald-700">
+                    </div>
+                    <div>
+                        <label class="block mb-1 uppercase tracking-wider text-emerald-900">Valor Total a Pagar (R$)</label>
+                        <input type="text" id="af_total_geral_pagar" readonly value="R$ 0,00" class="w-full px-3 py-2.5 rounded-xl border border-emerald-300 bg-white font-bold text-emerald-700">
+                    </div>
+                    <p class="col-span-2 text-[11px] font-medium text-emerald-900/80 leading-relaxed normal-case">
+                        <strong>Direta:</strong> quem vendeu ganha esse % do valor da venda. <strong>Patrocinador:</strong> somente o patrocinador direto (o "pai" de quem vendeu) ganha esse % sobre a venda do filho. <strong>Todo o resto da venda fica com a Central</strong>, em qualquer geração. A soma das duas não pode passar de 100%. A taxa vale para as vendas confirmadas daqui para frente.
+                    </p>
+                </div>
+            </div>
+
+            <div>
+                <h4 class="text-xs font-black uppercase tracking-wider text-slate-900 mb-3"><i class="fa-solid fa-list-check"></i> Filiais / Parceiros Cadastrados na Central</h4>
+                <div id="listaGerenciaAfiliadosContainer" class="space-y-2 max-h-48 overflow-y-auto"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL: ÁREA GERENCIAL (ADMIN) -->
+    <div id="modalLojista" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm hidden flex items-center justify-center p-4 z-50">
+        <div class="bg-white rounded-3xl max-w-lg w-full p-6 sm:p-8 relative shadow-2xl border border-slate-200 max-h-[90vh] overflow-y-auto">
+            <button onclick="fecharModalLojista()" class="absolute top-5 right-5 text-slate-400 hover:text-slate-700">
+                <i class="fa-solid fa-xmark text-xl"></i>
+            </button>
+            <div class="flex items-center gap-3 mb-4">
+                <div class="w-10 h-10 rounded-xl bg-slate-900 text-orange-500 flex items-center justify-center font-bold">
+                    <i class="fa-solid fa-user-gear"></i>
+                </div>
+                <div>
+                    <h3 class="text-lg font-black text-slate-900">Área Gerencial (Acesso Restrito - Admin)</h3>
+                    <p class="text-xs text-slate-500">Crie ou edite produtos do catálogo.</p>
+                </div>
+            </div>
+
+            <div class="mb-6 p-1 bg-slate-100 rounded-xl flex gap-1">
+                <button type="button" id="tabCriar" onclick="setModoLojista('criar')" class="flex-1 py-2 text-xs font-bold rounded-lg bg-white shadow-sm text-slate-900">+ Novo Produto</button>
+                <button type="button" id="tabEditar" onclick="setModoLojista('editar')" class="flex-1 py-2 text-xs font-bold rounded-lg text-slate-500 hover:text-slate-900"><i class="fa-solid fa-pen-to-square mr-1"></i> Editar</button>
+            </div>
+            
+            <form id="formLojista" onsubmit="salvarProdutoLojista(event)" class="space-y-4 text-xs font-semibold text-slate-700">
+                <input type="hidden" id="editIndex" value="-1">
+
+                <div id="seletorProdutoEditarBox" class="hidden">
+                    <label class="block mb-1 uppercase tracking-wider text-orange-600">Selecione o Produto para Editar</label>
+                    <select id="seletorProdutoEditar" onchange="carregarDadosParaEdicao()" class="w-full px-4 py-3 rounded-xl border border-orange-300 bg-orange-50/50 outline-none"></select>
+                </div>
+
+                <div>
+                    <label class="block mb-1 uppercase tracking-wider">Identificador (ID: lite, pro ou plus)</label>
+                    <input type="text" id="p_id" required placeholder="Ex: lite, pro, plus" class="w-full px-4 py-3 rounded-xl border border-slate-200 outline-none bg-slate-50">
+                </div>
+
+                <div>
+                    <label class="block mb-1 uppercase tracking-wider">Nome do Software</label>
+                    <input type="text" id="p_nome" required placeholder="Ex: CMV Food Pro 2.0" class="w-full px-4 py-3 rounded-xl border border-slate-200 outline-none">
+                </div>
+
+                <div>
+                    <label class="block mb-1 uppercase tracking-wider">Descrição Curta</label>
+                    <textarea id="p_desc" required rows="2" placeholder="Módulos do software..." class="w-full px-4 py-3 rounded-xl border border-slate-200 outline-none"></textarea>
+                </div>
+
+                <div class="grid grid-cols-3 gap-3">
+                    <div>
+                        <label class="block mb-1 uppercase tracking-wider text-slate-400">Custo (R$)</label>
+                        <input type="number" step="0.01" id="p_custo" required placeholder="10.00" class="w-full px-3 py-3 rounded-xl border border-slate-200 bg-slate-50 outline-none">
+                    </div>
+                    <div>
+                        <label class="block mb-1 uppercase tracking-wider text-slate-500">Preço De (R$)</label>
+                        <input type="number" step="0.01" id="p_preco_de" required placeholder="99.99" class="w-full px-3 py-3 rounded-xl border border-slate-200 outline-none">
+                    </div>
+                    <div>
+                        <label class="block mb-1 uppercase tracking-wider text-orange-600">Preço Por (R$)</label>
+                        <input type="number" step="0.01" id="p_preco_por" required placeholder="79.99" class="w-full px-3 py-3 rounded-xl border border-orange-300 bg-orange-50/30 font-bold outline-none">
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block mb-1 uppercase tracking-wider">Imagem do Produto</label>
+                    <input type="file" id="p_imagem_file" accept="image/*" class="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl bg-slate-50">
+                </div>
+
+                <div class="pt-2 flex gap-2">
+                    <button type="submit" id="btnSalvarProduto" class="flex-1 py-3.5 text-white gradient-orange rounded-xl font-bold uppercase tracking-wider shadow-orange-glow transition">Salvar Produto</button>
+                    <button type="button" id="btnDeletarProduto" onclick="deletarProdutoAtual()" class="hidden px-4 py-3.5 text-red-600 bg-red-50 hover:bg-red-100 rounded-xl font-bold transition"><i class="fa-solid fa-trash-can"></i></button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- SCRIPT DA LOJA CENTRALIZADA E UNIFICADA -->
+    <script>
+        const produtosIniciais = [
+            { id: 'lite', nome: "CMV Food Lite", desc: "Início prático e direto para controle de fichas técnicas básicas.", custo: 10.00, precoDe: 69.99, precoPor: 49.99, imagem: "https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=500&auto=format&fit=crop&q=60", video: "", pdf: "" },
+            { id: 'pro', nome: "CMV Food Pro", desc: "Inclui módulo de Metas de Lucro Bruto e painel visual.", custo: 15.00, precoDe: 99.99, precoPor: 79.99, imagem: "https://images.unsplash.com/photo-1460925895917-afdab827c52f?w=500&auto=format&fit=crop&q=60", video: "", pdf: "" },
+            { id: 'plus', nome: "CMV Food Plus", desc: "Versão definitiva com base de clientes e suporte VIP.", custo: 20.00, precoDe: 119.00, precoPor: 99.99, imagem: "https://images.unsplash.com/photo-1507238691740-187a5b1d37b8?w=500&auto=format&fit=crop&q=60", video: "", pdf: "" }
+        ];
+
+        let modoCadastroPortao = false;
+        let usuarioSessaoAtual = null;
+
+        let produtos = produtosIniciais;
+        let afiliadosBase = [];
+        let taxasComissao = { taxaComissao: 50, taxaPatrocinador: 15 };
+
+        // ===== SUPORTE (WhatsApp) E TROCA OBRIGATÓRIA DE SENHA =====
+        let whatsappSuporte = '';
+
+        function configurarSuporte() {
+            if (!whatsappSuporte) return;
+            const botao = document.getElementById('btnSuporteWhats');
+            botao.href = `https://wa.me/${whatsappSuporte}?text=${encodeURIComponent('Olá! Preciso de ajuda com a Loja Tech.')}`;
+            botao.classList.remove('hidden');
+            botao.classList.add('flex');
+            const link = document.getElementById('linkEsqueciSenha');
+            link.href = `https://wa.me/${whatsappSuporte}?text=${encodeURIComponent('Olá! Esqueci minha senha da Loja Tech. Meu usuário é: ')}`;
+            link.classList.remove('hidden');
+            document.getElementById('textoEsqueciSemZap').classList.add('hidden');
+        }
+
+        function abrirTrocaSenhaObrigatoria() {
+            document.getElementById('modalTrocarSenha').classList.remove('hidden');
+        }
+
+        function cancelarTrocaSenha() {
+            localStorage.removeItem('tech_token');
+            document.getElementById('modalTrocarSenha').classList.add('hidden');
+            document.getElementById('nova_senha_1').value = '';
+            document.getElementById('nova_senha_2').value = '';
+        }
+
+        async function confirmarTrocaSenha(e) {
+            e.preventDefault();
+            const a = document.getElementById('nova_senha_1').value;
+            const b = document.getElementById('nova_senha_2').value;
+            if (a.length < 6) { alert('A senha precisa ter pelo menos 6 caracteres.'); return; }
+            if (a !== b) { alert('As duas senhas não são iguais.'); return; }
+            try {
+                const r = await api('POST', '/api/senha/alterar', { novaSenha: a });
+                localStorage.setItem('tech_token', r.token);
+                document.getElementById('modalTrocarSenha').classList.add('hidden');
+                document.getElementById('nova_senha_1').value = '';
+                document.getElementById('nova_senha_2').value = '';
+                alert('Senha alterada com sucesso!');
+                iniciarSessao(r.user);
+            } catch (err) {
+                alert(err.message);
+            }
+        }
+
+        // ===== CONEXÃO COM O SERVIDOR (Render + banco Neon) =====
+        const API_URL = ''; // vazio = mesmo endereço do site (Render serve as páginas e a API juntas)
+        const CHAVE_INDICADOR = 'tech_afiliado_indicador';
+
+        function esc(t) {
+            return String(t == null ? '' : t).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+        }
+
+        async function api(metodo, caminho, corpo) {
+            const headers = { 'Content-Type': 'application/json' };
+            const token = localStorage.getItem('tech_token');
+            if (token) headers['Authorization'] = 'Bearer ' + token;
+            let resp;
+            try {
+                resp = await fetch(API_URL + caminho, { method: metodo, headers, body: corpo !== undefined ? JSON.stringify(corpo) : undefined });
+            } catch (e) {
+                throw new Error('Sem conexão com o servidor. Tente novamente em instantes.');
+            }
+            let dados = {};
+            try { dados = await resp.json(); } catch (e) {}
+            if (resp.status === 401 && token && caminho !== '/api/login') {
+                localStorage.removeItem('tech_token');
+                localStorage.removeItem('tech_sessao_ativa');
+                alert(dados.erro || 'Sessão expirada. Faça login novamente.');
+                window.location.reload();
+                throw new Error(dados.erro || 'Sessão expirada.');
+            }
+            if (!resp.ok) throw new Error(dados.erro || 'Erro inesperado no servidor.');
+            return dados;
+        }
+
+        window.addEventListener('DOMContentLoaded', async () => {
+            sincronizarParametrosURL();
+            await carregarDadosPublicos();
+            verificarSessaoInicial();
+        });
+
+        async function carregarDadosPublicos() {
+            try {
+                const lista = await api('GET', '/api/produtos');
+                if (Array.isArray(lista) && lista.length) produtos = lista;
+                const cfg = await api('GET', '/api/config');
+                taxasComissao = { taxaComissao: cfg.taxaComissao, taxaPatrocinador: cfg.taxaPatrocinador };
+                whatsappSuporte = cfg.whatsappSuporte || '';
+                configurarSuporte();
+            } catch (e) {
+                console.warn('Usando catálogo padrão:', e.message);
+            }
+        }
+
+        function normalizarTexto(txt) {
+            return txt ? txt.toString().trim().toLowerCase() : '';
+        }
+
+        function sincronizarParametrosURL() {
+            const urlParams = new URLSearchParams(window.location.search);
+            let ref = urlParams.get('ref');
+            let afiliado = urlParams.get('afiliado');
+
+            if (afiliado) {
+                afiliado = normalizarTexto(afiliado).replace(/[^a-z0-9_.-]/g, '');
+                localStorage.setItem(CHAVE_INDICADOR, afiliado);
+            } else {
+                afiliado = localStorage.getItem('tech_afiliado_indicador');
+            }
+
+            if (!ref) ref = 'admin';
+
+            let novaUrl = `${window.location.pathname}?ref=${ref}`;
+            if (afiliado) {
+                novaUrl += `&afiliado=${encodeURIComponent(afiliado)}`;
+            }
+            window.history.replaceState({}, '', novaUrl);
+        }
+
+        function alternarModoPortao() {
+            modoCadastroPortao = !modoCadastroPortao;
+            const btnSubmit = document.getElementById('btnPortaoSubmit');
+            const btnAlternar = document.getElementById('btnPortaoAlternar');
+            const boxCampos = document.getElementById('boxCamposNovoCliente');
+
+            if (modoCadastroPortao) {
+                btnSubmit.innerText = "Criar Conta de Cliente";
+                btnAlternar.innerText = "Já possui uma conta? Faça Login";
+                document.getElementById('portaoSubtitulo').innerText = "Crie sua conta de cliente gratuita";
+                boxCampos.classList.remove('hidden');
+            } else {
+                btnSubmit.innerText = "Entrar na Loja Tech";
+                btnAlternar.innerText = "Primeiro acesso? Crie sua conta de cliente";
+                document.getElementById('portaoSubtitulo').innerText = "Identifique-se para acessar a plataforma";
+                boxCampos.classList.add('hidden');
+            }
+        }
+
+        async function processarLoginPortao(e) {
+            e.preventDefault();
+            const usuarioInput = normalizarTexto(document.getElementById('portao_usuario').value);
+            const senhaInput = document.getElementById('portao_senha').value;
+            const btn = document.getElementById('btnPortaoSubmit');
+            const textoBtn = btn.innerText;
+            btn.disabled = true;
+            btn.innerText = 'Aguarde...';
+
+            try {
+                let resp;
+                if (modoCadastroPortao) {
+                    const nomeInput = document.getElementById('portao_nome').value.trim();
+                    const emailInput = document.getElementById('portao_email').value.trim();
+                    const cpfInput = document.getElementById('portao_cpf').value.trim();
+                    const pixInput = document.getElementById('portao_pix').value.trim();
+                    const telefoneInput = document.getElementById('portao_telefone').value.trim();
+
+                    if (!nomeInput || !emailInput || !telefoneInput || !usuarioInput) {
+                        alert("Preencha todos os campos obrigatórios.");
+                        return;
+                    }
+                    resp = await api('POST', '/api/registrar', { usuario: usuarioInput, nome: nomeInput, email: emailInput, cpf: cpfInput, pix: pixInput, telefone: telefoneInput, senha: senhaInput });
+                    alert("Conta criada com sucesso!");
+                } else {
+                    resp = await api('POST', '/api/login', { usuario: usuarioInput, senha: senhaInput });
+                }
+                localStorage.setItem('tech_token', resp.token);
+                if (resp.trocarSenha) {
+                    abrirTrocaSenhaObrigatoria();
+                    return;
+                }
+                iniciarSessao(resp.user);
+            } catch (err) {
+                alert(err.message);
+            } finally {
+                btn.disabled = false;
+                btn.innerText = textoBtn;
+            }
+        }
+
+        function iniciarSessao(user) {
+            usuarioSessaoAtual = user;
+            localStorage.setItem('tech_sessao_ativa', JSON.stringify(user));
+
+            document.getElementById('telaPortaoEntrada').classList.add('hidden');
+            document.getElementById('conteudoSistemaLoja').classList.remove('hidden');
+
+            document.getElementById('labelNomeUsuarioLogado').innerText = user.nome;
+            document.getElementById('labelPerfilUsuarioLogado').innerText = user.perfil.toUpperCase();
+
+            const btnAreaAfiliado = document.getElementById('menuBtnAreaAfiliado');
+            const btnGerenciaAfiliados = document.getElementById('menuBtnGerenciaAfiliados');
+            const btnAreaGerencial = document.getElementById('menuBtnAreaGerencial');
+            const btnAfiliase = document.getElementById('menuBtnAfiliase');
+
+            if (user.perfil === 'admin') {
+                btnAreaAfiliado.classList.remove('hidden');
+                btnGerenciaAfiliados.classList.remove('hidden');
+                btnAreaGerencial.classList.remove('hidden');
+                btnAfiliase.classList.add('hidden');
+
+                const newUrl = `${window.location.pathname}?ref=admin`;
+                window.history.replaceState({}, '', newUrl);
+            } else if (user.perfil === 'afiliado') {
+                btnAreaAfiliado.classList.remove('hidden');
+                btnGerenciaAfiliados.classList.add('hidden');
+                btnAreaGerencial.classList.add('hidden');
+                btnAfiliase.classList.add('hidden');
+
+                localStorage.setItem('tech_afiliado_indicador', user.usuario);
+                const newUrl = `${window.location.pathname}?ref=admin&afiliado=${encodeURIComponent(user.usuario)}`;
+                window.history.replaceState({}, '', newUrl);
+            } else {
+                btnAreaAfiliado.classList.add('hidden');
+                btnGerenciaAfiliados.classList.add('hidden');
+                btnAreaGerencial.classList.add('hidden');
+                btnAfiliase.classList.remove('hidden');
+            }
+
+            renderizarProdutos();
+        }
+
+        function verificarSessaoInicial() {
+            const sessaoSalva = localStorage.getItem('tech_sessao_ativa');
+            if (sessaoSalva && !localStorage.getItem('tech_token')) {
+                localStorage.removeItem('tech_sessao_ativa');
+                return;
+            }
+            if (sessaoSalva) {
+                try {
+                    iniciarSessao(JSON.parse(sessaoSalva));
+                } catch(e) {
+                    efetuarLogoutGeral();
+                }
+            }
+        }
+
+        function efetuarLogoutGeral() {
+            localStorage.removeItem('tech_sessao_ativa');
+            localStorage.removeItem('tech_token');
+            usuarioSessaoAtual = null;
+            const afiliadoSalvo = localStorage.getItem('tech_afiliado_indicador');
+            let newUrl = window.location.pathname + '?ref=admin';
+            if (afiliadoSalvo) {
+                newUrl += `&afiliado=${encodeURIComponent(afiliadoSalvo)}`;
+            }
+            window.history.replaceState({}, '', newUrl);
+            window.location.reload();
+        }
+
+        async function solicitarAfiliacaoModalCompleto() {
+            if (!usuarioSessaoAtual) return;
+
+            const nome = prompt("Confirme seu Nome Completo para a Central:", usuarioSessaoAtual.nome || '');
+            if (!nome) return;
+            const email = prompt("Confirme seu E-mail:", usuarioSessaoAtual.email || '');
+            if (!email) return;
+            const cpf = prompt("Digite seu CPF:", usuarioSessaoAtual.cpf || '');
+            if (!cpf) return;
+            const pix = prompt("Digite sua Chave Pix para receber comissões:", usuarioSessaoAtual.pix || '');
+            if (!pix) return;
+            const telefone = prompt("Telefone / WhatsApp de contato (com DDD):", usuarioSessaoAtual.telefone || '');
+            if (!telefone) return;
+
+            try {
+                const r = await api('POST', '/api/afiliar', { nome, email, cpf, pix, telefone, indicador: localStorage.getItem(CHAVE_INDICADOR) || '' });
+                const origemMsg = r.patrocinadorUsuario ? `à rede do patrocinador @${r.patrocinadorUsuario}` : 'diretamente à Central';
+                alert(`Solicitação de afiliação aprovada pela Central! A filial foi vinculada ${origemMsg}. Faça login novamente para acessar o seu painel.`);
+                efetuarLogoutGeral();
+            } catch (err) {
+                alert(err.message);
+            }
+        }
+
+        function renderizarProdutos() {
+            const grid = document.getElementById('gridProdutos');
+            const labelCount = document.getElementById('qtdProdutosLabel');
+            
+            grid.innerHTML = '';
+            labelCount.innerText = `${produtos.length} Produto(s) Ativo(s)`;
+
+            const urlParams = new URLSearchParams(window.location.search);
+            const refParam = urlParams.get('ref') || 'admin';
+            const afiliadoParam = (urlParams.get('afiliado') || localStorage.getItem(CHAVE_INDICADOR) || '').replace(/[^a-zA-Z0-9_.-]/g, '');
+
+            produtos.forEach((p, idx) => {
+                let arquivoCheckout = 'check_lite.html';
+                let prodIdNormalizado = (p.id || '').toLowerCase().trim();
+
+                if (prodIdNormalizado.includes('pro')) arquivoCheckout = 'check_pro.html';
+                else if (prodIdNormalizado.includes('plus')) arquivoCheckout = 'check_plus.html';
+
+                let linkCheckoutFinal = `${arquivoCheckout}?produto=${prodIdNormalizado}&ref=${refParam}`;
+                if (afiliadoParam) linkCheckoutFinal += `&afiliado=${encodeURIComponent(afiliadoParam)}`;
+
+                grid.innerHTML += `
+                    <div class="bg-white rounded-3xl border border-slate-200 p-6 shadow-sm hover:shadow-xl transition-all flex flex-col justify-between group">
+                        <div>
+                            <div class="h-48 rounded-2xl overflow-hidden mb-6 bg-slate-100 flex items-center justify-center">
+                                <img src="${p.imagem}" alt="${p.nome}" class="w-full h-full object-cover group-hover:scale-105 transition-transform">
+                            </div>
+                            <span class="text-[10px] font-black uppercase tracking-widest text-orange-600 bg-orange-50 px-2.5 py-1 rounded-md">Software Tech</span>
+                            <h4 class="text-xl font-extrabold text-slate-900 mt-2">${p.nome}</h4>
+                            <p class="text-xs text-slate-500 mt-2 leading-relaxed">${p.desc}</p>
+                            <div class="mt-6">
+                                <span class="text-xs text-slate-400 line-through">De: R$ ${parseFloat(p.precoDe).toFixed(2)}</span>
+                                <div class="text-2xl font-black text-orange-600">R$ ${parseFloat(p.precoPor).toFixed(2)}</div>
+                            </div>
+                        </div>
+                        <div class="mt-6">
+                            <button onclick="executarCompraEProcessarComissao(${idx}, '${afiliadoParam}', '${linkCheckoutFinal}')" class="w-full py-3.5 text-xs font-bold uppercase tracking-wider text-white gradient-orange rounded-xl shadow-orange-glow hover:opacity-95 transition flex items-center justify-center gap-2">
+                                <i class="fa-solid fa-bolt"></i> Comprar Agora
+                            </button>
+                        </div>
+                    </div>
+                `;
+            });
+        }
+
+        function executarCompraEProcessarComissao(idxProduto, usuarioAfiliado, urlCheckout) {
+            // Aqui NÃO há venda nem comissão. O pedido é registrado no checkout e a comissão
+            // só nasce quando a Central confirma o recebimento do pagamento.
+            if (!produtos[idxProduto]) return;
+            window.location.href = urlCheckout;
+        }
+
+        function fecharModalLojista() { document.getElementById('modalLojista').classList.add('hidden'); }
+        function fecharModalAfiliados() { document.getElementById('modalAfiliados').classList.add('hidden'); }
+
+        function solicitarSenhaGerencial() {
+            if (usuarioSessaoAtual && usuarioSessaoAtual.perfil === 'admin') {
+                document.getElementById('modalLojista').classList.remove('hidden');
+                setModoLojista('criar');
+            } else {
+                alert("Acesso exclusivo para o Administrador Geral.");
+            }
+        }
+
+        function solicitarSenhaGerenciaAfiliados() {
+            if (usuarioSessaoAtual && usuarioSessaoAtual.perfil === 'admin') {
+                carregarListaGerenciaAfiliados();
+                document.getElementById('modalAfiliados').classList.remove('hidden');
+            } else {
+                alert("Acesso exclusivo para o Administrador Geral.");
+            }
+        }
+
+        async function atualizarTaxasNaTela() {
+            try {
+                const cfg = await api('GET', '/api/config');
+                taxasComissao = { taxaComissao: cfg.taxaComissao, taxaPatrocinador: cfg.taxaPatrocinador };
+            } catch (err) {
+                console.warn(err.message);
+            }
+            document.getElementById('af_comissao_direta').value = taxasComissao.taxaComissao;
+            document.getElementById('af_comissao_patrocinador').value = taxasComissao.taxaPatrocinador;
+        }
+
+        async function salvarTaxasComissao() {
+            const novas = {
+                taxaComissao: parseFloat(document.getElementById('af_comissao_direta').value),
+                taxaPatrocinador: parseFloat(document.getElementById('af_comissao_patrocinador').value)
+            };
+            try {
+                if (Object.values(novas).some(v => isNaN(v))) throw new Error('Preencha as duas comissões com números.');
+                await api('PUT', '/api/config', novas);
+                taxasComissao = novas;
+            } catch (err) {
+                alert(err.message);
+            }
+            await atualizarTaxasNaTela();
+        }
+
+        async function carregarListaGerenciaAfiliados() {
+            const container = document.getElementById('listaGerenciaAfiliadosContainer');
+            try {
+                afiliadosBase = await api('GET', '/api/afiliados');
+            } catch (err) {
+                alert(err.message);
+                afiliadosBase = [];
+            }
+            await atualizarTaxasNaTela();
+
+            if (afiliadosBase.length === 0) {
+                container.innerHTML = `<div class="text-xs text-slate-500 py-3 text-center border border-dashed rounded-xl">Nenhuma filial cadastrada na Central até o momento.</div>`;
+                document.getElementById('af_total_geral_pagar').value = "R$ 0,00";
+                return;
+            }
+
+            container.innerHTML = '';
+            let totalGeralComissao = 0;
+
+            afiliadosBase.forEach((af, index) => {
+                const comissaoTotalAf = af.comissaoTotal || 0;
+                totalGeralComissao += comissaoTotalAf;
+                container.innerHTML += `
+                    <div class="bg-slate-50 border border-slate-200 p-3 rounded-xl flex items-center justify-between text-xs">
+                        <div>
+                            <strong class="text-slate-900 block">Filial: ${esc(af.nome)} (@${esc(af.usuario)})</strong>
+                            <span class="text-[10px] text-slate-400 font-mono">Pix: ${esc(af.pix)} | CPF: ${esc(af.cpf)}</span>
+                        </div>
+                        <div class="flex items-center gap-3">
+                            <div class="text-right">
+                                <span class="font-bold text-emerald-600 block">${af.vendasDiretas || 0} venda(s)</span>
+                                <span class="text-[10px] text-slate-500">Comissão: R$ ${comissaoTotalAf.toFixed(2)}</span>
+                            </div>
+                            <button onclick="excluirFilialCentral('${esc(af.id)}')" class="p-2 text-red-500 hover:bg-red-50 rounded-lg transition" title="Excluir Filial"><i class="fa-solid fa-trash-can"></i></button>
+                        </div>
+                    </div>
+                `;
+            });
+
+            document.getElementById('af_total_geral_pagar').value = `R$ ${totalGeralComissao.toFixed(2)}`;
+        }
+
+        async function excluirFilialCentral(id) {
+            if (!confirm("Deseja realmente excluir esta filial da Central?")) return;
+            try {
+                await api('DELETE', '/api/afiliados/' + encodeURIComponent(id));
+            } catch (err) {
+                alert(err.message);
+            }
+            carregarListaGerenciaAfiliados();
+        }
+
+        function setModoLojista(modo) {
+            const tabCriar = document.getElementById('tabCriar');
+            const tabEditar = document.getElementById('tabEditar');
+            const seletorBox = document.getElementById('seletorProdutoEditarBox');
+            const btnSalvar = document.getElementById('btnSalvarProduto');
+            const btnDeletar = document.getElementById('btnDeletarProduto');
+
+            if (modo === 'criar') {
+                tabCriar.className = "flex-1 py-2 text-xs font-bold rounded-lg bg-white shadow-sm text-slate-900";
+                tabEditar.className = "flex-1 py-2 text-xs font-bold rounded-lg text-slate-500 hover:text-slate-900";
+                seletorBox.classList.add('hidden');
+                btnSalvar.innerText = "Salvar Novo Produto";
+                btnDeletar.classList.add('hidden');
+                document.getElementById('editIndex').value = "-1";
+                document.getElementById('formLojista').reset();
+            } else {
+                tabEditar.className = "flex-1 py-2 text-xs font-bold rounded-lg bg-white shadow-sm text-slate-900";
+                tabCriar.className = "flex-1 py-2 text-xs font-bold rounded-lg text-slate-500 hover:text-slate-900";
+                seletorBox.classList.remove('hidden');
+                btnSalvar.innerText = "Salvar Alterações";
+                btnDeletar.classList.remove('hidden');
+                
+                const select = document.getElementById('seletorProdutoEditar');
+                select.innerHTML = '';
+                produtos.forEach((p, idx) => { select.innerHTML += `<option value="${idx}">${p.nome}</option>`; });
+                carregarDadosParaEdicao();
+            }
+        }
+
+        function carregarDadosParaEdicao() {
+            const idx = document.getElementById('seletorProdutoEditar').value;
+            if (idx === null || idx === "") return;
+            const p = produtos[idx];
+            document.getElementById('editIndex').value = idx;
+            document.getElementById('p_id').value = p.id || '';
+            document.getElementById('p_nome').value = p.nome;
+            document.getElementById('p_desc').value = p.desc;
+            document.getElementById('p_custo').value = p.custo;
+            document.getElementById('p_preco_de').value = p.precoDe;
+            document.getElementById('p_preco_por').value = p.precoPor;
+        }
+
+        async function salvarProdutosNoServidor() {
+            try {
+                await api('PUT', '/api/produtos', produtos);
+                return true;
+            } catch (err) {
+                alert('Não foi possível salvar no servidor: ' + err.message);
+                return false;
+            }
+        }
+
+        async function salvarProdutoLojista(e) {
+            e.preventDefault();
+            const editIdx = parseInt(document.getElementById('editIndex').value);
+            const id = document.getElementById('p_id').value.trim().toLowerCase() || ('prod-'+Date.now());
+            const nome = document.getElementById('p_nome').value;
+            const desc = document.getElementById('p_desc').value;
+            const custo = parseFloat(document.getElementById('p_custo').value);
+            const precoDe = parseFloat(document.getElementById('p_preco_de').value);
+            const precoPor = parseFloat(document.getElementById('p_preco_por').value);
+            let imgFinal = "https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=500&auto=format&fit=crop&q=60";
+
+            if (editIdx >= 0) {
+                produtos[editIdx] = { ...produtos[editIdx], id, nome, desc, custo, precoDe, precoPor };
+                alert("Produto atualizado!");
+            } else {
+                produtos.push({ id, nome, desc, custo, precoDe, precoPor, imagem: imgFinal });
+                alert("Produto criado!");
+            }
+
+            if (!(await salvarProdutosNoServidor())) return;
+            renderizarProdutos();
+            fecharModalLojista();
+        }
+
+        async function deletarProdutoAtual() {
+            const idx = parseInt(document.getElementById('editIndex').value);
+            if (idx >= 0 && confirm("Remover produto?")) {
+                produtos.splice(idx, 1);
+                if (!(await salvarProdutosNoServidor())) return;
+                renderizarProdutos();
+                fecharModalLojista();
+            }
+        }
+    </script>
+</body>
+</html>
