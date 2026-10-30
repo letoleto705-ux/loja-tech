@@ -74,6 +74,8 @@ const mapAf = r => {
     patrocinadorId: r.patrocinador_id, criadoEm: r.criado_em,
     vendasDiretas: Number(r.vendas) || 0, vendasRede: Number(r.vendas_rede) || 0,
     comissaoDireta: direta, comissaoRede: rede, comissaoTotal: dinheiro(direta + rede),
+    comissaoDiretaPendente: dinheiro(r.direta_pendente), comissaoRedePendente: dinheiro(r.rede_pendente),
+    comissaoPendente: dinheiro(Number(r.direta_pendente || 0) + Number(r.rede_pendente || 0)),
     comissaoCentral: dinheiro(r.central), faturado: dinheiro(r.faturado)
   };
 };
@@ -91,7 +93,9 @@ async function afiliadosComComissao() {
     SELECT a.*,
       COALESCE(v.qtd, 0) AS vendas, COALESCE(v.direta, 0) AS direta,
       COALESCE(v.central, 0) AS central, COALESCE(v.faturado, 0) AS faturado,
-      COALESCE(n.qtd, 0) AS vendas_rede, COALESCE(n.rede, 0) AS rede
+      COALESCE(n.qtd, 0) AS vendas_rede, COALESCE(n.rede, 0) AS rede,
+      COALESCE(pd.direta_pendente, 0) AS direta_pendente,
+      COALESCE(pn.rede_pendente, 0) AS rede_pendente
     FROM afiliados a
     LEFT JOIN (
       SELECT afiliado_usuario AS u, count(*)::int AS qtd, sum(comissao) AS direta,
@@ -102,6 +106,18 @@ async function afiliadosComComissao() {
       SELECT patrocinador_usuario AS u, count(*)::int AS qtd, sum(comissao_patrocinador) AS rede
       FROM pedidos WHERE status = 'pago' AND patrocinador_usuario IS NOT NULL GROUP BY 1
     ) n ON n.u = a.usuario
+    LEFT JOIN (
+      SELECT afiliado_usuario AS u, sum(comissao) AS direta_pendente
+      FROM pedidos
+      WHERE status = 'pago' AND status_comissao_direta = 'PENDENTE' AND afiliado_usuario IS NOT NULL
+      GROUP BY 1
+    ) pd ON pd.u = a.usuario
+    LEFT JOIN (
+      SELECT patrocinador_usuario AS u, sum(comissao_patrocinador) AS rede_pendente
+      FROM pedidos
+      WHERE status = 'pago' AND status_comissao_patrocinador = 'PENDENTE' AND patrocinador_usuario IS NOT NULL
+      GROUP BY 1
+    ) pn ON pn.u = a.usuario
     ORDER BY a.criado_em, a.id`);
   const lista = r.rows.map(mapAf);
   lista.forEach(a => { a.filhosDiretos = lista.filter(f => ehFilhoDe(f, a)).length; });
@@ -162,6 +178,10 @@ async function iniciarBanco() {
   await q('ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS patrocinador_usuario text');
   await q('ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS comissao_patrocinador numeric(12,2) NOT NULL DEFAULT 0');
   await q('ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS comissao_central numeric(12,2) NOT NULL DEFAULT 0');
+  await q("ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS status_comissao_direta text NOT NULL DEFAULT 'PENDENTE'");
+  await q('ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS data_pagamento_comissao_direta timestamptz');
+  await q("ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS status_comissao_patrocinador text NOT NULL DEFAULT 'PENDENTE'");
+  await q('ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS data_pagamento_comissao_patrocinador timestamptz');
   await q(`CREATE TABLE IF NOT EXISTS config (chave text PRIMARY KEY, valor jsonb NOT NULL)`);
 }
 
@@ -450,7 +470,10 @@ app.post('/api/pedidos/:id/confirmar', auth, soAdmin, wrap(async (req, res) => {
 
     await client.query(
       `UPDATE pedidos SET status = 'pago', comissao = $2, patrocinador_usuario = $3,
-         comissao_patrocinador = $4, comissao_central = $5, pago_em = now() WHERE id = $1`,
+         comissao_patrocinador = $4, comissao_central = $5, pago_em = now(),
+         status_comissao_direta = 'PENDENTE', data_pagamento_comissao_direta = NULL,
+         status_comissao_patrocinador = 'PENDENTE', data_pagamento_comissao_patrocinador = NULL
+       WHERE id = $1`,
       [ped.id, vendedor, patrocinadorUsuario, patrocinador, central]);
     return { comissao: vendedor, comissaoPatrocinador: patrocinador, comissaoCentral: central };
   });
@@ -578,6 +601,67 @@ app.post('/api/senha/alterar', auth, wrap(async (req, res) => {
 // ----- Administração de afiliados -----
 app.get('/api/afiliados', auth, soAdmin, wrap(async (req, res) => {
   res.json(await afiliadosComComissao());
+}));
+
+app.post('/api/admin/afiliados/:id/pagar', auth, soAdmin, wrap(async (req, res) => {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const afiliado = (await client.query(
+      'SELECT usuario FROM afiliados WHERE id = $1 FOR UPDATE',
+      [req.params.id]
+    )).rows[0];
+    if (!afiliado) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ erro: 'Afiliado não encontrado.' });
+    }
+
+    const baixadas = await client.query(`
+      UPDATE pedidos
+      SET status_comissao_direta = CASE
+            WHEN afiliado_usuario = $1 AND status_comissao_direta = 'PENDENTE' THEN 'PAGO'
+            ELSE status_comissao_direta
+          END,
+          data_pagamento_comissao_direta = CASE
+            WHEN afiliado_usuario = $1 AND status_comissao_direta = 'PENDENTE' THEN now()
+            ELSE data_pagamento_comissao_direta
+          END,
+          status_comissao_patrocinador = CASE
+            WHEN patrocinador_usuario = $1 AND status_comissao_patrocinador = 'PENDENTE' THEN 'PAGO'
+            ELSE status_comissao_patrocinador
+          END,
+          data_pagamento_comissao_patrocinador = CASE
+            WHEN patrocinador_usuario = $1 AND status_comissao_patrocinador = 'PENDENTE' THEN now()
+            ELSE data_pagamento_comissao_patrocinador
+          END
+      WHERE status = 'pago'
+        AND ((afiliado_usuario = $1 AND status_comissao_direta = 'PENDENTE')
+          OR (patrocinador_usuario = $1 AND status_comissao_patrocinador = 'PENDENTE'))
+      RETURNING afiliado_usuario, patrocinador_usuario, comissao, comissao_patrocinador`,
+      [afiliado.usuario]
+    );
+
+    let valorPago = 0;
+    let quantidade = 0;
+    for (const row of baixadas.rows) {
+      if (row.afiliado_usuario === afiliado.usuario) {
+        valorPago += Number(row.comissao) || 0;
+        quantidade++;
+      }
+      if (row.patrocinador_usuario === afiliado.usuario) {
+        valorPago += Number(row.comissao_patrocinador) || 0;
+        quantidade++;
+      }
+    }
+
+    await client.query('COMMIT');
+    res.json({ ok: true, afiliado: afiliado.usuario, valorPago: dinheiro(valorPago), quantidade });
+  } catch (e) {
+    await client.query('ROLLBACK');
+    throw e;
+  } finally {
+    client.release();
+  }
 }));
 
 app.delete('/api/afiliados/:id', auth, soAdmin, wrap(async (req, res) => {
