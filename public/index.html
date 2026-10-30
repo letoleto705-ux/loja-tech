@@ -821,7 +821,7 @@
                                 <span class="font-bold text-emerald-600 block">${af.vendasDiretas || 0} venda(s)</span>
                                 <span class="text-[10px] text-slate-500">Pendente: R$ ${comissaoPendenteAf.toFixed(2)}</span>
                             </div>
-                            ${comissaoPendenteAf > 0 ? `<button onclick="confirmarPagamentoAfiliado(this)" data-afiliado-id="${esc(af.id)}" data-afiliado-nome="${esc(af.nome)}" class="px-3 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-lg font-bold transition" title="Confirmar pagamento e dar baixa"><i class="fa-solid fa-money-bill-transfer mr-1"></i> Confirmar Pagamento / Dar Baixa</button>` : ''}
+                            <button onclick="confirmarPagamentoAfiliado(this)" data-afiliado-id="${esc(af.id)}" data-afiliado-nome="${esc(af.nome)}" class="px-3 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-lg font-bold transition" title="Confirmar pagamento e dar baixa"><i class="fa-solid fa-money-bill-transfer mr-1"></i> Confirmar Pagamento / Dar Baixa</button>
                             <button onclick="excluirFilialCentral('${esc(af.id)}')" class="p-2 text-red-500 hover:bg-red-50 rounded-lg transition" title="Excluir Filial"><i class="fa-solid fa-trash-can"></i></button>
                         </div>
                     </div>
