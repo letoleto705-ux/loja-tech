@@ -184,6 +184,25 @@ async function iniciarBanco() {
   await q('ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS data_pagamento_comissao_patrocinador timestamptz');
   await q('ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS download_token text');
   await q(`CREATE TABLE IF NOT EXISTS config (chave text PRIMARY KEY, valor jsonb NOT NULL)`);
+  await q(`CREATE TABLE IF NOT EXISTS vendas_aprovadas (
+    payment_id text PRIMARY KEY,
+    cpf text NOT NULL DEFAULT '',
+    email text NOT NULL DEFAULT '',
+    produto text NOT NULL DEFAULT 'CMV Food Light',
+    valor numeric(12,2) NOT NULL DEFAULT 0,
+    hwid text,
+    status text NOT NULL DEFAULT 'APROVADO',
+    ativa boolean NOT NULL DEFAULT true
+  )`);
+  await q('ALTER TABLE vendas_aprovadas ADD COLUMN IF NOT EXISTS payment_id text');
+  await q("ALTER TABLE vendas_aprovadas ADD COLUMN IF NOT EXISTS cpf text NOT NULL DEFAULT ''");
+  await q("ALTER TABLE vendas_aprovadas ADD COLUMN IF NOT EXISTS email text NOT NULL DEFAULT ''");
+  await q("ALTER TABLE vendas_aprovadas ADD COLUMN IF NOT EXISTS produto text NOT NULL DEFAULT 'CMV Food Light'");
+  await q('ALTER TABLE vendas_aprovadas ADD COLUMN IF NOT EXISTS valor numeric(12,2) NOT NULL DEFAULT 0');
+  await q('ALTER TABLE vendas_aprovadas ADD COLUMN IF NOT EXISTS hwid text');
+  await q("ALTER TABLE vendas_aprovadas ADD COLUMN IF NOT EXISTS status text NOT NULL DEFAULT 'APROVADO'");
+  await q('ALTER TABLE vendas_aprovadas ADD COLUMN IF NOT EXISTS ativa boolean NOT NULL DEFAULT true');
+  await q('CREATE UNIQUE INDEX IF NOT EXISTS vendas_aprovadas_payment_id_uidx ON vendas_aprovadas (payment_id)');
 }
 
 // ===== App =====
@@ -712,11 +731,12 @@ app.delete('/api/afiliados/:id', auth, soAdmin, wrap(async (req, res) => {
   }
 }));
 
-// Recebe notificações do Mercado Pago e confirma o estado consultando a API oficial.
+// Recebe notificações do Mercado Pago e sincroniza o estado da licença no Neon.
 app.post('/api/webhook/mercadopago', async (req, res) => {
   const responderOk = () => res.status(200).send('OK');
   try {
-    const idPagamento = req.query.id || req.query['data.id'] || req.body?.data?.id || req.body?.id;
+    const idPagamento = req.query.id || req.query['data.id']
+      || req.body?.data?.id || req.body?.id || req.body?.payment_id;
     if (!idPagamento) {
       console.warn('Notificação de Webhook recebida sem ID de pagamento.');
       return responderOk();
@@ -746,18 +766,45 @@ app.post('/api/webhook/mercadopago', async (req, res) => {
     }
 
     const dadosPagamento = await resposta.json();
-    if (dadosPagamento.status === 'approved') {
-      const emailCliente = dadosPagamento.payer?.email || 'não informado';
-      const valorPago = Number(dadosPagamento.transaction_amount);
-      const moeda = dadosPagamento.currency_id;
-      const valorFormatado = Number.isFinite(valorPago) && moeda === 'BRL'
-        ? new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(valorPago)
-        : `${dadosPagamento.transaction_amount ?? 'não informado'} ${moeda || 'moeda não informada'}`;
+    const status = String(dadosPagamento.status || '').toLowerCase();
+    const cpf = txt(
+      dadosPagamento.payer?.identification?.number
+        || dadosPagamento.additional_info?.payer?.identification?.number
+        || '',
+      30
+    );
+    const email = txt(dadosPagamento.payer?.email || '', 254);
+    const valor = Number(dadosPagamento.transaction_amount);
+    const produto = txt(
+      dadosPagamento.description
+        || dadosPagamento.additional_info?.items?.[0]?.title
+        || 'CMV Food Light',
+      200
+    ) || 'CMV Food Light';
 
-      console.log(`Pagamento APROVADO para o ID: ${id}`);
-      console.log(`Comprador: ${emailCliente} | Valor: ${valorFormatado}`);
+    if (status === 'approved') {
+      if (!Number.isFinite(valor) || valor < 0) {
+        console.error(`Pagamento ${id} aprovado, mas o valor retornado é inválido.`);
+        return responderOk();
+      }
+
+      await q(`
+        INSERT INTO vendas_aprovadas (payment_id, cpf, email, produto, valor, hwid, status, ativa)
+        VALUES ($1, $2, $3, $4, $5, NULL, 'APROVADO', TRUE)
+        ON CONFLICT (payment_id)
+        DO UPDATE SET status = 'APROVADO', ativa = TRUE`,
+      [id, cpf, email, produto, valor]);
+
+      const valorFormatado = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(valor);
+      console.log(`Pagamento aprovado e licença ativada. ID: ${id} | Comprador: ${email || 'não informado'} | Valor: ${valorFormatado}`);
+    } else if (['refunded', 'cancelled', 'charged_back'].includes(status)) {
+      const resultado = await q(
+        'UPDATE vendas_aprovadas SET ativa = FALSE, status = $1 WHERE payment_id = $2',
+        [status, id]
+      );
+      console.log(`Pagamento ${status === 'refunded' ? 'estornado' : status === 'cancelled' ? 'cancelado' : 'contestado'}; licença desativada. ID: ${id} | Registros atualizados: ${resultado.rowCount}`);
     } else {
-      console.log(`Status do pagamento ${id}: ${dadosPagamento.status || 'não informado'}`);
+      console.log(`Pagamento ${id} recebido com status "${status || 'não informado'}"; nenhuma alteração de licença.`);
     }
   } catch (erro) {
     console.error('Erro no processamento do Webhook do Mercado Pago:', erro);
@@ -767,6 +814,7 @@ app.post('/api/webhook/mercadopago', async (req, res) => {
 
 app.use('/api', (req, res) => res.status(404).json({ erro: 'Rota não encontrada.' }));
 app.use((err, req, res, next) => {
+  if (req.path === '/api/webhook/mercadopago') return res.status(200).send('OK');
   if (err.type === 'entity.parse.failed') return res.status(400).json({ erro: 'Requisição inválida.' });
   if (err.code === '23505') return res.status(409).json({ erro: 'Registro já existe.' });
   console.error(err);
