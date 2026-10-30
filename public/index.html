@@ -821,7 +821,6 @@
                                 <span class="font-bold text-emerald-600 block">${af.vendasDiretas || 0} venda(s)</span>
                                 <span class="text-[10px] text-slate-500">Pendente: R$ ${comissaoPendenteAf.toFixed(2)}</span>
                             </div>
-                            <button onclick="confirmarPagamentoAfiliado(this)" data-afiliado-id="${esc(af.id)}" data-afiliado-nome="${esc(af.nome)}" class="px-3 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-lg font-bold transition" title="Confirmar pagamento e dar baixa"><i class="fa-solid fa-money-bill-transfer mr-1"></i> Confirmar Pagamento / Dar Baixa</button>
                             <button onclick="excluirFilialCentral('${esc(af.id)}')" class="p-2 text-red-500 hover:bg-red-50 rounded-lg transition" title="Excluir Filial"><i class="fa-solid fa-trash-can"></i></button>
                         </div>
                     </div>
@@ -829,29 +828,6 @@
             });
 
             document.getElementById('af_total_geral_pagar').value = `R$ ${totalGeralComissao.toFixed(2)}`;
-        }
-
-        async function confirmarPagamentoAfiliado(botao) {
-            const id = botao.dataset.afiliadoId;
-            const nome = botao.dataset.afiliadoNome;
-            if (!confirm(`Confirma que o Pix de ${nome} foi realizado? Esta ação dará baixa nas comissões pendentes.`)) return;
-
-            const conteudoOriginal = botao.innerHTML;
-            botao.disabled = true;
-            botao.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-1"></i> Processando...';
-            try {
-                const resultado = await api('POST', '/api/admin/afiliados/' + encodeURIComponent(id) + '/pagar');
-                await carregarListaGerenciaAfiliados();
-                if (resultado.quantidade > 0) {
-                    alert(`Pagamento confirmado: R$ ${Number(resultado.valorPago).toFixed(2)} baixados em ${resultado.quantidade} comissão(ões).`);
-                } else {
-                    alert('Nenhuma comissão pendente foi encontrada. O afiliado já está em dia.');
-                }
-            } catch (err) {
-                botao.disabled = false;
-                botao.innerHTML = conteudoOriginal;
-                alert(err.message);
-            }
         }
 
         async function excluirFilialCentral(id) {
