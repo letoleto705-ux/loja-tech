@@ -620,6 +620,8 @@
 
                 const link = document.getElementById('linkDownloadProduto');
                 link.href = dados.url;
+                link.target = '_blank';
+                link.rel = 'noopener noreferrer';
                 link.classList.remove('hidden');
                 botao.classList.add('hidden');
                 status.innerText = 'Pagamento confirmado. O arquivo do produto está liberado.';

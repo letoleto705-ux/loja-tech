@@ -36,6 +36,14 @@ const RE_EMAIL = /^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$/;
 const RE_CPF = /^[0-9.\-\s]{0,20}$/;
 const RE_PIX = /^[A-Za-z0-9@._+\-\s\/]{0,100}$/;
 const semTags = t => !/[<>]/.test(t);
+const ehUrlWeb = valor => {
+  try {
+    const url = new URL(valor);
+    return (url.protocol === 'http:' || url.protocol === 'https:') && !!url.hostname;
+  } catch {
+    return false;
+  }
+};
 const hash256 = s => crypto.createHash('sha256').update(String(s)).digest();
 const igual = (a, b) => crypto.timingSafeEqual(hash256(a), hash256(b));
 const soDigitos = t => String(t == null ? '' : t).replace(/\D/g, '');
@@ -636,8 +644,8 @@ app.get('/api/checkout/:id/download', limitarTentativas, wrap(async (req, res) =
 
   const produtos = await lerConfig('produtos', PRODUTOS_INICIAIS);
   const produto = produtos.find(p => norm(p.id) === norm(pedido.produto_id));
-  const arquivo = produto ? txt(produto.pdf, 1000) : '';
-  if (!arquivo || (!/^https?:\/\//i.test(arquivo) && (/^[a-z][a-z0-9+.-]*:/i.test(arquivo) || /^[/\\]{2}/.test(arquivo)))) {
+  const arquivo = produto ? txt(produto.pdf, 8192) : '';
+  if (!arquivo || (/^[a-z][a-z0-9+.-]*:/i.test(arquivo) && !ehUrlWeb(arquivo))) {
     return res.status(404).json({ erro: 'Arquivo do produto não configurado.' });
   }
   res.json({ ok: true, url: arquivo });
@@ -773,11 +781,11 @@ app.put('/api/produtos', auth, soAdmin, wrap(async (req, res) => {
     id: txt(p.id, 40), nome: txt(p.nome, 120), desc: txt(p.desc, 500),
     custo: Number(p.custo) || 0, precoDe: Number(p.precoDe) || 0, precoPor: Number(p.precoPor) || 0,
     imagem: /^https?:\/\//.test(txt(p.imagem, 500)) ? txt(p.imagem, 500) : '',
-    video: txt(p.video, 500), pdf: txt(p.pdf, 1000)
+    video: txt(p.video, 500), pdf: txt(p.pdf, 8192)
   }));
   if (limpa.some(p => !p.id || !p.nome)) return res.status(400).json({ erro: 'Todo produto precisa de id e nome.' });
-  if (limpa.some(p => p.pdf && !/^https?:\/\//i.test(p.pdf) && (/^[a-z][a-z0-9+.-]*:/i.test(p.pdf) || /^[/\\]{2}/.test(p.pdf)))) {
-    return res.status(400).json({ erro: 'O arquivo deve ser um link HTTP(S) ou um caminho relativo válido.' });
+  if (limpa.some(p => p.pdf && /^[a-z][a-z0-9+.-]*:/i.test(p.pdf) && !ehUrlWeb(p.pdf))) {
+    return res.status(400).json({ erro: 'O arquivo deve ser uma URL pública HTTP ou HTTPS, ou um caminho relativo válido.' });
   }
   await gravarConfig('produtos', limpa);
   res.json({ ok: true });
