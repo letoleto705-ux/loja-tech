@@ -90,26 +90,27 @@
                 <div id="boxCamposCadastro" class="hidden space-y-4 pt-2 border-t border-slate-100">
                     <div>
                         <label class="block mb-1.5 text-xs font-bold uppercase tracking-wider text-slate-700">Nome Completo</label>
-                        <input type="text" id="auth_nome" placeholder="Ex: Neyza Nelly" class="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-orange-500 outline-none text-sm font-semibold bg-slate-50">
+                        <input type="text" id="auth_nome" disabled placeholder="Ex: Neyza Nelly" class="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-orange-500 outline-none text-sm font-semibold bg-slate-50">
                     </div>
 
                     <div>
                         <label class="block mb-1.5 text-xs font-bold uppercase tracking-wider text-slate-700">CPF</label>
-                        <input type="text" id="auth_cpf" placeholder="000.000.000-00" class="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-orange-500 outline-none text-sm font-semibold bg-slate-50">
+                        <input type="text" id="auth_cpf" disabled placeholder="000.000.000-00" class="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-orange-500 outline-none text-sm font-semibold bg-slate-50">
                     </div>
 
                     <div>
                         <label class="block mb-1.5 text-xs font-bold uppercase tracking-wider text-slate-700">Telefone / WhatsApp (com DDD)</label>
-                        <input type="tel" id="auth_telefone" placeholder="(11) 91234-5678" class="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-orange-500 outline-none text-sm font-semibold bg-slate-50">
+                        <input type="tel" id="auth_telefone" disabled placeholder="(11) 91234-5678" class="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-orange-500 outline-none text-sm font-semibold bg-slate-50">
                     </div>
                     <div>
                         <label class="block mb-1.5 text-xs font-bold uppercase tracking-wider text-slate-700">Chave Pix</label>
-                        <input type="text" id="auth_pix" placeholder="Digite sua chave Pix" class="w-full px-4 py-3 rounded-xl border border-emerald-300 focus:border-emerald-500 outline-none text-sm font-bold bg-emerald-50/40 text-slate-900">
+                        <input type="text" id="auth_pix" disabled placeholder="Digite sua chave Pix" class="w-full px-4 py-3 rounded-xl border border-emerald-300 focus:border-emerald-500 outline-none text-sm font-bold bg-emerald-50/40 text-slate-900">
+                        <p class="mt-1 text-[11px] font-semibold text-emerald-700">Chave Pix para receber a comissão</p>
                     </div>
 
                     <div>
                         <label class="block mb-1.5 text-xs font-bold uppercase tracking-wider text-slate-700">E-mail</label>
-                        <input type="email" id="auth_email" placeholder="email@exemplo.com" class="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-orange-500 outline-none text-sm font-semibold bg-slate-50">
+                        <input type="email" id="auth_email" disabled placeholder="email@exemplo.com" class="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-orange-500 outline-none text-sm font-semibold bg-slate-50">
                     </div>
                 </div>
 
@@ -389,6 +390,11 @@
             const btnSubmit = document.getElementById('btnAuthSubmit');
             const btnAlternar = document.getElementById('btnAlternarModoAuth');
             const boxCampos = document.getElementById('boxCamposCadastro');
+            ['auth_nome', 'auth_cpf', 'auth_telefone', 'auth_pix', 'auth_email'].forEach(id => {
+                const campo = document.getElementById(id);
+                campo.required = modoCadastro;
+                campo.disabled = !modoCadastro;
+            });
 
             if (modoCadastro) {
                 titulo.innerText = "Criar sua Conta";
@@ -418,7 +424,7 @@
             const btn = document.getElementById('btnAuthSubmit');
             const textoBtn = btn.innerText;
 
-            if (modoCadastro && (!nome || !cpf || !pix || !email || !telefone || !usuario)) {
+            if (modoCadastro && (!nome || !cpf || !pix || !email || !telefone || !usuario || !senha)) {
                 alert("Preencha todos os campos obrigatórios.");
                 return;
             }
@@ -427,19 +433,13 @@
             btn.innerText = 'Aguarde...';
             try {
                 if (modoCadastro) {
-                    // 1) cria a conta; 2) torna afiliado já vinculado ao patrocinador do link
-                    const conta = await api('POST', '/api/registrar', { usuario, nome, email, cpf, pix, telefone, senha });
+                    const conta = await api('POST', '/api/registrar', {
+                        usuario, nome, email, cpf, pix, telefone, senha,
+                        perfil: 'afiliado', indicador: patrocinadorCad || ''
+                    });
                     salvarSessao(conta.token, conta.user);
-                    try {
-                        const af = await api('POST', '/api/afiliar', { nome, email, cpf, pix, telefone, indicador: patrocinadorCad || '' });
-                        salvarSessao(conta.token, { ...conta.user, perfil: 'afiliado' });
-                        const origem = af.patrocinadorUsuario ? `na rede de @${af.patrocinadorUsuario}` : 'diretamente na Central';
-                        alert(`Cadastro realizado com sucesso ${origem}!`);
-                    } catch (err) {
-                        alert(`Sua conta foi criada, mas a afiliação não foi concluída: ${err.message}\nEntre na loja e use o botão "Afilia-se".`);
-                        window.location.href = 'index.html';
-                        return;
-                    }
+                    const origem = conta.patrocinadorUsuario ? `na rede de @${conta.patrocinadorUsuario}` : 'diretamente na Central';
+                    alert(`Cadastro realizado com sucesso ${origem}!`);
                 } else {
                     const login = await api('POST', '/api/login', { usuario, senha });
                     if (login.trocarSenha) {

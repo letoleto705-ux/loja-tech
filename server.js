@@ -255,7 +255,8 @@ const soAdmin = (req, res, next) =>
 
 app.get('/api/saude', (req, res) => res.json({ ok: true }));
 app.get('/api/pagamento/config', (req, res) => {
-  res.json({ publicKey: process.env.MERCADO_PAGO_PUBLIC_KEY || '' });
+  res.set('Cache-Control', 'no-store');
+  res.json({ publicKey: String(process.env.MERCADO_PAGO_PUBLIC_KEY || '').trim() });
 });
 
 // ----- Cadastro / login -----
@@ -265,22 +266,66 @@ app.post('/api/registrar', limitarTentativas, wrap(async (req, res) => {
   const cpf = txt(req.body.cpf, 20), pix = txt(req.body.pix, 100);
   const telefone = soDigitos(req.body.telefone);
   const senha = String(req.body.senha || '');
+  const perfil = req.body.perfil || 'cliente';
 
+  if (!['cliente', 'afiliado'].includes(perfil)) return res.status(400).json({ erro: 'Tipo de cadastro inválido.' });
   if (!RE_USUARIO.test(usuario)) return res.status(400).json({ erro: 'Usuário inválido: use de 3 a 30 letras minúsculas, números, ponto, hífen ou _.' });
   if (!nome || !semTags(nome)) return res.status(400).json({ erro: 'Informe um nome válido.' });
   if (!RE_EMAIL.test(email)) return res.status(400).json({ erro: 'Informe um e-mail válido.' });
-  if (!RE_CPF.test(cpf) || !RE_PIX.test(pix)) return res.status(400).json({ erro: 'CPF ou chave Pix com caracteres inválidos.' });
+  if (!cpf || !RE_CPF.test(cpf)) return res.status(400).json({ erro: 'Informe um CPF válido.' });
+  if (perfil === 'afiliado' && !pix) return res.status(400).json({ erro: 'Informe uma chave Pix para receber a comissão.' });
+  if (!RE_PIX.test(pix)) return res.status(400).json({ erro: 'Chave Pix com caracteres inválidos.' });
   if (!RE_TEL.test(telefone)) return res.status(400).json({ erro: 'Informe um telefone/WhatsApp de contato com DDD (somente números).' });
   if (senha.length < 6) return res.status(400).json({ erro: 'A senha precisa ter pelo menos 6 caracteres.' });
   if (usuario === ADMIN_USUARIO) return res.status(409).json({ erro: 'Este usuário já existe.' });
 
-  const ex = await q('SELECT 1 FROM contas WHERE usuario = $1 UNION SELECT 1 FROM afiliados WHERE usuario = $1', [usuario]);
-  if (ex.rows.length) return res.status(409).json({ erro: 'Este usuário já existe.' });
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const ex = await client.query('SELECT 1 FROM contas WHERE usuario = $1 UNION SELECT 1 FROM afiliados WHERE usuario = $1', [usuario]);
+    if (ex.rows.length) {
+      await client.query('ROLLBACK');
+      return res.status(409).json({ erro: 'Este usuário já existe.' });
+    }
 
-  const senhaHash = await bcrypt.hash(senha, 10);
-  await q('INSERT INTO contas (usuario, nome, email, cpf, pix, telefone, senha_hash) VALUES ($1,$2,$3,$4,$5,$6,$7)',
-    [usuario, nome, email, cpf, pix, telefone, senhaHash]);
-  res.json({ token: gerarToken(usuario, 'cliente'), user: dadosUsuario({ usuario, nome, email, cpf, pix, telefone }, 'cliente') });
+    const senhaHash = await bcrypt.hash(senha, 10);
+    const pixConta = perfil === 'afiliado' ? pix : '';
+    await client.query('INSERT INTO contas (usuario, nome, email, cpf, pix, telefone, senha_hash) VALUES ($1,$2,$3,$4,$5,$6,$7)',
+      [usuario, nome, email, cpf, pixConta, telefone, senhaHash]);
+
+    if (perfil === 'afiliado') {
+      let patrocinadorId = 'admin', patrocinadorUsuario = null;
+      const indicador = norm(req.body.indicador);
+      if (indicador && indicador !== 'admin' && indicador !== usuario) {
+        const pai = (await client.query('SELECT id, usuario FROM afiliados WHERE usuario = $1', [indicador])).rows[0];
+        if (pai) {
+          patrocinadorId = pai.id;
+          patrocinadorUsuario = pai.usuario;
+        }
+      }
+      const id = 'AF-' + usuario.toUpperCase();
+      await client.query(`INSERT INTO afiliados (id, usuario, nome, email, cpf, pix, telefone, senha_hash, patrocinador_id)
+                          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+        [id, usuario, nome, email, cpf, pix, telefone, senhaHash, patrocinadorId]);
+      await client.query('COMMIT');
+      return res.json({
+        token: gerarToken(usuario, 'afiliado'),
+        user: dadosUsuario({ usuario, nome, email, cpf, pix, telefone }, 'afiliado'),
+        id, patrocinadorId, patrocinadorUsuario
+      });
+    }
+
+    await client.query('COMMIT');
+    res.json({
+      token: gerarToken(usuario, 'cliente'),
+      user: dadosUsuario({ usuario, nome, email, cpf, pix: '', telefone }, 'cliente')
+    });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
 }));
 
 app.post('/api/login', limitarTentativas, wrap(async (req, res) => {

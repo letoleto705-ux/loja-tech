@@ -367,10 +367,10 @@
         let pixChaveAtual = '';
 
         async function carregarConfigPagamento() {
-            const resp = await fetch(API_URL + '/api/pagamento/config');
+            const resp = await fetch(API_URL + '/api/pagamento/config', { cache: 'no-store' });
             const dados = await resp.json().catch(() => ({}));
             if (!resp.ok || !dados.publicKey) throw new Error('O pagamento com cartão não está configurado. Tente novamente mais tarde.');
-            publicKeyPagamento = dados.publicKey;
+            publicKeyPagamento = String(dados.publicKey).trim();
         }
 
         async function inicializarBrickCartao(forma) {
@@ -384,10 +384,13 @@
                     brickController = null;
                 }
                 formaBrickAtual = forma;
-                const mp = new MercadoPago(publicKeyPagamento, { locale: 'pt-BR' });
-                const tipos = forma === 'debito' ? ['debit_card'] : ['credit_card', 'prepaid-card'];
+                const mp = new window.MercadoPago(publicKeyPagamento, { locale: 'pt-BR' });
+                const tipos = forma === 'debito' ? ['debit_card'] : ['credit_card', 'prepaid_card'];
+                const initialization = { amount: precoBase };
+                const emailPagador = document.getElementById('chk_email').value.trim();
+                if (emailPagador) initialization.payer = { email: emailPagador };
                 brickController = await mp.bricks().create('cardPayment', 'cardPaymentBrick_container', {
-                    initialization: { amount: precoBase },
+                    initialization,
                     customization: {
                         paymentMethods: {
                             maxInstallments: 12,
