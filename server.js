@@ -14,10 +14,11 @@ if (!DATABASE_URL || !JWT_SECRET || !ADMIN_SENHA) {
   process.exit(1);
 }
 
-// ===== Regras de negócio (valores iniciais; o administrador altera na Gerência de Afiliados) =====
-// Só existem DUAS taxas. Tudo o que sobra da venda fica com a Central (o administrador, o "patriarca").
-const TAXA_COMISSAO_PADRAO = 50;     // % da venda para o afiliado que vendeu (comissão direta)
-const TAXA_PATROCINADOR_PADRAO = 15; // % da venda para o patrocinador DIRETO (o "pai" de quem vendeu)
+// ===== Regras fixas de comissão =====
+const TAXA_COMISSAO_PADRAO = 35;
+const TAXA_PATROCINADOR_PADRAO = 10;
+const TAXA_AVO_PADRAO = 5;
+const TAXA_CENTRAL_PADRAO = 50;
 
 const PRODUTOS_INICIAIS = [
   { id: 'lite', nome: 'CMV Food Lite', desc: 'Início prático e direto para controle de fichas técnicas básicas.', custo: 10.00, precoDe: 69.99, precoPor: 49.99, imagem: 'https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=500&auto=format&fit=crop&q=60', video: '', pdf: '' },
@@ -68,8 +69,10 @@ async function gravarConfig(chave, valor) {
 
 async function lerTaxas() {
   return {
-    taxaComissao: Number(await lerConfig('taxaComissao', TAXA_COMISSAO_PADRAO)),
-    taxaPatrocinador: Number(await lerConfig('taxaPatrocinador', TAXA_PATROCINADOR_PADRAO))
+    taxaComissao: TAXA_COMISSAO_PADRAO,
+    taxaPatrocinador: TAXA_PATROCINADOR_PADRAO,
+    taxaAvo: TAXA_AVO_PADRAO,
+    taxaCentral: TAXA_CENTRAL_PADRAO
   };
 }
 const centavos = (valor, taxa) => Math.round(valor * taxa) / 100;
@@ -95,7 +98,7 @@ function ehFilhoDe(filho, pai) {
 }
 
 // Totais de cada afiliado, somados dos pedidos PAGOS (estorno e cancelamento saem sozinhos da conta):
-//  direta = comissão das vendas que ele fez; rede = comissão que ele ganhou como patrocinador
+//  direta = comissão das vendas que ele fez; rede = comissões de pai e avô
 async function afiliadosComComissao() {
   const r = await q(`
     SELECT a.*,
@@ -111,8 +114,15 @@ async function afiliadosComComissao() {
       FROM pedidos WHERE status = 'pago' AND afiliado_usuario IS NOT NULL GROUP BY 1
     ) v ON v.u = a.usuario
     LEFT JOIN (
-      SELECT patrocinador_usuario AS u, count(*)::int AS qtd, sum(comissao_patrocinador) AS rede
-      FROM pedidos WHERE status = 'pago' AND patrocinador_usuario IS NOT NULL GROUP BY 1
+      SELECT u, count(DISTINCT pedido_id)::int AS qtd, sum(valor) AS rede
+      FROM (
+        SELECT id AS pedido_id, patrocinador_usuario AS u, comissao_patrocinador AS valor
+        FROM pedidos WHERE status = 'pago' AND patrocinador_usuario IS NOT NULL
+        UNION ALL
+        SELECT id AS pedido_id, avo_usuario AS u, comissao_avo AS valor
+        FROM pedidos WHERE status = 'pago' AND avo_usuario IS NOT NULL
+      ) comissoes_rede
+      GROUP BY u
     ) n ON n.u = a.usuario
     LEFT JOIN (
       SELECT afiliado_usuario AS u, sum(comissao) AS direta_pendente
@@ -121,10 +131,17 @@ async function afiliadosComComissao() {
       GROUP BY 1
     ) pd ON pd.u = a.usuario
     LEFT JOIN (
-      SELECT patrocinador_usuario AS u, sum(comissao_patrocinador) AS rede_pendente
-      FROM pedidos
-      WHERE status = 'pago' AND status_comissao_patrocinador = 'PENDENTE' AND patrocinador_usuario IS NOT NULL
-      GROUP BY 1
+      SELECT u, sum(valor) AS rede_pendente
+      FROM (
+        SELECT patrocinador_usuario AS u, comissao_patrocinador AS valor
+        FROM pedidos
+        WHERE status = 'pago' AND status_comissao_patrocinador = 'PENDENTE' AND patrocinador_usuario IS NOT NULL
+        UNION ALL
+        SELECT avo_usuario AS u, comissao_avo AS valor
+        FROM pedidos
+        WHERE status = 'pago' AND status_comissao_avo = 'PENDENTE' AND avo_usuario IS NOT NULL
+      ) comissoes_rede_pendentes
+      GROUP BY u
     ) pn ON pn.u = a.usuario
     ORDER BY a.criado_em, a.id`);
   const lista = r.rows.map(mapAf);
@@ -185,11 +202,18 @@ async function iniciarBanco() {
   // Comissões gravadas NA HORA da confirmação (mudar a taxa depois não altera vendas antigas)
   await q('ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS patrocinador_usuario text');
   await q('ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS comissao_patrocinador numeric(12,2) NOT NULL DEFAULT 0');
+  await q('ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS avo_usuario text');
+  await q('ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS comissao_avo numeric(12,2) NOT NULL DEFAULT 0');
+  await q("ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS pix_comissao_direta text NOT NULL DEFAULT ''");
+  await q("ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS pix_comissao_patrocinador text NOT NULL DEFAULT ''");
+  await q("ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS pix_comissao_avo text NOT NULL DEFAULT ''");
   await q('ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS comissao_central numeric(12,2) NOT NULL DEFAULT 0');
   await q("ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS status_comissao_direta text NOT NULL DEFAULT 'PENDENTE'");
   await q('ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS data_pagamento_comissao_direta timestamptz');
   await q("ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS status_comissao_patrocinador text NOT NULL DEFAULT 'PENDENTE'");
   await q('ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS data_pagamento_comissao_patrocinador timestamptz');
+  await q("ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS status_comissao_avo text NOT NULL DEFAULT 'PENDENTE'");
+  await q('ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS data_pagamento_comissao_avo timestamptz');
   await q('ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS download_token text');
   await q('ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS payment_id text');
   await q("ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS payment_status text NOT NULL DEFAULT ''");
@@ -430,12 +454,13 @@ app.get('/api/rede', auth, wrap(async (req, res) => {
     });
     const t = (await q(`SELECT count(*)::int AS qtd, COALESCE(sum(valor), 0) AS faturado,
         COALESCE(sum(comissao), 0) AS vend, COALESCE(sum(comissao_patrocinador), 0) AS pat,
-        COALESCE(sum(comissao_central), 0) AS cen FROM pedidos WHERE status = 'pago'`)).rows[0];
+        COALESCE(sum(comissao_avo), 0) AS avo, COALESCE(sum(comissao_central), 0) AS cen
+      FROM pedidos WHERE status = 'pago'`)).rows[0];
     return res.json({
       visao: 'admin', taxas, afiliados: arvore,
       resumo: {
         vendasPagas: t.qtd, faturado: dinheiro(t.faturado), comissaoCentral: dinheiro(t.cen),
-        totalADistribuir: dinheiro(Number(t.vend) + Number(t.pat)), totalAfiliados: lista.length,
+        totalADistribuir: dinheiro(Number(t.vend) + Number(t.pat) + Number(t.avo)), totalAfiliados: lista.length,
         geracoes: arvore.reduce((m, a) => Math.max(m, a.nivel), 0)
       }
     });
@@ -696,41 +721,60 @@ async function mudarPedido(id, de, fn) {
 }
 const responder = (res, r) => res.status(r.codigo).json(r.codigo === 200 ? { ok: true, ...r } : { erro: r.erro });
 
-// Confirmar recebimento: ÚNICO ponto em que a comissão nasce.
-//  - vendedor: taxaComissao % do preço (50%)
-//  - patrocinador DIRETO do vendedor, se for afiliado: taxaPatrocinador % do preço (15%)
-//    (avô, bisavô etc. não ganham; o patrocinado também não ganha sobre o próprio pai)
-//  - Central (administrador): TODO o resto da venda, em qualquer geração
+async function afiliadoPorReferencia(client, referencia) {
+  const ref = norm(referencia);
+  if (!ref || ref === 'admin') return null;
+  return (await client.query(
+    'SELECT usuario, pix, patrocinador_id FROM afiliados WHERE lower(id) = $1 OR usuario = $1 LIMIT 1',
+    [ref]
+  )).rows[0] || null;
+}
+
+// Confirmação de recebimento: grava os três níveis, sem comissões abaixo do avô.
 async function confirmarPedido(id) {
-  const taxas = await lerTaxas();
   return mudarPedido(id, 'aguardando', async (client, ped) => {
     const valor = Number(ped.valor);
-    let vendedor = 0, patrocinador = 0, patrocinadorUsuario = null;
+    let vendedor = 0, patrocinador = 0, avo = 0;
+    let patrocinadorUsuario = null, avoUsuario = null;
+    let pixVendedor = '', pixPatrocinador = '', pixAvo = '';
 
     if (ped.afiliado_usuario) {
-      const af = (await client.query('SELECT usuario, patrocinador_id FROM afiliados WHERE usuario = $1', [ped.afiliado_usuario])).rows[0];
+      const af = (await client.query('SELECT usuario, pix, patrocinador_id FROM afiliados WHERE usuario = $1', [ped.afiliado_usuario])).rows[0];
       if (af) {
-        vendedor = centavos(valor, taxas.taxaComissao);
-        const ref = norm(af.patrocinador_id);
-        if (ref && ref !== 'admin') {
-          const pai = (await client.query('SELECT usuario FROM afiliados WHERE lower(id) = $1 OR usuario = $1', [ref])).rows[0];
-          if (pai && pai.usuario !== af.usuario) {
-            patrocinadorUsuario = pai.usuario;
-            patrocinador = centavos(valor, taxas.taxaPatrocinador);
+        vendedor = centavos(valor, TAXA_COMISSAO_PADRAO);
+        pixVendedor = af.pix || '';
+        const pai = await afiliadoPorReferencia(client, af.patrocinador_id);
+        if (pai && pai.usuario !== af.usuario) {
+          patrocinadorUsuario = pai.usuario;
+          patrocinador = centavos(valor, TAXA_PATROCINADOR_PADRAO);
+          pixPatrocinador = pai.pix || '';
+
+          const avoAfiliado = await afiliadoPorReferencia(client, pai.patrocinador_id);
+          if (avoAfiliado && avoAfiliado.usuario !== af.usuario && avoAfiliado.usuario !== pai.usuario) {
+            avoUsuario = avoAfiliado.usuario;
+            avo = centavos(valor, TAXA_AVO_PADRAO);
+            pixAvo = avoAfiliado.pix || '';
           }
         }
       }
     }
-    const central = dinheiro(valor - vendedor - patrocinador); // o que sobra fica com a Central
+    const central = dinheiro(valor - vendedor - patrocinador - avo);
 
     await client.query(
       `UPDATE pedidos SET status = 'pago', comissao = $2, patrocinador_usuario = $3,
-         comissao_patrocinador = $4, comissao_central = $5, pago_em = now(),
+         comissao_patrocinador = $4, avo_usuario = $5, comissao_avo = $6,
+         pix_comissao_direta = $7, pix_comissao_patrocinador = $8, pix_comissao_avo = $9,
+         comissao_central = $10, pago_em = now(),
          status_comissao_direta = 'PENDENTE', data_pagamento_comissao_direta = NULL,
-         status_comissao_patrocinador = 'PENDENTE', data_pagamento_comissao_patrocinador = NULL
+         status_comissao_patrocinador = 'PENDENTE', data_pagamento_comissao_patrocinador = NULL,
+         status_comissao_avo = 'PENDENTE', data_pagamento_comissao_avo = NULL
        WHERE id = $1`,
-      [ped.id, vendedor, patrocinadorUsuario, patrocinador, central]);
-    return { comissao: vendedor, comissaoPatrocinador: patrocinador, comissaoCentral: central };
+      [ped.id, vendedor, patrocinadorUsuario, patrocinador, avoUsuario, avo,
+        pixVendedor || '', pixPatrocinador || '', pixAvo || '', central]);
+    return {
+      comissao: vendedor, comissaoPatrocinador: patrocinador,
+      comissaoAvo: avo, comissaoCentral: central
+    };
   });
 }
 
@@ -796,19 +840,18 @@ app.get('/api/config', wrap(async (req, res) => {
 }));
 
 app.put('/api/config', auth, soAdmin, wrap(async (req, res) => {
+  const taxasFixas = {
+    taxaComissao: TAXA_COMISSAO_PADRAO,
+    taxaPatrocinador: TAXA_PATROCINADOR_PADRAO
+  };
   const rotulos = { taxaComissao: 'Comissão direta', taxaPatrocinador: 'Comissão do patrocinador' };
-  const atual = await lerTaxas();
-  const novo = { ...atual };
-  for (const k of Object.keys(rotulos)) {
+  for (const k of Object.keys(taxasFixas)) {
     const v = req.body[k];
     if (v === undefined) continue;
-    if (typeof v !== 'number' || !isFinite(v) || v < 0 || v > 100) return res.status(400).json({ erro: `${rotulos[k]}: informe um valor entre 0 e 100.` });
-    novo[k] = v;
+    if (typeof v !== 'number' || !isFinite(v) || v !== taxasFixas[k]) {
+      return res.status(400).json({ erro: `${rotulos[k]} é fixa em ${taxasFixas[k]}%.` });
+    }
   }
-  if (novo.taxaComissao + novo.taxaPatrocinador > 100) {
-    return res.status(400).json({ erro: 'A soma das duas comissões não pode passar de 100% do valor da venda.' });
-  }
-  for (const k of Object.keys(rotulos)) if (novo[k] !== atual[k]) await gravarConfig(k, novo[k]);
 
   if (req.body.pixChave !== undefined) {
     const chave = txt(req.body.pixChave, 100);
@@ -909,11 +952,21 @@ app.post('/api/admin/afiliados/:id/pagar', auth, soAdmin, wrap(async (req, res) 
           data_pagamento_comissao_patrocinador = CASE
             WHEN patrocinador_usuario = $1 AND status_comissao_patrocinador = 'PENDENTE' THEN now()
             ELSE data_pagamento_comissao_patrocinador
+          END,
+          status_comissao_avo = CASE
+            WHEN avo_usuario = $1 AND status_comissao_avo = 'PENDENTE' THEN 'PAGO'
+            ELSE status_comissao_avo
+          END,
+          data_pagamento_comissao_avo = CASE
+            WHEN avo_usuario = $1 AND status_comissao_avo = 'PENDENTE' THEN now()
+            ELSE data_pagamento_comissao_avo
           END
       WHERE status = 'pago'
         AND ((afiliado_usuario = $1 AND status_comissao_direta = 'PENDENTE')
-          OR (patrocinador_usuario = $1 AND status_comissao_patrocinador = 'PENDENTE'))
-      RETURNING afiliado_usuario, patrocinador_usuario, comissao, comissao_patrocinador`,
+          OR (patrocinador_usuario = $1 AND status_comissao_patrocinador = 'PENDENTE')
+          OR (avo_usuario = $1 AND status_comissao_avo = 'PENDENTE'))
+      RETURNING afiliado_usuario, patrocinador_usuario, avo_usuario,
+        comissao, comissao_patrocinador, comissao_avo`,
       [afiliado.usuario]
     );
 
@@ -926,6 +979,10 @@ app.post('/api/admin/afiliados/:id/pagar', auth, soAdmin, wrap(async (req, res) 
       }
       if (row.patrocinador_usuario === afiliado.usuario) {
         valorPago += Number(row.comissao_patrocinador) || 0;
+        quantidade++;
+      }
+      if (row.avo_usuario === afiliado.usuario) {
+        valorPago += Number(row.comissao_avo) || 0;
         quantidade++;
       }
     }
