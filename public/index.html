@@ -301,18 +301,18 @@
                 <div class="grid grid-cols-2 gap-3 text-xs font-semibold text-slate-700">
                     <div>
                         <label class="block mb-1 uppercase tracking-wider text-emerald-900">Comissão Direta do Afiliado (%)</label>
-                        <input type="number" id="af_comissao_direta" min="0" max="100" step="0.5" value="50" onchange="salvarTaxasComissao()" class="w-full px-3 py-2.5 rounded-xl border border-emerald-300 bg-white font-bold text-emerald-700">
+                        <input type="number" id="af_comissao_direta" min="0" max="100" step="0.01" value="35" onchange="salvarTaxasComissao()" class="w-full px-3 py-2.5 rounded-xl border border-emerald-300 bg-white font-bold text-emerald-700">
                     </div>
                     <div>
                         <label class="block mb-1 uppercase tracking-wider text-emerald-900">Comissão do Patrocinador (%)</label>
-                        <input type="number" id="af_comissao_patrocinador" min="0" max="100" step="0.5" value="15" onchange="salvarTaxasComissao()" class="w-full px-3 py-2.5 rounded-xl border border-emerald-300 bg-white font-bold text-emerald-700">
+                        <input type="number" id="af_comissao_patrocinador" min="0" max="100" step="0.01" value="10" onchange="salvarTaxasComissao()" class="w-full px-3 py-2.5 rounded-xl border border-emerald-300 bg-white font-bold text-emerald-700">
                     </div>
                     <div>
                         <label class="block mb-1 uppercase tracking-wider text-emerald-900">Valor Total a Pagar (R$)</label>
                         <input type="text" id="af_total_geral_pagar" readonly value="R$ 0,00" class="w-full px-3 py-2.5 rounded-xl border border-emerald-300 bg-white font-bold text-emerald-700">
                     </div>
                     <p class="col-span-2 text-[11px] font-medium text-emerald-900/80 leading-relaxed normal-case">
-                        <strong>Direta:</strong> quem vendeu ganha esse % do valor da venda. <strong>Patrocinador:</strong> somente o patrocinador direto (o "pai" de quem vendeu) ganha esse % sobre a venda do filho. <strong>Todo o resto da venda fica com a Central</strong>, em qualquer geração. A soma das duas não pode passar de 100%. A taxa vale para as vendas confirmadas daqui para frente.
+                        <strong>Direta:</strong> quem vendeu ganha esse % do valor da venda. <strong>Patrocinador:</strong> somente o patrocinador direto (o "pai" de quem vendeu) ganha esse % sobre a venda do filho. Os 5% do avô permanecem fixos quando houver essa geração; a distribuição total a afiliados não pode ultrapassar 100%. A taxa vale para as vendas confirmadas daqui para frente.
                     </p>
                 </div>
             </div>
@@ -414,7 +414,7 @@
 
         let produtos = produtosIniciais;
         let afiliadosBase = [];
-        let taxasComissao = { taxaComissao: 50, taxaPatrocinador: 15 };
+        let taxasComissao = { taxaComissao: 35, taxaPatrocinador: 10 };
 
         // ===== SUPORTE (WhatsApp) E TROCA OBRIGATÓRIA DE SENHA =====
         let whatsappSuporte = '';
@@ -790,7 +790,12 @@
                 taxaPatrocinador: parseFloat(document.getElementById('af_comissao_patrocinador').value)
             };
             try {
-                if (Object.values(novas).some(v => isNaN(v))) throw new Error('Preencha as duas comissões com números.');
+                if (Object.values(novas).some(v => !Number.isFinite(v) || v < 0 || v > 100)) {
+                    throw new Error('Informe cada comissão entre 0% e 100%.');
+                }
+                if (novas.taxaComissao + novas.taxaPatrocinador + 5 > 100) {
+                    throw new Error('A soma das comissões distribuídas, incluindo os 5% do avô, não pode ultrapassar 100%.');
+                }
                 await api('PUT', '/api/config', novas);
                 taxasComissao = novas;
             } catch (err) {

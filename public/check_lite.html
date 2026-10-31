@@ -125,6 +125,7 @@
                             <span>Pagamento via Pix com Liberação após Confirmação</span>
                         </div>
                         <p class="text-slate-600 leading-relaxed">O QR Code Pix e o código Copia e Cola serão gerados pelo Mercado Pago nesta tela. A liberação acontece após a confirmação.</p>
+                        <p class="text-xs font-bold text-emerald-800">Recebedor: Tech Software.</p>
                     </div>
 
                     <!-- FORMULÁRIO SEGURO DE CARTÃO -->
@@ -215,6 +216,7 @@
 
             <div id="modalBoxPix" class="hidden space-y-2 bg-emerald-50/60 p-4 rounded-2xl border border-emerald-200">
                 <span class="text-[10px] uppercase font-bold text-emerald-700 block">QR Code Pix do Mercado Pago</span>
+                <span class="text-xs font-bold text-emerald-800 block">Recebedor: Tech Software</span>
                 <img id="modalPixQr" alt="QR Code Pix para pagamento" class="mx-auto max-w-[220px] rounded bg-white p-2">
                 <label for="modalPixChave" class="text-[10px] uppercase font-bold text-emerald-700 block">Pix Copia e Cola</label>
                 <textarea id="modalPixChave" readonly rows="4" class="w-full rounded-lg border border-emerald-200 p-2 font-mono text-xs text-slate-900"></textarea>
@@ -321,6 +323,7 @@
 
         function setFormaPagto(tipo) {
             formaPagtoAtual = tipo;
+            if (tipo === 'pix') brickInicializacao++;
 
             document.getElementById('btnTabPix').className = "py-3.5 px-2 rounded-2xl border border-slate-200 bg-white text-slate-600 font-bold text-sm flex flex-col items-center gap-1 transition";
             document.getElementById('btnTabCartao').className = "py-3.5 px-2 rounded-2xl border border-slate-200 bg-white text-slate-600 font-bold text-sm flex flex-col items-center gap-1 transition";
@@ -362,6 +365,7 @@
 
         let publicKeyPagamento = '';
         let brickController = null;
+        let brickInicializacao = 0;
         let formaBrickAtual = '';
         let monitorStatusTimer = null;
         let pixChaveAtual = '';
@@ -375,10 +379,12 @@
 
         async function inicializarBrickCartao(forma) {
             const erro = document.getElementById('erroBrick');
+            const inicializacaoAtual = ++brickInicializacao;
             erro.innerText = '';
             try {
                 if (!window.MercadoPago) throw new Error('Não foi possível carregar o formulário seguro do Mercado Pago.');
                 if (!publicKeyPagamento) await carregarConfigPagamento();
+                if (inicializacaoAtual !== brickInicializacao || forma !== formaPagtoAtual) return;
                 if (brickController) {
                     await brickController.unmount();
                     brickController = null;
@@ -389,7 +395,7 @@
                 const initialization = { amount: precoBase };
                 const emailPagador = document.getElementById('chk_email').value.trim();
                 if (emailPagador) initialization.payer = { email: emailPagador };
-                brickController = await mp.bricks().create('cardPayment', 'cardPaymentBrick_container', {
+                const controller = await mp.bricks().create('cardPayment', 'cardPaymentBrick_container', {
                     initialization,
                     customization: {
                         paymentMethods: {
@@ -406,6 +412,11 @@
                         onSubmit: formData => processarPagamentoCartao(formData, formaBrickAtual)
                     }
                 });
+                if (inicializacaoAtual !== brickInicializacao || forma !== formaPagtoAtual) {
+                    await controller.unmount();
+                    return;
+                }
+                brickController = controller;
             } catch (err) {
                 erro.innerText = err.message || 'Não foi possível inicializar o pagamento.';
             }

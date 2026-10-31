@@ -9,16 +9,17 @@ const jwt = require('jsonwebtoken');
 // ===== Variáveis de ambiente (configure no Render) =====
 const { DATABASE_URL, JWT_SECRET, ADMIN_SENHA } = process.env;
 const ADMIN_USUARIO = (process.env.ADMIN_USUARIO || 'admin').trim().toLowerCase();
+const MERCADO_PAGO_ACCESS_TOKEN = (process.env.MERCADO_PAGO_ACCESS_TOKEN || '').trim() || (process.env.ACCESS_TOKEN || '').trim();
+const MERCADO_PAGO_PUBLIC_KEY = (process.env.MERCADO_PAGO_PUBLIC_KEY || '').trim() || (process.env.PUBLIC_KEY || '').trim();
 if (!DATABASE_URL || !JWT_SECRET || !ADMIN_SENHA) {
   console.error('Defina DATABASE_URL, JWT_SECRET e ADMIN_SENHA nas variáveis de ambiente.');
   process.exit(1);
 }
 
-// ===== Regras fixas de comissão =====
+// ===== Regras padrão de comissão =====
 const TAXA_COMISSAO_PADRAO = 35;
 const TAXA_PATROCINADOR_PADRAO = 10;
 const TAXA_AVO_PADRAO = 5;
-const TAXA_CENTRAL_PADRAO = 50;
 
 const PRODUTOS_INICIAIS = [
   { id: 'lite', nome: 'CMV Food Lite', desc: 'Início prático e direto para controle de fichas técnicas básicas.', custo: 10.00, precoDe: 69.99, precoPor: 49.99, imagem: 'https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=500&auto=format&fit=crop&q=60', video: '', pdf: '' },
@@ -68,11 +69,17 @@ async function gravarConfig(chave, valor) {
 }
 
 async function lerTaxas() {
+  const [taxaComissao, taxaPatrocinador] = await Promise.all([
+    lerConfig('taxaComissao', TAXA_COMISSAO_PADRAO),
+    lerConfig('taxaPatrocinador', TAXA_PATROCINADOR_PADRAO)
+  ]);
+  const direta = Number(taxaComissao);
+  const patrocinador = Number(taxaPatrocinador);
   return {
-    taxaComissao: TAXA_COMISSAO_PADRAO,
-    taxaPatrocinador: TAXA_PATROCINADOR_PADRAO,
+    taxaComissao: direta,
+    taxaPatrocinador: patrocinador,
     taxaAvo: TAXA_AVO_PADRAO,
-    taxaCentral: TAXA_CENTRAL_PADRAO
+    taxaCentral: 100 - direta - patrocinador - TAXA_AVO_PADRAO
   };
 }
 const centavos = (valor, taxa) => Math.round(valor * taxa) / 100;
@@ -288,7 +295,7 @@ const soAdmin = (req, res, next) =>
 app.get('/api/saude', (req, res) => res.json({ ok: true }));
 app.get('/api/pagamento/config', (req, res) => {
   res.set('Cache-Control', 'no-store');
-  res.json({ publicKey: String(process.env.MERCADO_PAGO_PUBLIC_KEY || '').trim() });
+  res.json({ publicKey: String(MERCADO_PAGO_PUBLIC_KEY || '').trim() });
 });
 
 // ----- Cadastro / login -----
@@ -527,8 +534,8 @@ app.post('/api/checkout', limitarTentativas, wrap(async (req, res) => {
 }));
 
 async function consultarPagamentoMercadoPago(id) {
-  const accessToken = process.env.MERCADO_PAGO_ACCESS_TOKEN;
-  if (!accessToken) throw new Error('MERCADO_PAGO_ACCESS_TOKEN não está configurado.');
+  const accessToken = MERCADO_PAGO_ACCESS_TOKEN;
+  if (!accessToken) throw new Error('MERCADO_PAGO_ACCESS_TOKEN ou ACCESS_TOKEN não está configurado.');
   const resposta = await fetch(`https://api.mercadopago.com/v1/payments/${encodeURIComponent(id)}`, {
     headers: { Authorization: `Bearer ${accessToken}` },
     signal: AbortSignal.timeout(10000)
@@ -545,7 +552,7 @@ app.post('/api/checkout/:id/pagar', limitarTentativas, wrap(async (req, res) => 
   }
   if (pedido.status === 'pago') return res.status(409).json({ erro: 'Este pedido já foi pago.' });
   if (pedido.status !== 'aguardando') return res.status(409).json({ erro: 'Este pedido não está disponível para pagamento.' });
-  if (!process.env.MERCADO_PAGO_ACCESS_TOKEN) {
+  if (!MERCADO_PAGO_ACCESS_TOKEN) {
     return res.status(503).json({ erro: 'O pagamento está temporariamente indisponível. Tente novamente mais tarde.' });
   }
 
@@ -561,6 +568,7 @@ app.post('/api/checkout/:id/pagar', limitarTentativas, wrap(async (req, res) => 
   const pagamento = {
     transaction_amount: Number(pedido.valor),
     description: pedido.produto_nome,
+    statement_descriptor: 'TECH SOFTWARE',
     external_reference: pedido.id,
     notification_url: process.env.MERCADO_PAGO_WEBHOOK_URL || undefined,
     payer: {
@@ -589,7 +597,7 @@ app.post('/api/checkout/:id/pagar', limitarTentativas, wrap(async (req, res) => 
     if (issuerId) pagamento.issuer_id = issuerId;
   }
 
-  const accessToken = process.env.MERCADO_PAGO_ACCESS_TOKEN;
+  const accessToken = MERCADO_PAGO_ACCESS_TOKEN;
   let resposta;
   try {
     resposta = await fetch('https://api.mercadopago.com/v1/payments', {
@@ -682,7 +690,7 @@ app.get('/api/checkout/:id/status', limitarConsultasStatusCheckout, wrap(async (
   if (!pedido || !/^[a-f0-9]{64}$/i.test(token) || !pedido.download_token || !igual(token, pedido.download_token)) {
     return res.status(404).json({ erro: 'Pedido não encontrado.' });
   }
-  if (pedido.payment_id && process.env.MERCADO_PAGO_ACCESS_TOKEN) {
+  if (pedido.payment_id && MERCADO_PAGO_ACCESS_TOKEN) {
     await sincronizarPagamentoMercadoPago(pedido.payment_id);
     pedido = (await q('SELECT id, status, payment_id, payment_status FROM pedidos WHERE id = $1', [req.params.id])).rows[0];
   }
@@ -733,6 +741,7 @@ async function afiliadoPorReferencia(client, referencia) {
 // Confirmação de recebimento: grava os três níveis, sem comissões abaixo do avô.
 async function confirmarPedido(id) {
   return mudarPedido(id, 'aguardando', async (client, ped) => {
+    const taxas = await lerTaxas();
     const valor = Number(ped.valor);
     let vendedor = 0, patrocinador = 0, avo = 0;
     let patrocinadorUsuario = null, avoUsuario = null;
@@ -741,12 +750,12 @@ async function confirmarPedido(id) {
     if (ped.afiliado_usuario) {
       const af = (await client.query('SELECT usuario, pix, patrocinador_id FROM afiliados WHERE usuario = $1', [ped.afiliado_usuario])).rows[0];
       if (af) {
-        vendedor = centavos(valor, TAXA_COMISSAO_PADRAO);
+        vendedor = centavos(valor, taxas.taxaComissao);
         pixVendedor = af.pix || '';
         const pai = await afiliadoPorReferencia(client, af.patrocinador_id);
         if (pai && pai.usuario !== af.usuario) {
           patrocinadorUsuario = pai.usuario;
-          patrocinador = centavos(valor, TAXA_PATROCINADOR_PADRAO);
+          patrocinador = centavos(valor, taxas.taxaPatrocinador);
           pixPatrocinador = pai.pix || '';
 
           const avoAfiliado = await afiliadoPorReferencia(client, pai.patrocinador_id);
@@ -840,18 +849,19 @@ app.get('/api/config', wrap(async (req, res) => {
 }));
 
 app.put('/api/config', auth, soAdmin, wrap(async (req, res) => {
-  const taxasFixas = {
-    taxaComissao: TAXA_COMISSAO_PADRAO,
-    taxaPatrocinador: TAXA_PATROCINADOR_PADRAO
-  };
-  const rotulos = { taxaComissao: 'Comissão direta', taxaPatrocinador: 'Comissão do patrocinador' };
-  for (const k of Object.keys(taxasFixas)) {
-    const v = req.body[k];
-    if (v === undefined) continue;
-    if (typeof v !== 'number' || !isFinite(v) || v !== taxasFixas[k]) {
-      return res.status(400).json({ erro: `${rotulos[k]} é fixa em ${taxasFixas[k]}%.` });
-    }
+  const taxasAtuais = await lerTaxas();
+  const taxaComissao = req.body.taxaComissao === undefined ? taxasAtuais.taxaComissao : req.body.taxaComissao;
+  const taxaPatrocinador = req.body.taxaPatrocinador === undefined ? taxasAtuais.taxaPatrocinador : req.body.taxaPatrocinador;
+  if (typeof taxaComissao !== 'number' || !Number.isFinite(taxaComissao) || taxaComissao < 0 || taxaComissao > 100
+    || typeof taxaPatrocinador !== 'number' || !Number.isFinite(taxaPatrocinador) || taxaPatrocinador < 0 || taxaPatrocinador > 100) {
+    return res.status(400).json({ erro: 'As comissões devem ser números entre 0% e 100%.' });
   }
+  if (taxaComissao + taxaPatrocinador + TAXA_AVO_PADRAO > 100) {
+    return res.status(400).json({ erro: `A soma das comissões distribuídas, incluindo os ${TAXA_AVO_PADRAO}% do avô, não pode ultrapassar 100%.` });
+  }
+
+  if (req.body.taxaComissao !== undefined) await gravarConfig('taxaComissao', taxaComissao);
+  if (req.body.taxaPatrocinador !== undefined) await gravarConfig('taxaPatrocinador', taxaPatrocinador);
 
   if (req.body.pixChave !== undefined) {
     const chave = txt(req.body.pixChave, 100);
@@ -1035,9 +1045,9 @@ app.post('/api/webhook/mercadopago', async (req, res) => {
       return responderOk();
     }
 
-    const accessToken = process.env.MERCADO_PAGO_ACCESS_TOKEN;
+    const accessToken = MERCADO_PAGO_ACCESS_TOKEN;
     if (!accessToken) {
-      console.error('MERCADO_PAGO_ACCESS_TOKEN não está configurado.');
+      console.error('MERCADO_PAGO_ACCESS_TOKEN ou ACCESS_TOKEN não está configurado.');
       return responderOk();
     }
 

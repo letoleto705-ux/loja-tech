@@ -32,8 +32,8 @@ Crie um repositório e envie **o conteúdo da pasta `loja-tech`** (com `package.
 | `JWT_SECRET` | um texto longo e aleatório (40+ caracteres) |
 | `ADMIN_SENHA` | a senha do administrador |
 | `ADMIN_USUARIO` | (opcional) padrão é `admin` |
-| `MERCADO_PAGO_ACCESS_TOKEN` | token privado de produção ou teste da aplicação Mercado Pago |
-| `MERCADO_PAGO_PUBLIC_KEY` | chave pública da mesma aplicação, usada pelo formulário seguro de cartão |
+| `MERCADO_PAGO_ACCESS_TOKEN` ou `ACCESS_TOKEN` | token privado de produção ou teste da aplicação Mercado Pago |
+| `MERCADO_PAGO_PUBLIC_KEY` ou `PUBLIC_KEY` | chave pública da mesma aplicação, injetada no formulário seguro de cartão |
 | `MERCADO_PAGO_WEBHOOK_URL` | (recomendado) URL pública `https://seu-dominio/api/webhook/mercadopago` |
 
 No plano gratuito o Render "dorme" sem uso; o primeiro acesso depois disso demora alguns segundos (as páginas avisam enquanto carregam).
@@ -46,24 +46,25 @@ Configure no painel Mercado Pago o webhook de pagamentos para apontar para `MERC
 - **1ª geração:** quem entra direto pelo link da Central.
 - **2ª geração:** quem entra pelo link de um afiliado da 1ª geração. **3ª geração:** quem entra pelo link de alguém da 2ª, e assim por diante.
 
-Só existem **duas porcentagens**, que você define na loja: entre como administrador → **Gerência de Afiliados** → "Regra Geral de Comissões". Valores iniciais: **50%** e **15%**.
+As porcentagens de comissão direta e de patrocinador são ajustáveis na loja: entre como administrador → **Gerência de Afiliados** → "Regra Geral de Comissões". Valores iniciais: **35%** e **10%**. A comissão do avô permanece fixa em 5% quando há essa geração.
 
 | Quem | Ganha | Sobre |
 |---|---|---|
-| **Quem vendeu** | 50% (comissão direta) | o preço do produto |
-| **O pai de quem vendeu** (patrocinador direto) | 15% | o preço do produto vendido pelo filho |
+| **Quem vendeu** | taxa direta configurada (padrão 35%) | o preço do produto |
+| **O pai de quem vendeu** (patrocinador direto) | taxa configurada (padrão 10%) | o preço do produto vendido pelo filho |
+| **O avô de quem vendeu** | 5% (fixos) | o preço do produto, quando houver essa geração |
 | **A Central (administrador)** | **todo o resto** | o preço do produto, em qualquer geração |
 
-- Só o patrocinador **direto** ganha os 15%. Avô, bisavô etc. não ganham nada. O filho não ganha nada sobre o pai.
-- Não existe uma porcentagem para a Central: ela fica com o que sobra. Em venda de afiliado que tem pai: 50% + 15% = 65% saem, **35% ficam com a Central**. Em venda de afiliado da 1ª geração (sem pai afiliado): 50% sai, **50% fica com a Central**. Venda sem afiliado: 100% da Central.
-- A soma das duas porcentagens não pode passar de 100%. Mudar uma taxa vale só para as vendas confirmadas dali em diante.
+- Só o patrocinador **direto** recebe a taxa de patrocinador. O avô recebe somente os 5% fixos; gerações acima dele não recebem comissão. O filho não ganha nada sobre o pai.
+- Não existe uma porcentagem para a Central: ela fica com o que sobra. O total distribuído aos afiliados (direta, patrocinador e avô, quando aplicável) nunca pode ultrapassar 100%; portanto, a soma das taxas direta e de patrocinador é limitada a 95%.
+- Mudar uma taxa vale só para as vendas confirmadas dali em diante.
 - As comissões são gravadas **quando o Mercado Pago confirma a aprovação** (ou quando um pedido antigo/manual é confirmado pelo administrador), e os totais de cada afiliado são somados dos pedidos pagos.
 
-Exemplo (venda de R$ 49,99 pela Neyza, indicada pelo Roll): Neyza R$ 25,00 · Roll R$ 7,50 · Central R$ 17,49.
+Venda sem afiliado gera 100% para a Central. Nas vendas com afiliados, a Central recebe o restante após as comissões aplicáveis àquela posição na rede.
 
 ## 5. Área do Afiliado (`afiliado.html`)
 O botão **Área do Afiliado** da loja abre essa página.
-- **Afiliado:** vê as suas vendas, a comissão direta, a comissão de rede (os 15% dos filhos), o total a receber, os seus dois links e **somente os indicados diretos** (quantas vendas fizeram e quanto você ganhou sobre eles).
+- **Afiliado:** vê as suas vendas, a comissão direta, a comissão de rede (a taxa atual do patrocinador sobre as vendas dos filhos), o total a receber, os seus dois links e **somente os indicados diretos** (quantas vendas fizeram e quanto você ganhou sobre eles).
 - **Administrador:** vê **toda a rede, de todas as gerações**, com o patrocinador de cada um, as vendas, as comissões e quanto sobra para a Central, mais o total a distribuir.
 - **Link 1 (vendas):** `index.html?ref=admin&afiliado=SEU_USUARIO`. **Link 2 (cadastrar na sua rede):** `afiliado.html?cad=SEU_USUARIO`: quem se cadastra por ele já entra como afiliado, filho de quem convidou.
 
