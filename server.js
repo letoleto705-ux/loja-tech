@@ -20,6 +20,7 @@ if (!DATABASE_URL || !JWT_SECRET || !ADMIN_SENHA) {
 const TAXA_COMISSAO_PADRAO = 35;
 const TAXA_PATROCINADOR_PADRAO = 10;
 const TAXA_AVO_PADRAO = 5;
+const VALOR_MINIMO_SAQUE_PADRAO = 50;
 
 const PRODUTOS_INICIAIS = [
   { id: 'lite', nome: 'CMV Food Lite', desc: 'Início prático e direto para controle de fichas técnicas básicas.', custo: 10.00, precoDe: 69.99, precoPor: 49.99, imagem: 'https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=500&auto=format&fit=crop&q=60', video: '', pdf: '' },
@@ -85,6 +86,73 @@ async function lerTaxas() {
 const centavos = (valor, taxa) => Math.round(valor * taxa) / 100;
 const dinheiro = v => Math.round(Number(v || 0) * 100) / 100;
 
+function dataAtualBrasil() {
+  const partes = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Sao_Paulo',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  }).formatToParts(new Date());
+  return Object.fromEntries(partes.filter(p => p.type !== 'literal').map(p => [p.type, Number(p.value)]));
+}
+
+function dataInicioMesBrasil() {
+  const { year, month } = dataAtualBrasil();
+  return new Date(Date.UTC(year, month - 1, 1, 3)).toISOString();
+}
+
+function dataPascoa(ano) {
+  const a = ano % 19, b = Math.floor(ano / 100), c = ano % 100;
+  const d = Math.floor(b / 4), e = b % 4, f = Math.floor((b + 8) / 25);
+  const g = Math.floor((b - f + 1) / 3), h = (19 * a + b - d - g + 15) % 30;
+  const i = Math.floor(c / 4), k = c % 4, l = (32 + 2 * e + 2 * i - h - k) % 7;
+  const m = Math.floor((a + 11 * h + 22 * l) / 451);
+  const mes = Math.floor((h + l - 7 * m + 114) / 31);
+  const dia = (h + l - 7 * m + 114) % 31 + 1;
+  return new Date(Date.UTC(ano, mes - 1, dia));
+}
+
+function quintoDiaUtilBrasil(ano, mes) {
+  const pascoa = dataPascoa(ano);
+  const feriados = new Set([
+    `${ano}-01-01`, `${ano}-04-21`, `${ano}-05-01`, `${ano}-09-07`,
+    `${ano}-10-12`, `${ano}-11-02`, `${ano}-11-15`, `${ano}-11-20`, `${ano}-12-25`
+  ]);
+  const diaMovel = (offset) => {
+    const data = new Date(pascoa);
+    data.setUTCDate(data.getUTCDate() + offset);
+    return data.toISOString().slice(0, 10);
+  };
+  [ -48, -47, -2, 60 ].forEach(offset => feriados.add(diaMovel(offset)));
+
+  let uteis = 0;
+  const cursor = new Date(Date.UTC(ano, mes - 1, 1));
+  while (true) {
+    const semana = cursor.getUTCDay();
+    const data = cursor.toISOString().slice(0, 10);
+    if (semana !== 0 && semana !== 6 && !feriados.has(data)) {
+      uteis++;
+      if (uteis === 5) return data;
+    }
+    cursor.setUTCDate(cursor.getUTCDate() + 1);
+  }
+}
+
+function calendarioSaqueHoje() {
+  const { year, month, day } = dataAtualBrasil();
+  const hoje = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+  const dataEsteMes = quintoDiaUtilBrasil(year, month);
+  const liberado = dataEsteMes === hoje;
+  if (!liberado && hoje > dataEsteMes) {
+    const proximoMes = new Date(Date.UTC(year, month, 1));
+    return {
+      dataSaque: quintoDiaUtilBrasil(proximoMes.getUTCFullYear(), proximoMes.getUTCMonth() + 1),
+      liberado
+    };
+  }
+  return { dataSaque: dataEsteMes, liberado };
+}
+
 const mapAf = r => {
   const direta = dinheiro(r.direta), rede = dinheiro(r.rede);
   return {
@@ -94,6 +162,8 @@ const mapAf = r => {
     comissaoDireta: direta, comissaoRede: rede, comissaoTotal: dinheiro(direta + rede),
     comissaoDiretaPendente: dinheiro(r.direta_pendente), comissaoRedePendente: dinheiro(r.rede_pendente),
     comissaoPendente: dinheiro(Number(r.direta_pendente || 0) + Number(r.rede_pendente || 0)),
+    comissaoDiretaLiberar: dinheiro(r.direta_liberar), comissaoRedeLiberar: dinheiro(r.rede_liberar),
+    comissaoLiberar: dinheiro(Number(r.direta_liberar || 0) + Number(r.rede_liberar || 0)),
     comissaoCentral: dinheiro(r.central), faturado: dinheiro(r.faturado)
   };
 };
@@ -113,7 +183,9 @@ async function afiliadosComComissao() {
       COALESCE(v.central, 0) AS central, COALESCE(v.faturado, 0) AS faturado,
       COALESCE(n.qtd, 0) AS vendas_rede, COALESCE(n.rede, 0) AS rede,
       COALESCE(pd.direta_pendente, 0) AS direta_pendente,
-      COALESCE(pn.rede_pendente, 0) AS rede_pendente
+      COALESCE(pn.rede_pendente, 0) AS rede_pendente,
+      COALESCE(pd.direta_liberar, 0) AS direta_liberar,
+      COALESCE(pn.rede_liberar, 0) AS rede_liberar
     FROM afiliados a
     LEFT JOIN (
       SELECT afiliado_usuario AS u, count(*)::int AS qtd, sum(comissao) AS direta,
@@ -132,25 +204,27 @@ async function afiliadosComComissao() {
       GROUP BY u
     ) n ON n.u = a.usuario
     LEFT JOIN (
-      SELECT afiliado_usuario AS u, sum(comissao) AS direta_pendente
+      SELECT afiliado_usuario AS u, sum(comissao) AS direta_pendente,
+             sum(comissao) FILTER (WHERE pago_em < $1::timestamptz) AS direta_liberar
       FROM pedidos
       WHERE status = 'pago' AND status_comissao_direta = 'PENDENTE' AND afiliado_usuario IS NOT NULL
       GROUP BY 1
     ) pd ON pd.u = a.usuario
     LEFT JOIN (
-      SELECT u, sum(valor) AS rede_pendente
+      SELECT u, sum(valor) AS rede_pendente,
+             sum(valor) FILTER (WHERE pago_em < $1::timestamptz) AS rede_liberar
       FROM (
-        SELECT patrocinador_usuario AS u, comissao_patrocinador AS valor
+        SELECT patrocinador_usuario AS u, comissao_patrocinador AS valor, pago_em
         FROM pedidos
         WHERE status = 'pago' AND status_comissao_patrocinador = 'PENDENTE' AND patrocinador_usuario IS NOT NULL
         UNION ALL
-        SELECT avo_usuario AS u, comissao_avo AS valor
+        SELECT avo_usuario AS u, comissao_avo AS valor, pago_em
         FROM pedidos
         WHERE status = 'pago' AND status_comissao_avo = 'PENDENTE' AND avo_usuario IS NOT NULL
       ) comissoes_rede_pendentes
       GROUP BY u
     ) pn ON pn.u = a.usuario
-    ORDER BY a.criado_em, a.id`);
+    ORDER BY a.criado_em, a.id`, [dataInicioMesBrasil()]);
   const lista = r.rows.map(mapAf);
   lista.forEach(a => { a.filhosDiretos = lista.filter(f => ehFilhoDe(f, a)).length; });
   return lista;
@@ -448,6 +522,8 @@ app.get('/api/patrocinador/:usuario', limitarTentativas, wrap(async (req, res) =
 app.get('/api/rede', auth, wrap(async (req, res) => {
   const lista = await afiliadosComComissao();
   const taxas = await lerTaxas();
+  const valorMinimoSaque = Number(await lerConfig('valorMinimoSaque', VALOR_MINIMO_SAQUE_PADRAO));
+  const calendarioSaque = calendarioSaqueHoje();
 
   if (req.user.perfil === 'admin') {
     const arvore = arvoreOrdenada(lista).map(a => {
@@ -464,7 +540,8 @@ app.get('/api/rede', auth, wrap(async (req, res) => {
         COALESCE(sum(comissao_avo), 0) AS avo, COALESCE(sum(comissao_central), 0) AS cen
       FROM pedidos WHERE status = 'pago'`)).rows[0];
     return res.json({
-      visao: 'admin', taxas, afiliados: arvore,
+      visao: 'admin', taxas, afiliados: arvore, valorMinimoSaque,
+      calendarioSaque,
       resumo: {
         vendasPagas: t.qtd, faturado: dinheiro(t.faturado), comissaoCentral: dinheiro(t.cen),
         totalADistribuir: dinheiro(Number(t.vend) + Number(t.pat) + Number(t.avo)), totalAfiliados: lista.length,
@@ -483,10 +560,12 @@ app.get('/api/rede', auth, wrap(async (req, res) => {
     minhaComissao: dinheiro((ganhos.find(g => g.u === f.usuario) || {}).total)
   }));
   res.json({
-    visao: 'afiliado', taxas, filhos,
+    visao: 'afiliado', taxas, filhos, valorMinimoSaque,
+    calendarioSaque,
     eu: {
       id: eu.id, usuario: eu.usuario, nome: eu.nome, vendasDiretas: eu.vendasDiretas, vendasRede: eu.vendasRede,
       comissaoDireta: eu.comissaoDireta, comissaoRede: eu.comissaoRede, comissaoTotal: eu.comissaoTotal,
+      comissaoPendente: eu.comissaoPendente, comissaoLiberar: eu.comissaoLiberar,
       filhosDiretos: eu.filhosDiretos, patrocinadorNome: pai ? pai.nome : 'Central (Administrador)'
     }
   });
@@ -845,7 +924,14 @@ app.put('/api/produtos', auth, soAdmin, wrap(async (req, res) => {
 }));
 
 app.get('/api/config', wrap(async (req, res) => {
-  res.json({ ...(await lerTaxas()), pixChave: String(await lerConfig('pixChave', '')), whatsappSuporte: String(await lerConfig('whatsappSuporte', '')) });
+  const calendarioSaque = calendarioSaqueHoje();
+  res.json({
+    ...(await lerTaxas()),
+    valorMinimoSaque: Number(await lerConfig('valorMinimoSaque', VALOR_MINIMO_SAQUE_PADRAO)),
+    calendarioSaque,
+    pixChave: String(await lerConfig('pixChave', '')),
+    whatsappSuporte: String(await lerConfig('whatsappSuporte', ''))
+  });
 }));
 
 app.put('/api/config', auth, soAdmin, wrap(async (req, res) => {
@@ -858,6 +944,14 @@ app.put('/api/config', auth, soAdmin, wrap(async (req, res) => {
   }
   if (taxaComissao + taxaPatrocinador + TAXA_AVO_PADRAO > 100) {
     return res.status(400).json({ erro: `A soma das comissões distribuídas, incluindo os ${TAXA_AVO_PADRAO}% do avô, não pode ultrapassar 100%.` });
+  }
+
+  if (req.body.valorMinimoSaque !== undefined) {
+    const valorMinimoSaque = req.body.valorMinimoSaque;
+    if (typeof valorMinimoSaque !== 'number' || !Number.isFinite(valorMinimoSaque) || valorMinimoSaque < 0) {
+      return res.status(400).json({ erro: 'O valor mínimo de saque deve ser um valor numérico igual ou superior a zero.' });
+    }
+    await gravarConfig('valorMinimoSaque', dinheiro(valorMinimoSaque));
   }
 
   if (req.body.taxaComissao !== undefined) await gravarConfig('taxaComissao', taxaComissao);
@@ -932,10 +1026,86 @@ app.get('/api/afiliados', auth, soAdmin, wrap(async (req, res) => {
   res.json(await afiliadosComComissao());
 }));
 
+async function baixarComissoesElegiveis(client, usuarios, inicioMes) {
+  if (!usuarios.length) return { valorPago: 0, quantidade: 0, afiliados: [] };
+  const baixadas = await client.query(`
+    WITH elegiveis AS (
+      SELECT id, afiliado_usuario, patrocinador_usuario, avo_usuario,
+        status_comissao_direta = 'PENDENTE' AND afiliado_usuario = ANY($1::text[]) AS baixa_direta,
+        status_comissao_patrocinador = 'PENDENTE' AND patrocinador_usuario = ANY($1::text[]) AS baixa_patrocinador,
+        status_comissao_avo = 'PENDENTE' AND avo_usuario = ANY($1::text[]) AS baixa_avo
+      FROM pedidos
+      WHERE status = 'pago' AND pago_em < $2::timestamptz
+        AND ((afiliado_usuario = ANY($1::text[]) AND status_comissao_direta = 'PENDENTE')
+          OR (patrocinador_usuario = ANY($1::text[]) AND status_comissao_patrocinador = 'PENDENTE')
+          OR (avo_usuario = ANY($1::text[]) AND status_comissao_avo = 'PENDENTE'))
+      FOR UPDATE
+    )
+    UPDATE pedidos AS p
+    SET status_comissao_direta = CASE
+          WHEN e.baixa_direta THEN 'PAGO'
+          ELSE p.status_comissao_direta
+        END,
+        data_pagamento_comissao_direta = CASE
+          WHEN e.baixa_direta THEN now()
+          ELSE p.data_pagamento_comissao_direta
+        END,
+        status_comissao_patrocinador = CASE
+          WHEN e.baixa_patrocinador THEN 'PAGO'
+          ELSE p.status_comissao_patrocinador
+        END,
+        data_pagamento_comissao_patrocinador = CASE
+          WHEN e.baixa_patrocinador THEN now()
+          ELSE p.data_pagamento_comissao_patrocinador
+        END,
+        status_comissao_avo = CASE
+          WHEN e.baixa_avo THEN 'PAGO'
+          ELSE p.status_comissao_avo
+        END,
+        data_pagamento_comissao_avo = CASE
+          WHEN e.baixa_avo THEN now()
+          ELSE p.data_pagamento_comissao_avo
+        END
+    FROM elegiveis AS e
+    WHERE p.id = e.id
+    RETURNING e.afiliado_usuario, e.patrocinador_usuario, e.avo_usuario,
+      e.baixa_direta, e.baixa_patrocinador, e.baixa_avo,
+      p.comissao, p.comissao_patrocinador, p.comissao_avo`,
+    [usuarios, inicioMes]);
+
+  const totais = new Map(usuarios.map(usuario => [usuario, { valorPago: 0, quantidade: 0 }]));
+  for (const row of baixadas.rows) {
+    for (const [usuario, coluna, baixar] of [
+      [row.afiliado_usuario, 'comissao', row.baixa_direta],
+      [row.patrocinador_usuario, 'comissao_patrocinador', row.baixa_patrocinador],
+      [row.avo_usuario, 'comissao_avo', row.baixa_avo]
+    ]) {
+      if (!baixar || !totais.has(usuario)) continue;
+      const total = totais.get(usuario);
+      total.valorPago += Number(row[coluna]) || 0;
+      total.quantidade++;
+    }
+  }
+  const afiliados = Array.from(totais, ([usuario, total]) => ({
+    usuario, valorPago: dinheiro(total.valorPago), quantidade: total.quantidade
+  })).filter(af => af.quantidade > 0);
+  return {
+    valorPago: dinheiro(afiliados.reduce((soma, af) => soma + af.valorPago, 0)),
+    quantidade: afiliados.reduce((soma, af) => soma + af.quantidade, 0),
+    afiliados
+  };
+}
+
 app.post('/api/admin/afiliados/:id/pagar', auth, soAdmin, wrap(async (req, res) => {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
+    const calendario = calendarioSaqueHoje();
+    if (!calendario.liberado) {
+      await client.query('ROLLBACK');
+      return res.status(409).json({ erro: `Os pagamentos de comissão são liberados somente no 5º dia útil do mês (${calendario.dataSaque}).` });
+    }
+
     const afiliado = (await client.query(
       'SELECT usuario FROM afiliados WHERE id = $1 FOR UPDATE',
       [req.params.id]
@@ -945,60 +1115,90 @@ app.post('/api/admin/afiliados/:id/pagar', auth, soAdmin, wrap(async (req, res) 
       return res.status(404).json({ erro: 'Afiliado não encontrado.' });
     }
 
-    const baixadas = await client.query(`
-      UPDATE pedidos
-      SET status_comissao_direta = CASE
-            WHEN afiliado_usuario = $1 AND status_comissao_direta = 'PENDENTE' THEN 'PAGO'
-            ELSE status_comissao_direta
-          END,
-          data_pagamento_comissao_direta = CASE
-            WHEN afiliado_usuario = $1 AND status_comissao_direta = 'PENDENTE' THEN now()
-            ELSE data_pagamento_comissao_direta
-          END,
-          status_comissao_patrocinador = CASE
-            WHEN patrocinador_usuario = $1 AND status_comissao_patrocinador = 'PENDENTE' THEN 'PAGO'
-            ELSE status_comissao_patrocinador
-          END,
-          data_pagamento_comissao_patrocinador = CASE
-            WHEN patrocinador_usuario = $1 AND status_comissao_patrocinador = 'PENDENTE' THEN now()
-            ELSE data_pagamento_comissao_patrocinador
-          END,
-          status_comissao_avo = CASE
-            WHEN avo_usuario = $1 AND status_comissao_avo = 'PENDENTE' THEN 'PAGO'
-            ELSE status_comissao_avo
-          END,
-          data_pagamento_comissao_avo = CASE
-            WHEN avo_usuario = $1 AND status_comissao_avo = 'PENDENTE' THEN now()
-            ELSE data_pagamento_comissao_avo
-          END
-      WHERE status = 'pago'
-        AND ((afiliado_usuario = $1 AND status_comissao_direta = 'PENDENTE')
-          OR (patrocinador_usuario = $1 AND status_comissao_patrocinador = 'PENDENTE')
-          OR (avo_usuario = $1 AND status_comissao_avo = 'PENDENTE'))
-      RETURNING afiliado_usuario, patrocinador_usuario, avo_usuario,
-        comissao, comissao_patrocinador, comissao_avo`,
-      [afiliado.usuario]
-    );
-
-    let valorPago = 0;
-    let quantidade = 0;
-    for (const row of baixadas.rows) {
-      if (row.afiliado_usuario === afiliado.usuario) {
-        valorPago += Number(row.comissao) || 0;
-        quantidade++;
-      }
-      if (row.patrocinador_usuario === afiliado.usuario) {
-        valorPago += Number(row.comissao_patrocinador) || 0;
-        quantidade++;
-      }
-      if (row.avo_usuario === afiliado.usuario) {
-        valorPago += Number(row.comissao_avo) || 0;
-        quantidade++;
-      }
+    const valorMinimoSaque = Number(await lerConfig('valorMinimoSaque', VALOR_MINIMO_SAQUE_PADRAO));
+    const inicioMes = dataInicioMesBrasil();
+    const saldo = (await client.query(`
+      SELECT COALESCE(
+        (SELECT sum(comissao) FROM pedidos
+         WHERE status = 'pago' AND status_comissao_direta = 'PENDENTE'
+           AND afiliado_usuario = $1 AND pago_em < $2::timestamptz), 0
+      ) + COALESCE(
+        (SELECT sum(comissao_patrocinador) FROM pedidos
+         WHERE status = 'pago' AND status_comissao_patrocinador = 'PENDENTE'
+           AND patrocinador_usuario = $1 AND pago_em < $2::timestamptz), 0
+      ) + COALESCE(
+        (SELECT sum(comissao_avo) FROM pedidos
+         WHERE status = 'pago' AND status_comissao_avo = 'PENDENTE'
+           AND avo_usuario = $1 AND pago_em < $2::timestamptz), 0
+      ) AS total`, [afiliado.usuario, inicioMes])).rows[0];
+    const totalElegivel = dinheiro(saldo.total);
+    if (totalElegivel < valorMinimoSaque) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({
+        erro: `Pagamento não realizado: o saldo está abaixo do mínimo exigido de R$ ${valorMinimoSaque.toFixed(2)}. O valor continuará acumulado.`
+      });
     }
 
+    const resultado = await baixarComissoesElegiveis(client, [afiliado.usuario], inicioMes);
     await client.query('COMMIT');
-    res.json({ ok: true, afiliado: afiliado.usuario, valorPago: dinheiro(valorPago), quantidade });
+    res.json({ ok: true, afiliado: afiliado.usuario, ...resultado });
+  } catch (e) {
+    await client.query('ROLLBACK');
+    throw e;
+  } finally {
+    client.release();
+  }
+}));
+
+app.post('/api/admin/afiliados/liquidar-lote', auth, soAdmin, wrap(async (req, res) => {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const calendario = calendarioSaqueHoje();
+    if (!calendario.liberado) {
+      await client.query('ROLLBACK');
+      return res.status(409).json({ erro: `O fechamento de pagamentos só pode ser processado no 5º dia útil do mês (${calendario.dataSaque}).` });
+    }
+
+    const afiliados = await client.query('SELECT usuario FROM afiliados ORDER BY usuario FOR UPDATE');
+    const valorMinimoSaque = Number(await lerConfig('valorMinimoSaque', VALOR_MINIMO_SAQUE_PADRAO));
+    const inicioMes = dataInicioMesBrasil();
+    const elegiveis = await client.query(`
+      SELECT u FROM (
+        SELECT afiliado_usuario AS u, comissao AS valor
+        FROM pedidos
+        WHERE status = 'pago' AND status_comissao_direta = 'PENDENTE'
+          AND afiliado_usuario IS NOT NULL AND pago_em < $1::timestamptz
+        UNION ALL
+        SELECT patrocinador_usuario AS u, comissao_patrocinador AS valor
+        FROM pedidos
+        WHERE status = 'pago' AND status_comissao_patrocinador = 'PENDENTE'
+          AND patrocinador_usuario IS NOT NULL AND pago_em < $1::timestamptz
+        UNION ALL
+        SELECT avo_usuario AS u, comissao_avo AS valor
+        FROM pedidos
+        WHERE status = 'pago' AND status_comissao_avo = 'PENDENTE'
+          AND avo_usuario IS NOT NULL AND pago_em < $1::timestamptz
+      ) AS pendentes
+      GROUP BY u
+      HAVING sum(valor) >= $2 AND sum(valor) > 0`,
+      [inicioMes, valorMinimoSaque]);
+
+    const usuariosExistentes = new Set(afiliados.rows.map(af => af.usuario));
+    const usuariosElegiveis = elegiveis.rows
+      .map(af => af.u)
+      .filter(usuario => usuariosExistentes.has(usuario));
+    const resultado = await baixarComissoesElegiveis(client, usuariosElegiveis, inicioMes);
+
+    await client.query('COMMIT');
+    res.json({
+      ok: true,
+      valorMinimoSaque,
+      afiliadosLiquidados: resultado.afiliados.length,
+      valorPago: resultado.valorPago,
+      quantidade: resultado.quantidade,
+      afiliados: resultado.afiliados
+    });
   } catch (e) {
     await client.query('ROLLBACK');
     throw e;

@@ -59,6 +59,9 @@ As porcentagens de comissão direta e de patrocinador são ajustáveis na loja: 
 - Não existe uma porcentagem para a Central: ela fica com o que sobra. O total distribuído aos afiliados (direta, patrocinador e avô, quando aplicável) nunca pode ultrapassar 100%; portanto, a soma das taxas direta e de patrocinador é limitada a 95%.
 - Mudar uma taxa vale só para as vendas confirmadas dali em diante.
 - As comissões são gravadas **quando o Mercado Pago confirma a aprovação** (ou quando um pedido antigo/manual é confirmado pelo administrador), e os totais de cada afiliado são somados dos pedidos pagos.
+- O administrador configura o **valor mínimo de saque** em "Regra Geral de Comissões e Pagamentos" (padrão R$ 50,00). Os saldos abaixo do mínimo permanecem pendentes e acumulam.
+- A liberação de pagamentos ocorre somente no **5º dia útil de cada mês**, para comissões aprovadas em meses anteriores. A verificação é aplicada também no servidor; pedidos do mês corrente ficam acumulados para o próximo ciclo. O calendário exclui fins de semana e feriados nacionais, Sexta-feira Santa, Carnaval e Corpus Christi.
+- No Portal de Comissões, o administrador pode processar o fechamento em lote: somente afiliados que atingem o mínimo são liquidados. As baixas ficam registradas nos lançamentos com status e data de pagamento; quem não atinge o limite mantém o saldo pendente para o ciclo seguinte.
 
 Venda sem afiliado gera 100% para a Central. Nas vendas com afiliados, a Central recebe o restante após as comissões aplicáveis àquela posição na rede.
 

@@ -298,7 +298,7 @@
 
             <div class="bg-emerald-50/60 p-4 rounded-2xl border border-emerald-100 space-y-4 mb-6">
                 <h4 class="text-xs font-black uppercase tracking-wider text-emerald-800"><i class="fa-solid fa-sliders"></i> Regra Geral de Comissões e Pagamentos</h4>
-                <div class="grid grid-cols-2 gap-3 text-xs font-semibold text-slate-700">
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs font-semibold text-slate-700">
                     <div>
                         <label class="block mb-1 uppercase tracking-wider text-emerald-900">Comissão Direta do Afiliado (%)</label>
                         <input type="number" id="af_comissao_direta" min="0" max="100" step="0.01" value="35" onchange="salvarTaxasComissao()" class="w-full px-3 py-2.5 rounded-xl border border-emerald-300 bg-white font-bold text-emerald-700">
@@ -308,10 +308,14 @@
                         <input type="number" id="af_comissao_patrocinador" min="0" max="100" step="0.01" value="10" onchange="salvarTaxasComissao()" class="w-full px-3 py-2.5 rounded-xl border border-emerald-300 bg-white font-bold text-emerald-700">
                     </div>
                     <div>
+                        <label class="block mb-1 uppercase tracking-wider text-emerald-900">Valor Mínimo de Saque (R$)</label>
+                        <input type="number" id="af_valor_minimo_saque" min="0" step="0.01" value="50" required onchange="salvarValorMinimoSaque()" class="w-full px-3 py-2.5 rounded-xl border border-emerald-300 bg-white font-bold text-emerald-700">
+                    </div>
+                    <div>
                         <label class="block mb-1 uppercase tracking-wider text-emerald-900">Valor Total a Pagar (R$)</label>
                         <input type="text" id="af_total_geral_pagar" readonly value="R$ 0,00" class="w-full px-3 py-2.5 rounded-xl border border-emerald-300 bg-white font-bold text-emerald-700">
                     </div>
-                    <p class="col-span-2 text-[11px] font-medium text-emerald-900/80 leading-relaxed normal-case">
+                    <p class="sm:col-span-2 text-[11px] font-medium text-emerald-900/80 leading-relaxed normal-case">
                         <strong>Direta:</strong> quem vendeu ganha esse % do valor da venda. <strong>Patrocinador:</strong> somente o patrocinador direto (o "pai" de quem vendeu) ganha esse % sobre a venda do filho. Os 5% do avô permanecem fixos quando houver essa geração; a distribuição total a afiliados não pode ultrapassar 100%. A taxa vale para as vendas confirmadas daqui para frente.
                     </p>
                 </div>
@@ -777,6 +781,7 @@
             try {
                 const cfg = await api('GET', '/api/config');
                 taxasComissao = { taxaComissao: cfg.taxaComissao, taxaPatrocinador: cfg.taxaPatrocinador };
+                document.getElementById('af_valor_minimo_saque').value = cfg.valorMinimoSaque;
             } catch (err) {
                 console.warn(err.message);
             }
@@ -798,6 +803,21 @@
                 }
                 await api('PUT', '/api/config', novas);
                 taxasComissao = novas;
+            } catch (err) {
+                alert(err.message);
+            }
+            await atualizarTaxasNaTela();
+        }
+
+        async function salvarValorMinimoSaque() {
+            const textoValor = document.getElementById('af_valor_minimo_saque').value.trim();
+            const valor = Number(textoValor);
+            try {
+                if (!textoValor || !Number.isFinite(valor) || valor < 0) {
+                    throw new Error('O valor mínimo de saque deve ser igual ou superior a R$ 0,00.');
+                }
+                await api('PUT', '/api/config', { valorMinimoSaque: valor });
+                alert('Valor mínimo de saque salvo.');
             } catch (err) {
                 alert(err.message);
             }
