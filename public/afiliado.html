@@ -596,7 +596,7 @@
             document.getElementById('lblBoasVindasNome').innerText = eu.nome;
             document.getElementById('lblChaveCriptografada').innerText = eu.id;
             document.getElementById('lblRegras').innerText =
-                `Você ganha ${rede.taxas.taxaComissao}% de cada venda que fizer e ${rede.taxas.taxaPatrocinador}% das vendas dos parceiros que você indicar. Seu patrocinador: ${eu.patrocinadorNome}.`;
+                `Regras de comissão: Vendedor (comissão direta): ${rede.taxas.taxaComissao}%; Patrocinador (comissão do pai): ${rede.taxas.taxaPatrocinador}%; Avô (comissão do avô): ${rede.taxas.taxaAvo}% quando essa geração existir. Seu patrocinador: ${eu.patrocinadorNome}.`;
             document.getElementById('avisoSaqueAfiliado').innerHTML =
                 `<strong>Calendário de pagamentos:</strong> os pagamentos consolidados são realizados exclusivamente no 5º dia útil de cada mês, referentes aos saldos de comissões aprovados em meses anteriores. O saque mínimo configurado é <strong>${esc(brl(rede.valorMinimoSaque))}</strong>. Seu saldo pendente acumulado é <strong>${esc(brl(eu.comissaoPendente))}</strong>; valores abaixo do mínimo permanecem acumulados.`;
             document.getElementById('avisoSaqueAfiliado').classList.remove('hidden');
@@ -650,7 +650,7 @@
             document.getElementById('lblSubtitulo').innerText = 'Visão completa da rede: todos os afiliados, de todas as gerações.';
             document.getElementById('lblChaveCriptografada').innerText = 'ADMIN-CENTRAL';
             document.getElementById('lblRegras').innerText =
-                `Regras atuais: vendedor ${rede.taxas.taxaComissao}% · patrocinador direto ${rede.taxas.taxaPatrocinador}% · todo o resto da venda fica com a Central. Altere em Gerência de Afiliados, na loja.`;
+                `Regras de comissão: Vendedor (comissão direta): ${rede.taxas.taxaComissao}%; Patrocinador (comissão do pai): ${rede.taxas.taxaPatrocinador}%; Avô (comissão do avô): ${rede.taxas.taxaAvo}% quando essa geração existir. Altere em Gerência de Afiliados, na loja.`;
 
             document.getElementById('lblCard1').innerText = 'Vendas Pagas (Faturado)';
             document.getElementById('dashVendasDiretas').innerText = brl(r.faturado);

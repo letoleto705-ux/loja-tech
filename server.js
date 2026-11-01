@@ -111,12 +111,12 @@ async function gravarConfig(chave, valor) {
 
 async function lerTaxas() {
   const resultado = await q(
-    "SELECT chave, valor FROM config WHERE chave IN ('taxaComissao', 'taxaPatrocinador', 'taxaAvo')"
+    "SELECT chave, valor FROM config WHERE chave IN ('taxaComissao', 'taxaPatrocinador', 'taxaAvo', 'taxa_avo')"
   );
   const configuracoes = Object.fromEntries(resultado.rows.map(({ chave, valor }) => [chave, valor]));
   const direta = Number(configuracoes.taxaComissao ?? TAXA_COMISSAO_PADRAO);
   const patrocinador = Number(configuracoes.taxaPatrocinador ?? TAXA_PATROCINADOR_PADRAO);
-  const avo = Number(configuracoes.taxaAvo ?? TAXA_AVO_PADRAO);
+  const avo = Number(configuracoes.taxaAvo ?? configuracoes.taxa_avo ?? TAXA_AVO_PADRAO);
   return {
     taxaComissao: direta,
     taxaPatrocinador: patrocinador,
@@ -344,7 +344,8 @@ async function iniciarBanco() {
   await q(`CREATE TABLE IF NOT EXISTS config (chave text PRIMARY KEY, valor jsonb NOT NULL)`);
   await q("DELETE FROM config WHERE chave = 'pixChave'");
   await q(`INSERT INTO config (chave, valor) VALUES
-    ('taxaComissao', $1::jsonb), ('taxaPatrocinador', $2::jsonb), ('taxaAvo', $3::jsonb)
+    ('taxaComissao', $1::jsonb), ('taxaPatrocinador', $2::jsonb),
+    ('taxaAvo', COALESCE((SELECT valor FROM config WHERE chave = 'taxa_avo'), $3::jsonb))
     ON CONFLICT (chave) DO NOTHING`,
   [JSON.stringify(TAXA_COMISSAO_PADRAO), JSON.stringify(TAXA_PATROCINADOR_PADRAO), JSON.stringify(TAXA_AVO_PADRAO)]);
   const produtosSalvos = await lerConfig('produtos', PRODUTOS_INICIAIS);
@@ -644,6 +645,7 @@ app.get('/api/patrocinador/:usuario', limitarTentativas, wrap(async (req, res) =
 
 // Painel "Área do Afiliado": o administrador vê TODAS as gerações; o afiliado vê só os indicados diretos
 app.get('/api/rede', auth, wrap(async (req, res) => {
+  res.set('Cache-Control', 'no-store');
   const lista = await afiliadosComComissao();
   const taxas = await lerTaxas();
   const valorMinimoSaque = Number(await lerConfig('valorMinimoSaque', VALOR_MINIMO_SAQUE_PADRAO));
@@ -1233,6 +1235,7 @@ app.put('/api/produtos', auth, soAdmin, wrap(async (req, res) => {
 }));
 
 app.get('/api/config', wrap(async (req, res) => {
+  res.set('Cache-Control', 'no-store');
   const calendarioSaque = calendarioSaqueHoje();
   res.json({
     ...(await lerTaxas()),
@@ -1246,7 +1249,9 @@ app.put('/api/config', auth, soAdmin, wrap(async (req, res) => {
   const taxasAtuais = await lerTaxas();
   const taxaComissao = req.body.taxaComissao === undefined ? taxasAtuais.taxaComissao : req.body.taxaComissao;
   const taxaPatrocinador = req.body.taxaPatrocinador === undefined ? taxasAtuais.taxaPatrocinador : req.body.taxaPatrocinador;
-  const taxaAvo = req.body.taxaAvo === undefined ? taxasAtuais.taxaAvo : req.body.taxaAvo;
+  const taxaAvo = req.body.taxaAvo === undefined
+    ? (req.body.taxa_avo === undefined ? taxasAtuais.taxaAvo : req.body.taxa_avo)
+    : req.body.taxaAvo;
   if (typeof taxaComissao !== 'number' || !Number.isFinite(taxaComissao) || taxaComissao < 0 || taxaComissao > 100
     || typeof taxaPatrocinador !== 'number' || !Number.isFinite(taxaPatrocinador) || taxaPatrocinador < 0 || taxaPatrocinador > 100
     || typeof taxaAvo !== 'number' || !Number.isFinite(taxaAvo) || taxaAvo < 0 || taxaAvo > 100) {
@@ -1264,7 +1269,8 @@ app.put('/api/config', auth, soAdmin, wrap(async (req, res) => {
     await gravarConfig('valorMinimoSaque', dinheiro(valorMinimoSaque));
   }
 
-  if (req.body.taxaComissao !== undefined || req.body.taxaPatrocinador !== undefined || req.body.taxaAvo !== undefined) {
+  if (req.body.taxaComissao !== undefined || req.body.taxaPatrocinador !== undefined
+    || req.body.taxaAvo !== undefined || req.body.taxa_avo !== undefined) {
     await q(`INSERT INTO config (chave, valor) VALUES
       ('taxaComissao', $1::jsonb), ('taxaPatrocinador', $2::jsonb), ('taxaAvo', $3::jsonb)
       ON CONFLICT (chave) DO UPDATE SET valor = EXCLUDED.valor`,
