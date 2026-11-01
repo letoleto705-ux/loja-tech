@@ -469,13 +469,23 @@ function auth(req, res, next) {
   const h = req.headers.authorization || '';
   try {
     req.user = jwt.verify(h.startsWith('Bearer ') ? h.slice(7) : '', JWT_SECRET);
-    if (req.user.trocar && !req.path.startsWith('/api/senha/')) {
-      return res.status(403).json({ erro: 'Defina uma nova senha antes de continuar.', trocarSenha: true });
-    }
-    next();
   } catch (e) {
-    res.status(401).json({ erro: 'Sessão expirada. Faça login novamente.' });
+    return res.status(401).json({ erro: 'Sessão expirada. Faça login novamente.' });
   }
+  if (req.user.trocar && !req.path.startsWith('/api/senha/')) {
+    return res.status(403).json({ erro: 'Defina uma nova senha antes de continuar.', trocarSenha: true });
+  }
+  if (req.user.perfil === 'admin') return next();
+
+  const consultaConta = req.user.perfil === 'afiliado'
+    ? 'SELECT 1 FROM afiliados WHERE usuario = $1'
+    : 'SELECT 1 FROM contas WHERE usuario = $1';
+  q(consultaConta, [norm(req.user.usuario)])
+    .then(({ rows }) => {
+      if (!rows.length) return res.status(401).json({ erro: 'Conta removida. Faça login novamente.' });
+      next();
+    })
+    .catch(next);
 }
 const soAdmin = (req, res, next) =>
   req.user.perfil === 'admin' ? next() : res.status(403).json({ erro: 'Acesso exclusivo do Administrador.' });
@@ -1505,20 +1515,62 @@ app.post('/api/admin/afiliados/liquidar-lote', auth, soAdmin, wrap(async (req, r
   }
 }));
 
+async function excluirAfiliadoNoClient(client, id) {
+  const alvo = (await client.query('SELECT * FROM afiliados WHERE id = $1 FOR UPDATE', [id])).rows[0];
+  if (!alvo) return null;
+
+  // Preserva a rede: os filhos sobem para o patrocinador do excluído
+  await client.query(
+    'UPDATE afiliados SET patrocinador_id = $2 WHERE id <> $1 AND lower(patrocinador_id) IN (lower($1), lower($3))',
+    [alvo.id, alvo.patrocinador_id, alvo.usuario]);
+  await client.query('DELETE FROM afiliado_cupons WHERE afiliado_usuario = $1', [alvo.usuario]);
+  await client.query('DELETE FROM afiliados WHERE id = $1', [alvo.id]);
+  await client.query('DELETE FROM contas WHERE usuario = $1', [alvo.usuario]);
+  return alvo;
+}
+
 app.delete('/api/afiliados/:id', auth, soAdmin, wrap(async (req, res) => {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    const alvo = (await client.query('SELECT * FROM afiliados WHERE id = $1 FOR UPDATE', [req.params.id])).rows[0];
-    if (!alvo) { await client.query('ROLLBACK'); return res.status(404).json({ erro: 'Afiliado não encontrado.' }); }
-    // Preserva a rede: os filhos sobem para o patrocinador do excluído
-    await client.query(
-      'UPDATE afiliados SET patrocinador_id = $2 WHERE id <> $1 AND lower(patrocinador_id) IN (lower($1), lower($3))',
-      [alvo.id, alvo.patrocinador_id, alvo.usuario]);
-    await client.query('DELETE FROM afiliados WHERE id = $1', [alvo.id]);
-    await client.query('DELETE FROM contas WHERE usuario = $1', [alvo.usuario]);
+    const alvo = await excluirAfiliadoNoClient(client, req.params.id);
+    if (!alvo) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ erro: 'Afiliado não encontrado.' });
+    }
     await client.query('COMMIT');
-    res.json({ ok: true });
+    res.json({ ok: true, usuario: alvo.usuario });
+  } catch (e) {
+    await client.query('ROLLBACK');
+    throw e;
+  } finally {
+    client.release();
+  }
+}));
+
+app.delete('/api/admin/contas/:usuario', auth, soAdmin, wrap(async (req, res) => {
+  const usuario = norm(req.params.usuario);
+  if (!RE_USUARIO.test(usuario) || usuario === 'admin') {
+    return res.status(400).json({ erro: 'Identificador de usuário inválido.' });
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const conta = (await client.query('SELECT usuario FROM contas WHERE usuario = $1 FOR UPDATE', [usuario])).rows[0];
+    if (!conta) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ erro: 'Usuário não encontrado.' });
+    }
+
+    const afiliado = (await client.query('SELECT id FROM afiliados WHERE usuario = $1', [usuario])).rows[0];
+    if (afiliado) {
+      await excluirAfiliadoNoClient(client, afiliado.id);
+    } else {
+      await client.query('DELETE FROM contas WHERE usuario = $1', [usuario]);
+    }
+    await client.query('COMMIT');
+    res.json({ ok: true, usuario, afiliado: Boolean(afiliado) });
   } catch (e) {
     await client.query('ROLLBACK');
     throw e;

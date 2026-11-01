@@ -307,7 +307,7 @@
                 somaTotalGeral += totalAfiliado;
 
                 container.innerHTML += `
-                    <div class="bg-slate-50 border border-slate-200 rounded-2xl p-5 space-y-4">
+                    <div data-afiliado-card="${esc(af.id)}" data-total-pendente="${totalAfiliado}" class="bg-slate-50 border border-slate-200 rounded-2xl p-5 space-y-4">
                         <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b border-slate-200 pb-3">
                             <div>
                                 <span class="bg-emerald-100 text-emerald-800 font-black text-[10px] px-2.5 py-0.5 rounded-full uppercase">${esc(paiInfo)}</span>
@@ -322,8 +322,8 @@
                                 <button onclick="confirmarPagamentoAfiliado(this)" data-afiliado-id="${esc(af.id)}" data-afiliado-nome="${esc(af.nome)}" data-valor-pendente="${totalAfiliado}" class="px-3 py-2.5 bg-orange-500 hover:bg-orange-600 text-white rounded-xl text-[10px] sm:text-xs font-bold transition" title="Confirmar pagamento mensal e dar baixa">
                                     <i class="fa-solid fa-money-bill-transfer mr-1"></i> Confirmar Pagamento / Dar Baixa
                                 </button>
-                                <button onclick="deletarAfiliado('${esc(af.id)}')" class="px-3.5 py-3 bg-red-50 hover:bg-red-100 text-red-600 rounded-xl text-xs font-bold transition" title="Excluir Afiliado">
-                                    <i class="fa-solid fa-trash-can"></i>
+                                <button onclick="deletarAfiliado('${esc(af.id)}')" class="px-3.5 py-3 bg-red-50 hover:bg-red-100 text-red-600 rounded-xl text-xs font-bold transition" title="Excluir Afiliado" aria-label="Excluir afiliado">
+                                    <i class="fa-solid fa-trash-can"></i> Excluir
                                 </button>
                             </div>
                         </div>
@@ -451,7 +451,7 @@
                 return;
             }
             box.innerHTML = contas.map(c => `
-                <div class="bg-slate-50 border border-slate-200 rounded-2xl p-4 flex flex-wrap justify-between items-center gap-3 text-xs">
+                <div data-conta-usuario="${esc(c.usuario)}" class="bg-slate-50 border border-slate-200 rounded-2xl p-4 flex flex-wrap justify-between items-center gap-3 text-xs">
                     <div>
                         <strong class="text-slate-900 text-sm">${esc(c.nome)}</strong>
                         <span class="ml-1 text-[10px] font-black uppercase px-2 py-0.5 rounded-full ${c.afiliado ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-600'}">${c.afiliado ? 'Afiliado' : 'Cliente'}</span>
@@ -459,8 +459,25 @@
                         <div class="text-slate-500 font-mono">@${esc(c.usuario)}</div>
                         <div class="text-slate-600">${esc(c.email)} · CPF ${esc(c.cpf || 'não informado')} · Tel ${esc(c.telefone || 'não informado')}</div>
                     </div>
-                    <button onclick="gerarSenhaTemporaria('${esc(c.usuario)}')" class="px-3.5 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold transition"><i class="fa-solid fa-key mr-1"></i> Gerar senha temporária</button>
+                    <div class="flex flex-wrap gap-2">
+                        <button onclick="gerarSenhaTemporaria('${esc(c.usuario)}')" class="px-3.5 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold transition"><i class="fa-solid fa-key mr-1"></i> Gerar senha temporária</button>
+                        <button onclick="deletarConta('${esc(c.usuario)}')" class="px-3.5 py-2 bg-red-50 hover:bg-red-100 text-red-600 rounded-xl text-xs font-bold transition" title="Excluir usuário permanentemente" aria-label="Excluir usuário ${esc(c.usuario)}"><i class="fa-solid fa-trash-can mr-1"></i> Excluir usuário</button>
+                    </div>
                 </div>`).join('');
+        }
+
+        async function deletarConta(usuario) {
+            if (!confirm(`Deseja realmente excluir permanentemente a conta @${usuario}? Se for afiliado, a rede de sub-afiliados será preservada.`)) return;
+            const card = Array.from(document.querySelectorAll('[data-conta-usuario]'))
+                .find(item => item.dataset.contaUsuario === String(usuario));
+            try {
+                await api('DELETE', '/api/admin/contas/' + encodeURIComponent(usuario));
+                if (card) card.remove();
+                await Promise.all([buscarContas(), carregarRelatorioPagamentos()]);
+                alert('Usuário excluído com sucesso.');
+            } catch (err) {
+                alert(err.message);
+            }
         }
 
         async function gerarSenhaTemporaria(usuario) {
@@ -495,14 +512,23 @@
         }
 
         async function deletarAfiliado(idAfiliado) {
-            if (!confirm("Deseja realmente excluir este afiliado? O acesso, senha e links dele serão desativados, mas os filhos vinculados a ele continuarão ativos na rede.")) return;
+            if (!confirm("Deseja realmente excluir este afiliado? A conta e o acesso serão removidos permanentemente. Os filhos vinculados continuarão ativos e subirão para o patrocinador anterior.")) return;
             try {
                 await api('DELETE', '/api/afiliados/' + encodeURIComponent(idAfiliado));
+                const card = Array.from(document.querySelectorAll('[data-afiliado-card]'))
+                    .find(item => item.dataset.afiliadoCard === String(idAfiliado));
+                if (card) {
+                    card.remove();
+                    const cardsRestantes = Array.from(document.querySelectorAll('[data-afiliado-card]'));
+                    const totalRestante = cardsRestantes.reduce((total, item) => total + (Number(item.dataset.totalPendente) || 0), 0);
+                    document.getElementById('lblTotalGeralPagar').innerText = `R$ ${totalRestante.toFixed(2)}`;
+                    document.getElementById('qtdAfiliadosRelatorio').innerText = `${cardsRestantes.length} elegível(is) para pagamento`;
+                }
+                await Promise.all([carregarRelatorioPagamentos(), buscarContas()]);
                 alert("Afiliado excluído com sucesso! A rede de sub-afiliados foi preservada.");
             } catch (err) {
                 alert(err.message);
             }
-            carregarRelatorioPagamentos();
         }
 
         async function carregarGestaoCupons() {
