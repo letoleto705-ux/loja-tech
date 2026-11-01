@@ -1030,8 +1030,12 @@ app.get('/api/checkout/:id/status', limitarConsultasStatusCheckout, wrap(async (
   const token = txt(req.get('x-download-token'), 64);
   let pedido = (await q('SELECT id, status, payment_id, payment_status, download_token FROM pedidos WHERE id = $1', [req.params.id])).rows[0];
   if (!pedido || !igual(token, pedido.download_token)) return res.status(404).json({ erro: 'Pedido não encontrado.' });
-  if (pedido.payment_id && MERCADO_PAGO_ACCESS_TOKEN) await sincronizarPagamentoMercadoPago(pedido.payment_id);
-  res.json({ pedidoId: pedido.id, status: pedido.status });
+  if (pedido.status !== 'pago' && pedido.payment_id) {
+    const sincronizacao = await sincronizarPagamentoMercadoPago(pedido.payment_id);
+    if (!sincronizacao) return res.status(502).json({ erro: 'Não foi possível sincronizar o status com o Mercado Pago.' });
+    pedido = (await q('SELECT id, status, payment_status FROM pedidos WHERE id = $1', [pedido.id])).rows[0];
+  }
+  res.json({ pedidoId: pedido.id, status: pedido.status, paymentStatus: pedido.payment_status });
 }));
 
 async function confirmarPedido(id, paymentIdRecebido) {

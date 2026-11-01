@@ -244,7 +244,7 @@
 
             <div id="downloadProdutoBox" class="hidden space-y-2 bg-orange-50 p-4 rounded-2xl border border-orange-200">
                 <p id="downloadProdutoStatus" class="text-xs text-slate-700">O arquivo será liberado após a confirmação do pagamento.</p>
-                <button type="button" id="btnVerificarDownload" onclick="verificarLiberacaoDownload()" class="py-2 px-4 bg-orange-600 hover:bg-orange-700 text-white rounded-lg text-xs font-bold transition">
+                <button type="button" id="btnVerificarDownload" onclick="consultarPagamentoELiberar()" class="py-2 px-4 bg-orange-600 hover:bg-orange-700 text-white rounded-lg text-xs font-bold transition">
                     <i class="fa-solid fa-rotate mr-1"></i> Verificar pagamento e liberar arquivo
                 </button>
                 <a id="linkDownloadProduto" class="hidden block py-2 px-4 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold text-center transition" target="_blank" rel="noopener noreferrer">
@@ -829,6 +829,22 @@
                 await verificarLiberacaoDownload();
             }
             return aprovado;
+        }
+
+        async function consultarPagamentoELiberar() {
+            if (!pedidoDownloadAtual) return;
+            const botao = document.getElementById('btnVerificarDownload');
+            const status = document.getElementById('downloadProdutoStatus');
+            botao.disabled = true;
+            status.innerText = 'Verificando o status do pagamento...';
+            try {
+                const aprovado = await consultarStatusPedido();
+                if (!aprovado) status.innerText = 'Pagamento ainda não confirmado. Aguarde a confirmação e tente novamente.';
+            } catch (err) {
+                status.innerText = err.message || 'Não foi possível verificar o pagamento.';
+            } finally {
+                botao.disabled = false;
+            }
         }
 
         function monitorarStatusPedido() {
