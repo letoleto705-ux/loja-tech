@@ -102,15 +102,15 @@ async function lerConfig(chave, padrao) {
   const r = await q('SELECT valor FROM config WHERE chave = $1', [chave]);
   return r.rows.length ? r.rows[0].valor : padrao;
 }
-async function gravarConfig(chave, valor) {
-  await q(
+async function gravarConfig(chave, valor, client = pool) {
+  await client.query(
     'INSERT INTO config (chave, valor) VALUES ($1, $2::jsonb) ON CONFLICT (chave) DO UPDATE SET valor = EXCLUDED.valor',
     [chave, JSON.stringify(valor)]
   );
 }
 
-async function lerTaxas() {
-  await q(`INSERT INTO config (chave, valor) VALUES
+async function lerTaxas(client = pool) {
+  await client.query(`INSERT INTO config (chave, valor) VALUES
     ('taxaComissao', $1::jsonb),
     ('taxaPatrocinador', $2::jsonb),
     ('taxaAvo', $3::jsonb)
@@ -120,7 +120,7 @@ async function lerTaxas() {
     JSON.stringify(TAXA_PATROCINADOR_PADRAO),
     JSON.stringify(TAXA_AVO_PADRAO)
   ]);
-  const resultado = await q(
+  const resultado = await client.query(
     "SELECT chave, valor FROM config WHERE chave IN ('taxaComissao', 'taxaPatrocinador', 'taxaAvo')"
   );
   const configuracoes = Object.fromEntries(resultado.rows.map(({ chave, valor }) => [chave, valor]));
@@ -296,9 +296,9 @@ function arvoreOrdenada(lista) {
   return saida;
 }
 
-async function usuarioDoPatrocinador(patrocinadorId) {
+async function usuarioDoPatrocinador(patrocinadorId, client = pool) {
   if (!patrocinadorId || norm(patrocinadorId) === 'admin') return null;
-  const r = await q('SELECT usuario FROM afiliados WHERE lower(id) = $1 OR usuario = $1', [norm(patrocinadorId)]);
+  const r = await client.query('SELECT usuario FROM afiliados WHERE lower(id) = $1 OR usuario = $1', [norm(patrocinadorId)]);
   return r.rows.length ? r.rows[0].usuario : norm(patrocinadorId);
 }
 
@@ -348,6 +348,7 @@ async function iniciarBanco() {
   await q('ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS data_pagamento_comissao_avo timestamptz');
   await q('ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS download_token text');
   await q('ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS payment_id text');
+  await q('ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS payment_idempotency_key text');
   await q("ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS payment_status text NOT NULL DEFAULT ''");
   await q("ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS payment_qr_code text NOT NULL DEFAULT ''");
   await q("ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS payment_qr_code_base64 text NOT NULL DEFAULT ''");
@@ -501,7 +502,10 @@ function auth(req, res, next) {
 const soAdmin = (req, res, next) =>
   req.user.perfil === 'admin' ? next() : res.status(403).json({ erro: 'Acesso exclusivo do Administrador.' });
 
-app.get('/api/saude', (req, res) => res.json({ ok: true }));
+app.get('/api/saude', wrap(async (req, res) => {
+  await q('SELECT 1');
+  res.json({ ok: true, banco: 'conectado' });
+}));
 app.get('/api/pagamento/config', (req, res) => {
   res.set('Cache-Control', 'no-store');
   res.json({ publicKey: String(MERCADO_PAGO_PUBLIC_KEY || '').trim() });
@@ -618,31 +622,54 @@ app.post('/api/afiliar', auth, wrap(async (req, res) => {
   if (!pix || !RE_PIX.test(pix)) return res.status(400).json({ erro: 'Informe uma chave Pix válida.' });
   if (!RE_TEL.test(telefone)) return res.status(400).json({ erro: 'Informe um telefone/WhatsApp de contato com DDD (somente números).' });
 
-  await q('UPDATE contas SET telefone = $2 WHERE usuario = $1', [usuario, telefone]);
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const conta = (await client.query(
+      'SELECT senha_hash FROM contas WHERE usuario = $1 FOR UPDATE',
+      [usuario]
+    )).rows[0];
+    if (!conta) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ erro: 'Conta não encontrada.' });
+    }
 
-  // Já é afiliado: atualiza só os dados; patrocinador e valores são preservados
-  const existente = (await q('SELECT * FROM afiliados WHERE usuario = $1', [usuario])).rows[0];
-  if (existente) {
-    await q('UPDATE afiliados SET nome=$2, email=$3, cpf=$4, pix=$5, telefone=$6 WHERE usuario=$1', [usuario, nome, email, cpf, pix, telefone]);
-    return res.json({ ok: true, id: existente.id, patrocinadorId: existente.patrocinador_id, patrocinadorUsuario: await usuarioDoPatrocinador(existente.patrocinador_id) });
+    await client.query('UPDATE contas SET telefone = $2 WHERE usuario = $1', [usuario, telefone]);
+
+    // Já é afiliado: atualiza só os dados; patrocinador e valores são preservados
+    const existente = (await client.query('SELECT * FROM afiliados WHERE usuario = $1 FOR UPDATE', [usuario])).rows[0];
+    if (existente) {
+      await client.query(
+        'UPDATE afiliados SET nome=$2, email=$3, cpf=$4, pix=$5, telefone=$6 WHERE usuario=$1',
+        [usuario, nome, email, cpf, pix, telefone]
+      );
+      const patrocinadorUsuario = await usuarioDoPatrocinador(existente.patrocinador_id, client);
+      await client.query('COMMIT');
+      return res.json({
+        ok: true, id: existente.id, patrocinadorId: existente.patrocinador_id, patrocinadorUsuario
+      });
+    }
+
+    // Patrocinador: indicador do link, se for afiliado válido e não for ele mesmo; senão a Central
+    let patrocinadorId = 'admin', patrocinadorUsuario = null;
+    const indicador = norm(req.body.indicador);
+    if (indicador && indicador !== 'admin' && indicador !== usuario) {
+      const pai = (await client.query('SELECT id, usuario FROM afiliados WHERE usuario = $1', [indicador])).rows[0];
+      if (pai) { patrocinadorId = pai.id; patrocinadorUsuario = pai.usuario; }
+    }
+
+    const id = 'AF-' + usuario.toUpperCase();
+    await client.query(`INSERT INTO afiliados (id, usuario, nome, email, cpf, pix, telefone, senha_hash, patrocinador_id)
+                        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+      [id, usuario, nome, email, cpf, pix, telefone, conta.senha_hash, patrocinadorId]);
+    await client.query('COMMIT');
+    res.json({ ok: true, id, patrocinadorId, patrocinadorUsuario });
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
   }
-
-  const conta = (await q('SELECT senha_hash FROM contas WHERE usuario = $1', [usuario])).rows[0];
-  if (!conta) return res.status(404).json({ erro: 'Conta não encontrada.' });
-
-  // Patrocinador: indicador do link, se for afiliado válido e não for ele mesmo; senão a Central
-  let patrocinadorId = 'admin', patrocinadorUsuario = null;
-  const indicador = norm(req.body.indicador);
-  if (indicador && indicador !== 'admin' && indicador !== usuario) {
-    const pai = (await q('SELECT id, usuario FROM afiliados WHERE usuario = $1', [indicador])).rows[0];
-    if (pai) { patrocinadorId = pai.id; patrocinadorUsuario = pai.usuario; }
-  }
-
-  const id = 'AF-' + usuario.toUpperCase();
-  await q(`INSERT INTO afiliados (id, usuario, nome, email, cpf, pix, telefone, senha_hash, patrocinador_id)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
-    [id, usuario, nome, email, cpf, pix, telefone, conta.senha_hash, patrocinadorId]);
-  res.json({ ok: true, id, patrocinadorId, patrocinadorUsuario });
 }));
 
 app.get('/api/patrocinador/:usuario', limitarTentativas, wrap(async (req, res) => {
@@ -912,12 +939,14 @@ app.post('/api/checkout', limitarTentativas, wrap(async (req, res) => {
   const valorFinal = dinheiro(valorOriginal - desconto);
   const repasseJurosComprador = prod.repasseJurosComprador !== false;
   const maxParcelasSemJuros = normalizarMaxParcelasSemJuros(prod.maxParcelasSemJuros);
+  const paymentIdempotencyKey = crypto.randomUUID();
   await q(`INSERT INTO pedidos (id, afiliado_usuario, produto_id, produto_nome, valor, valor_original,
       cupom_codigo, cupom_desconto, repasse_juros_comprador, max_parcelas_sem_juros,
-      forma, cliente_nome, cliente_email, cliente_cpf, download_token)
-    VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)`,
+      forma, cliente_nome, cliente_email, cliente_cpf, download_token, payment_idempotency_key)
+    VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)`,
   [pedidoId, afiliadoValido ? afiliado : null, prod.id, prod.nome, valorFinal, valorOriginal,
-    codigoCupom, desconto, repasseJurosComprador, maxParcelasSemJuros, forma, nome, email, cpf, downloadToken]);
+    codigoCupom, desconto, repasseJurosComprador, maxParcelasSemJuros, forma, nome, email, cpf,
+    downloadToken, paymentIdempotencyKey]);
 
   res.json({
     pedidoId, produtoNome: prod.nome, valor: valorFinal, valorOriginal, desconto, codigoCupom,
@@ -957,9 +986,20 @@ async function consultarPagamentoMercadoPago(id) {
 
 app.post('/api/checkout/:id/pagar', limitarTentativas, wrap(async (req, res) => {
   const tokenPedido = txt(req.get('x-download-token'), 64);
-  const pedido = (await q('SELECT * FROM pedidos WHERE id = $1', [req.params.id])).rows[0];
+  let pedido = (await q('SELECT * FROM pedidos WHERE id = $1', [req.params.id])).rows[0];
   if (!pedido || !/^[a-f0-9]{64}$/i.test(tokenPedido) || !pedido.download_token || !igual(tokenPedido, pedido.download_token)) {
     return res.status(404).json({ erro: 'Pedido não encontrado.' });
+  }
+  if (pedido.payment_id && !['pending', 'in_process'].includes(pedido.payment_status)) {
+    const sincronizado = await sincronizarPagamentoMercadoPago(pedido.payment_id);
+    if (!sincronizado) {
+      return res.status(503).json({ erro: 'Não foi possível confirmar o estado do pagamento anterior. Tente novamente.' });
+    }
+    pedido = (await q('SELECT * FROM pedidos WHERE id = $1', [req.params.id])).rows[0];
+    if (pedido.status === 'pago') return res.status(409).json({ erro: 'Este pedido já foi pago.' });
+    if (pedido.status !== 'aguardando' || !['rejected', 'cancelled'].includes(pedido.payment_status)) {
+      return res.status(503).json({ erro: 'O pagamento anterior ainda está sendo sincronizado. Tente novamente.' });
+    }
   }
   if (pedido.status === 'pago') return res.status(409).json({ erro: 'Este pedido já foi pago.' });
   if (pedido.status !== 'aguardando') return res.status(409).json({ erro: 'Este pedido não está disponível para pagamento.' });
@@ -967,12 +1007,41 @@ app.post('/api/checkout/:id/pagar', limitarTentativas, wrap(async (req, res) => 
     return res.status(503).json({ erro: 'O pagamento está temporariamente indisponível. Tente novamente mais tarde.' });
   }
 
-  if (pedido.payment_id && ['pending', 'in_process'].includes(pedido.payment_status)) {
-    return res.json({
-      pedidoId: pedido.id, produtoNome: pedido.produto_nome, valor: Number(pedido.valor),
-      forma: pedido.forma, paymentId: pedido.payment_id, status: pedido.payment_status,
-      qrCode: pedido.payment_qr_code, qrCodeBase64: pedido.payment_qr_code_base64
-    });
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    pedido = (await client.query('SELECT * FROM pedidos WHERE id = $1 FOR UPDATE', [pedido.id])).rows[0];
+    if (!pedido || pedido.status !== 'aguardando') {
+      await client.query('ROLLBACK');
+      return res.status(409).json({ erro: 'Este pedido não está disponível para pagamento.' });
+    }
+
+    if (pedido.payment_id && ['pending', 'in_process'].includes(pedido.payment_status)) {
+      await client.query('COMMIT');
+      return res.json({
+        pedidoId: pedido.id, produtoNome: pedido.produto_nome, valor: Number(pedido.valor),
+        forma: pedido.forma, paymentId: pedido.payment_id, status: pedido.payment_status,
+        qrCode: pedido.payment_qr_code, qrCodeBase64: pedido.payment_qr_code_base64
+      });
+    }
+
+    if (pedido.payment_id) {
+      pedido.payment_idempotency_key = crypto.randomUUID();
+      await client.query(`UPDATE pedidos
+        SET payment_id = NULL, payment_status = '', payment_qr_code = '',
+            payment_qr_code_base64 = '', payment_idempotency_key = $2
+        WHERE id = $1`, [pedido.id, pedido.payment_idempotency_key]);
+    } else if (!pedido.payment_idempotency_key) {
+      pedido.payment_idempotency_key = crypto.randomUUID();
+      await client.query('UPDATE pedidos SET payment_idempotency_key = $2 WHERE id = $1',
+        [pedido.id, pedido.payment_idempotency_key]);
+    }
+    await client.query('COMMIT');
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
   }
 
   const metodo = pedido.forma;
@@ -983,7 +1052,8 @@ app.post('/api/checkout/:id/pagar', limitarTentativas, wrap(async (req, res) => 
     external_reference: pedido.id,
     metadata: {
       repasse_juros_comprador: pedido.repasse_juros_comprador ? 'true' : 'false',
-      max_parcelas_sem_juros: String(pedido.max_parcelas_sem_juros || 1)
+      max_parcelas_sem_juros: String(pedido.max_parcelas_sem_juros || 1),
+      checkout_attempt_key: pedido.payment_idempotency_key
     },
     notification_url: process.env.MERCADO_PAGO_WEBHOOK_URL
       || (process.env.RENDER_EXTERNAL_URL
@@ -1028,7 +1098,7 @@ app.post('/api/checkout/:id/pagar', limitarTentativas, wrap(async (req, res) => 
       headers: {
         Authorization: `Bearer ${accessToken}`,
         'Content-Type': 'application/json',
-        'X-Idempotency-Key': crypto.randomUUID()
+        'X-Idempotency-Key': pedido.payment_idempotency_key
       },
       body: JSON.stringify(pagamento),
       signal: AbortSignal.timeout(15000)
@@ -1040,16 +1110,25 @@ app.post('/api/checkout/:id/pagar', limitarTentativas, wrap(async (req, res) => 
 
   const dados = await resposta.json().catch(() => ({}));
   if (!resposta.ok || !dados.id) {
+    if (resposta.status >= 400 && resposta.status < 500) {
+      await q(`UPDATE pedidos SET payment_idempotency_key = $2
+        WHERE id = $1 AND payment_idempotency_key = $3`,
+      [pedido.id, crypto.randomUUID(), pedido.payment_idempotency_key]);
+    }
     console.error(`Mercado Pago recusou a criação do pagamento (HTTP ${resposta.status}).`);
     const detalhe = txt(dados.message || dados.cause?.[0]?.description, 240);
     return res.status(502).json({ erro: detalhe || 'O Mercado Pago não conseguiu processar o pagamento.' });
   }
 
   const qr = dados.point_of_interaction?.transaction_data || {};
-  await q(`UPDATE pedidos
+  const pedidoAtualizado = await q(`UPDATE pedidos
     SET payment_id = $2, payment_status = $3, payment_qr_code = $4, payment_qr_code_base64 = $5
-    WHERE id = $1`,
+    WHERE id = $1 AND (payment_id IS NULL OR payment_id = $2)
+    RETURNING id`,
   [pedido.id, String(dados.id), txt(dados.status, 40), txt(qr.qr_code, 3000), txt(qr.qr_code_base64, 100000)]);
+  if (!pedidoAtualizado.rows.length) {
+    throw new Error(`O pedido ${pedido.id} não aceitou o vínculo com o pagamento ${dados.id}.`);
+  }
 
   res.json({
     pedidoId: pedido.id, produtoNome: pedido.produto_nome, valor: Number(pedido.valor),
@@ -1069,15 +1148,25 @@ async function sincronizarPagamentoMercadoPago(idPagamento, pagamentoRecebido) {
   }
   const pagamento = consulta.dados;
   const pedidoId = txt(pagamento.external_reference, 64);
-  const pedido = (await q('SELECT * FROM pedidos WHERE id = $1 AND payment_id = $2', [pedidoId, String(pagamento.id)])).rows[0];
+  const pedido = (await q('SELECT * FROM pedidos WHERE id = $1', [pedidoId])).rows[0];
   if (!pedido || String(pagamento.currency_id || '').toUpperCase() !== 'BRL'
-    || dinheiro(pagamento.transaction_amount) !== dinheiro(pedido.valor)) {
+    || dinheiro(pagamento.transaction_amount) !== dinheiro(pedido.valor)
+    || (pedido.payment_id && String(pedido.payment_id) !== String(pagamento.id))
+    || (!pedido.payment_id
+      && (!pedido.payment_idempotency_key
+        || String(pagamento.metadata?.checkout_attempt_key || '') !== pedido.payment_idempotency_key))) {
     console.error(`Pagamento ${idPagamento} sem pedido correspondente ou com valor divergente.`);
     return null;
   }
 
   const statusPagamento = String(pagamento.status || '').toLowerCase();
-  await q('UPDATE pedidos SET payment_status = $2 WHERE id = $1', [pedido.id, statusPagamento]);
+  const vinculo = await q(`UPDATE pedidos
+    SET payment_id = COALESCE(payment_id, $2), payment_status = $3
+    WHERE id = $1
+      AND (payment_id = $2 OR (payment_id IS NULL AND payment_idempotency_key = $4))
+    RETURNING id`,
+  [pedido.id, String(pagamento.id), statusPagamento, pedido.payment_idempotency_key]);
+  if (!vinculo.rows.length) return null;
   if (statusPagamento === 'approved' && pedido.status === 'aguardando') {
     await confirmarPedido(pedido.id);
   } else if (['cancelled', 'refunded', 'charged_back'].includes(statusPagamento)) {
@@ -1151,7 +1240,7 @@ async function afiliadoPorReferencia(client, referencia) {
 // Confirmação automática após aprovação do Mercado Pago.
 async function confirmarPedido(id) {
   return mudarPedido(id, 'aguardando', async (client, ped) => {
-    const taxas = await lerTaxas();
+    const taxas = await lerTaxas(client);
     const valor = Number(ped.valor);
     let vendedor = 0, patrocinador = 0, avo = 0;
     let patrocinadorUsuario = null, avoUsuario = null;
@@ -1259,53 +1348,90 @@ app.get('/api/config', wrap(async (req, res) => {
 }));
 
 app.put('/api/config', auth, soAdmin, wrap(async (req, res) => {
-  const taxasAtuais = await lerTaxas();
-  const taxaComissao = req.body.taxaComissao === undefined ? taxasAtuais.taxaComissao : req.body.taxaComissao;
-  const taxaPatrocinador = req.body.taxaPatrocinador === undefined ? taxasAtuais.taxaPatrocinador : req.body.taxaPatrocinador;
-  const taxaAvo = req.body.taxaAvo === undefined ? taxasAtuais.taxaAvo : req.body.taxaAvo;
-  if (typeof taxaComissao !== 'number' || !Number.isFinite(taxaComissao) || taxaComissao < 0 || taxaComissao > 100
-    || typeof taxaPatrocinador !== 'number' || !Number.isFinite(taxaPatrocinador) || taxaPatrocinador < 0 || taxaPatrocinador > 100
-    || typeof taxaAvo !== 'number' || !Number.isFinite(taxaAvo) || taxaAvo < 0 || taxaAvo > 100) {
-    return res.status(400).json({ erro: 'As comissões devem ser números entre 0% e 100%.' });
-  }
-  if (taxaComissao + taxaPatrocinador + taxaAvo > 100) {
-    return res.status(400).json({ erro: 'A soma das comissões direta, do patrocinador e do avô não pode ultrapassar 100%.' });
-  }
+  const client = await pool.connect();
+  let transacaoAtiva = false;
+  try {
+    await client.query('BEGIN');
+    transacaoAtiva = true;
+    const taxasAtuais = await lerTaxas(client);
+    const taxaComissao = req.body.taxaComissao === undefined ? taxasAtuais.taxaComissao : req.body.taxaComissao;
+    const taxaPatrocinador = req.body.taxaPatrocinador === undefined ? taxasAtuais.taxaPatrocinador : req.body.taxaPatrocinador;
+    const taxaAvo = req.body.taxaAvo === undefined ? taxasAtuais.taxaAvo : req.body.taxaAvo;
 
-  if (req.body.valorMinimoSaque !== undefined) {
-    const valorMinimoSaque = req.body.valorMinimoSaque;
-    if (typeof valorMinimoSaque !== 'number' || !Number.isFinite(valorMinimoSaque) || valorMinimoSaque < 0) {
-      return res.status(400).json({ erro: 'O valor mínimo de saque deve ser um valor numérico igual ou superior a zero.' });
+    if (typeof taxaComissao !== 'number' || !Number.isFinite(taxaComissao) || taxaComissao < 0 || taxaComissao > 100
+      || typeof taxaPatrocinador !== 'number' || !Number.isFinite(taxaPatrocinador) || taxaPatrocinador < 0 || taxaPatrocinador > 100
+      || typeof taxaAvo !== 'number' || !Number.isFinite(taxaAvo) || taxaAvo < 0 || taxaAvo > 100) {
+      await client.query('ROLLBACK');
+      transacaoAtiva = false;
+      return res.status(400).json({ erro: 'As comissões devem ser números entre 0% e 100%.' });
     }
-    await gravarConfig('valorMinimoSaque', dinheiro(valorMinimoSaque));
-  }
-
-  if (req.body.taxaComissao !== undefined || req.body.taxaPatrocinador !== undefined || req.body.taxaAvo !== undefined) {
-    const resultado = await q(`INSERT INTO config (chave, valor) VALUES
-      ('taxaComissao', $1::jsonb),
-      ('taxaPatrocinador', $2::jsonb),
-      ('taxaAvo', $3::jsonb)
-      ON CONFLICT (chave) DO UPDATE SET valor = EXCLUDED.valor
-      RETURNING chave, valor`,
-    [JSON.stringify(taxaComissao), JSON.stringify(taxaPatrocinador), JSON.stringify(taxaAvo)]);
-    if (resultado.rows.length !== 3) {
-      throw new Error('O Neon não confirmou a persistência das três taxas de comissão.');
+    if (taxaComissao + taxaPatrocinador + taxaAvo > 100) {
+      await client.query('ROLLBACK');
+      transacaoAtiva = false;
+      return res.status(400).json({ erro: 'A soma das comissões direta, do patrocinador e do avô não pode ultrapassar 100%.' });
     }
 
-    const persistidas = Object.fromEntries(resultado.rows.map(({ chave, valor }) => [chave, Number(valor)]));
-    if (persistidas.taxaComissao !== taxaComissao
-      || persistidas.taxaPatrocinador !== taxaPatrocinador
-      || persistidas.taxaAvo !== taxaAvo) {
-      throw new Error('Os valores persistidos no Neon diferem das taxas enviadas pelo painel.');
+    if (req.body.valorMinimoSaque !== undefined) {
+      const valorMinimoSaque = req.body.valorMinimoSaque;
+      if (typeof valorMinimoSaque !== 'number' || !Number.isFinite(valorMinimoSaque) || valorMinimoSaque < 0) {
+        await client.query('ROLLBACK');
+        transacaoAtiva = false;
+        return res.status(400).json({ erro: 'O valor mínimo de saque deve ser um valor numérico igual ou superior a zero.' });
+      }
+      await gravarConfig('valorMinimoSaque', dinheiro(valorMinimoSaque), client);
     }
-  }
 
-  if (req.body.whatsappSuporte !== undefined) {
-    const d = soDigitos(req.body.whatsappSuporte);
-    if (d && (d.length < 10 || d.length > 15)) return res.status(400).json({ erro: 'Informe o WhatsApp do suporte com DDD (somente números).' });
-    await gravarConfig('whatsappSuporte', d ? paraWhatsApp(d) : '');
+    let taxasPersistidas = {
+      taxaComissao: taxasAtuais.taxaComissao,
+      taxaPatrocinador: taxasAtuais.taxaPatrocinador,
+      taxaAvo: taxasAtuais.taxaAvo,
+      taxaCentral: taxasAtuais.taxaCentral
+    };
+    if (req.body.taxaComissao !== undefined || req.body.taxaPatrocinador !== undefined || req.body.taxaAvo !== undefined) {
+      const resultado = await client.query(`INSERT INTO config (chave, valor) VALUES
+        ('taxaComissao', $1::jsonb),
+        ('taxaPatrocinador', $2::jsonb),
+        ('taxaAvo', $3::jsonb)
+        ON CONFLICT (chave) DO UPDATE SET valor = EXCLUDED.valor
+        RETURNING chave, valor`,
+      [JSON.stringify(taxaComissao), JSON.stringify(taxaPatrocinador), JSON.stringify(taxaAvo)]);
+      if (resultado.rows.length !== 3) {
+        throw new Error('O Neon não confirmou a persistência das três taxas de comissão.');
+      }
+
+      const valores = Object.fromEntries(resultado.rows.map(({ chave, valor }) => [chave, Number(valor)]));
+      if (valores.taxaComissao !== taxaComissao
+        || valores.taxaPatrocinador !== taxaPatrocinador
+        || valores.taxaAvo !== taxaAvo) {
+        throw new Error('Os valores persistidos no Neon diferem das taxas enviadas pelo painel.');
+      }
+      taxasPersistidas = {
+        taxaComissao,
+        taxaPatrocinador,
+        taxaAvo,
+        taxaCentral: 100 - taxaComissao - taxaPatrocinador - taxaAvo
+      };
+    }
+
+    if (req.body.whatsappSuporte !== undefined) {
+      const d = soDigitos(req.body.whatsappSuporte);
+      if (d && (d.length < 10 || d.length > 15)) {
+        await client.query('ROLLBACK');
+        transacaoAtiva = false;
+        return res.status(400).json({ erro: 'Informe o WhatsApp do suporte com DDD (somente números).' });
+      }
+      await gravarConfig('whatsappSuporte', d ? paraWhatsApp(d) : '', client);
+    }
+
+    await client.query('COMMIT');
+    transacaoAtiva = false;
+    res.json({ ok: true, ...taxasPersistidas });
+  } catch (error) {
+    if (transacaoAtiva) await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
   }
-  res.json({ ok: true, ...(await lerTaxas()) });
 }));
 
 // ----- Suporte: busca de contas, senha temporária e troca obrigatória -----
