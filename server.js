@@ -985,7 +985,10 @@ app.post('/api/checkout/:id/pagar', limitarTentativas, wrap(async (req, res) => 
       repasse_juros_comprador: pedido.repasse_juros_comprador ? 'true' : 'false',
       max_parcelas_sem_juros: String(pedido.max_parcelas_sem_juros || 1)
     },
-    notification_url: process.env.MERCADO_PAGO_WEBHOOK_URL || undefined,
+    notification_url: process.env.MERCADO_PAGO_WEBHOOK_URL
+      || (process.env.RENDER_EXTERNAL_URL
+        ? `${process.env.RENDER_EXTERNAL_URL.replace(/\/$/, '')}/api/webhook/mercadopago`
+        : undefined),
     payer: {
       email: pedido.cliente_email,
       first_name: pedido.cliente_nome.split(/\s+/)[0],
@@ -1608,6 +1611,7 @@ app.delete('/api/admin/contas/:usuario', auth, soAdmin, wrap(async (req, res) =>
 // Recebe notificações do Mercado Pago e sincroniza o estado da licença no Neon.
 app.post('/api/webhook/mercadopago', async (req, res) => {
   const responderOk = () => res.status(200).send('OK');
+  const responderFalha = () => res.status(503).send('Pagamento ainda não sincronizado.');
   try {
     const idPagamento = req.query.id || req.query['data.id']
       || req.body?.data?.id || req.body?.id || req.body?.payment_id;
@@ -1625,7 +1629,7 @@ app.post('/api/webhook/mercadopago', async (req, res) => {
     const accessToken = MERCADO_PAGO_ACCESS_TOKEN;
     if (!accessToken) {
       console.error('MERCADO_PAGO_ACCESS_TOKEN ou ACCESS_TOKEN não está configurado.');
-      return responderOk();
+      return responderFalha();
     }
 
     console.log(`Notificação de pagamento recebida para o ID: ${id}`);
@@ -1636,13 +1640,13 @@ app.post('/api/webhook/mercadopago', async (req, res) => {
 
     if (!resposta.ok) {
       console.error(`Erro ao consultar o pagamento ${id} na API do Mercado Pago: HTTP ${resposta.status}`);
-      return responderOk();
+      return responderFalha();
     }
 
     const dadosPagamento = await resposta.json();
     const status = String(dadosPagamento.status || '').toLowerCase();
     const sincronizado = await sincronizarPagamentoMercadoPago(id, dadosPagamento);
-    if (!sincronizado) return responderOk();
+    if (!sincronizado) return responderFalha();
     const cpf = txt(
       dadosPagamento.payer?.identification?.number
         || dadosPagamento.additional_info?.payer?.identification?.number
@@ -1684,13 +1688,14 @@ app.post('/api/webhook/mercadopago', async (req, res) => {
     }
   } catch (erro) {
     console.error('Erro no processamento do Webhook do Mercado Pago:', erro);
+    return res.status(500).send('Falha ao sincronizar pagamento.');
   }
   return responderOk();
 });
 
 app.use('/api', (req, res) => res.status(404).json({ erro: 'Rota não encontrada.' }));
 app.use((err, req, res, next) => {
-  if (req.path === '/api/webhook/mercadopago') return res.status(200).send('OK');
+  if (req.path === '/api/webhook/mercadopago') return res.status(500).send('Falha ao sincronizar pagamento.');
   if (err.type === 'entity.parse.failed') return res.status(400).json({ erro: 'Requisição inválida.' });
   if (err.code === '23505') return res.status(409).json({ erro: 'Registro já existe.' });
   console.error(err);

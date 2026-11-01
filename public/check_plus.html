@@ -656,6 +656,13 @@
             });
             const dados = await resp.json().catch(() => ({}));
             if (!resp.ok) throw new Error(dados.erro || 'Não foi possível registrar o pedido.');
+            if (afiliadoAtivoCodigo && !dados.afiliadoValido) {
+                const aviso = document.getElementById('infoAfiliadoBox');
+                aviso.classList.remove('text-emerald-700', 'bg-emerald-50/60');
+                aviso.classList.add('text-amber-800', 'bg-amber-50');
+                aviso.innerText = 'A indicação não foi validada. Esta compra não gerará comissão para o afiliado informado.';
+                aviso.classList.remove('hidden');
+            }
             return dados;
         }
 
