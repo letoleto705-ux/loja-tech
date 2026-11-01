@@ -174,14 +174,15 @@
                                 <h5 class="font-extrabold text-slate-900">CMV Food Plus</h5>
                                 <span class="text-xs text-slate-500">Nível Máximo + Suporte VIP</span>
                             </div>
-                            <span id="chk_precoItem" class="font-black text-slate-900">R$ 99,99</span>
+                            <span id="chk_precoItem" class="font-black text-slate-900">Carregando...</span>
                         </div>
+                        <p id="statusPrecoCatalogo" class="mt-2 text-[11px] text-slate-500" role="status">Buscando preço oficial...</p>
                     </div>
 
                     <div class="border-t border-slate-200 pt-4 mt-4 space-y-2 text-sm font-semibold text-slate-600">
                         <div class="flex justify-between">
                             <span>Subtotal:</span>
-                            <span id="chk_subtotal">R$ 99,99</span>
+                            <span id="chk_subtotal">Carregando...</span>
                         </div>
                         <div id="linhaDescontoCupom" class="hidden flex justify-between text-emerald-700">
                             <span>Desconto do cupom:</span>
@@ -193,7 +194,7 @@
                         </div>
                         <div class="flex justify-between pt-2 border-t border-slate-100 font-black text-slate-900 text-base">
                             <span>Total Geral:</span>
-                            <span id="chk_totalGeral" class="text-orange-600 text-xl">R$ 99,99</span>
+                            <span id="chk_totalGeral" class="text-orange-600 text-xl">Carregando...</span>
                         </div>
                         <div id="infoParcelamentoResumo" class="text-right text-xs text-slate-500 font-normal">
                             À vista no Pix ou Cartão
@@ -284,8 +285,8 @@
         const AFILIADO_KEY = 'tech_afiliado_ativo';
         const VALIDADE_AFILIADO_MS = 15 * 24 * 60 * 60 * 1000; // 15 dias
 
-        let precoBase = 99.99; // total efetivo enviado ao Mercado Pago
-        let precoCatalogo = 99.99;
+        let precoBase = null;
+        let precoCatalogo = null;
         let descontoCupom = 0;
         let codigoCupomAplicado = '';
         let repasseJurosComprador = true;
@@ -304,23 +305,28 @@
             const resumo = document.getElementById('checkoutResumo');
             const formulario = document.getElementById('checkoutFormulario');
             formulario.before(resumo);
-            atualizarResumoTela();
-            popularParcelasEstimadas();
             carregamentoPreco = carregarPrecoDoCatalogo();
-            await carregamentoPreco;
-            restaurarPedidoDownload();
+            if (await carregamentoPreco) {
+                popularParcelasEstimadas();
+                atualizarResumoTela();
+                restaurarPedidoDownload();
+            }
         });
 
-        // Usa o preço atual cadastrado na loja (se o administrador mudar o preço, o checkout acompanha)
         async function carregarPrecoDoCatalogo() {
             try {
-                const resp = await fetch(API_URL + '/api/produtos');
-                if (!resp.ok) return;
+                const resp = await fetch(API_URL + '/api/produtos', { cache: 'no-store' });
+                if (!resp.ok) throw new Error('Não foi possível consultar os preços oficiais da loja.');
                 const lista = await resp.json();
                 const prod = (lista || []).find(p => String(p.id || '').toLowerCase() === PRODUTO_ID);
-                if (!prod || !(Number(prod.precoPor) > 0)) return;
-                precoCatalogo = Number(prod.precoPor);
+                const precoOficial = Number(prod && prod.precoPor);
+                if (!Number.isFinite(precoOficial) || precoOficial <= 0) {
+                    throw new Error('O produto não possui um preço oficial válido no catálogo.');
+                }
+                precoCatalogo = precoOficial;
                 precoBase = precoCatalogo;
+                document.getElementById('statusPrecoCatalogo').innerText = 'Preço oficial atualizado.';
+                document.getElementById('statusPrecoCatalogo').className = 'mt-2 text-[11px] text-slate-500';
                 repasseJurosComprador = prod.repasseJurosComprador !== false;
                 const parcelasConfiguradas = Number(prod.maxParcelasSemJuros);
                 maxParcelasSemJuros = Number.isInteger(parcelasConfiguradas)
@@ -335,8 +341,14 @@
                 document.getElementById('statusParcelasCartao').innerText =
                     `Regra do produto: ${textoLimiteParcelasSemJuros()}. As condições efetivas dependem do cartão e da conta Mercado Pago.`;
                 atualizarResumoTela();
+                return true;
             } catch (e) {
-                console.warn('Usando preço de reserva:', e.message);
+                console.error('Falha ao carregar o preço oficial:', e);
+                const status = document.getElementById('statusPrecoCatalogo');
+                status.innerText = `${e.message} Atualize a página para tentar novamente.`;
+                status.className = 'mt-2 text-xs text-red-600';
+                document.getElementById('btnFinalizar').disabled = true;
+                return false;
             }
         }
 
@@ -370,9 +382,7 @@
         }
 
         async function setFormaPagto(tipo) {
-            if (tipo === 'cartao') {
-                await (carregamentoPreco || (carregamentoPreco = carregarPrecoDoCatalogo()));
-            }
+            if (!(await (carregamentoPreco || (carregamentoPreco = carregarPrecoDoCatalogo())))) return;
             formaPagtoAtual = tipo;
             if (tipo === 'pix') brickInicializacao++;
 
@@ -410,11 +420,13 @@
             const resumoParcelaEl = document.getElementById('infoParcelamentoResumo');
 
             infoTaxaEl.classList.add('hidden');
-            document.getElementById('chk_precoItem').innerText = `R$ ${precoCatalogo.toFixed(2)}`;
-            document.getElementById('chk_subtotal').innerText = `R$ ${precoCatalogo.toFixed(2)}`;
+            const precoTexto = Number.isFinite(precoCatalogo) ? `R$ ${precoCatalogo.toFixed(2)}` : 'Carregando...';
+            const totalTexto = Number.isFinite(precoBase) ? `R$ ${precoBase.toFixed(2)}` : 'Carregando...';
+            document.getElementById('chk_precoItem').innerText = precoTexto;
+            document.getElementById('chk_subtotal').innerText = precoTexto;
             document.getElementById('chk_descontoCupom').innerText = `- R$ ${descontoCupom.toFixed(2)}`;
             document.getElementById('linhaDescontoCupom').classList.toggle('hidden', descontoCupom <= 0);
-            totalEl.innerText = `R$ ${precoBase.toFixed(2)}`;
+            totalEl.innerText = totalTexto;
             resumoParcelaEl.innerText = formaPagtoAtual === 'pix'
                 ? 'À vista via Pix'
                 : formaPagtoAtual === 'debito' ? 'Débito via Mercado Pago' : 'Cartão via Mercado Pago';
@@ -427,6 +439,12 @@
 
         function formatarMoeda(valor) {
             return Number(valor).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+        }
+
+        function textoLimiteParcelasSemJuros() {
+            return maxParcelasSemJuros === 0
+                ? 'nenhuma parcela sem juros'
+                : `até ${maxParcelasSemJuros}x sem juros`;
         }
 
         function popularParcelasEstimadas() {
@@ -444,11 +462,6 @@
                 ));
             }
 
-            function textoLimiteParcelasSemJuros() {
-                return maxParcelasSemJuros === 0
-                    ? 'nenhuma parcela sem juros'
-                    : `até ${maxParcelasSemJuros}x sem juros`;
-            }
             select.value = quantidadeSelecionada;
             if (!select.value) select.value = '1';
         }
@@ -530,6 +543,11 @@
         async function aplicarCupomCheckout() {
             const input = document.getElementById('codigoCupomCheckout');
             const status = document.getElementById('statusCupomCheckout');
+            if (!Number.isFinite(precoCatalogo)) {
+                status.innerText = 'Aguarde o carregamento do preço oficial antes de aplicar o cupom.';
+                status.className = 'mt-2 text-xs text-red-600';
+                return;
+            }
             const codigo = input.value.trim().toUpperCase();
             if (!codigo) {
                 codigoCupomAplicado = '';
@@ -667,6 +685,9 @@
         }
 
         async function registrarPedido(cliente, forma) {
+            if (!Number.isFinite(precoCatalogo)) {
+                throw new Error('O preço oficial do produto ainda não foi carregado. Atualize a página e tente novamente.');
+            }
             const resp = await fetch(API_URL + '/api/checkout', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },

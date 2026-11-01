@@ -1094,6 +1094,7 @@ async function confirmarPedido(id, paymentIdRecebido) {
 
 // ----- Produtos, Configurações e Exclusões -----
 app.get('/api/produtos', wrap(async (req, res) => {
+  res.set('Cache-Control', 'no-store');
   res.json(await lerConfig('produtos', PRODUTOS_INICIAIS));
 }));
 
