@@ -21,11 +21,17 @@ const TAXA_COMISSAO_PADRAO = 35;
 const TAXA_PATROCINADOR_PADRAO = 10;
 const TAXA_AVO_PADRAO = 5;
 const VALOR_MINIMO_SAQUE_PADRAO = 50;
+const MAX_PARCELAS_CARTAO = 12;
+
+const normalizarMaxParcelasSemJuros = valor => {
+  const parcelas = Number(valor);
+  return Number.isInteger(parcelas) && parcelas >= 1 && parcelas <= MAX_PARCELAS_CARTAO ? parcelas : 1;
+};
 
 const PRODUTOS_INICIAIS = [
-  { id: 'lite', nome: 'CMV Food Lite', desc: 'Início prático e direto para controle de fichas técnicas básicas.', custo: 10.00, precoDe: 69.99, precoPor: 49.99, imagem: 'https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=500&auto=format&fit=crop&q=60', video: '', pdf: '', repasseJurosComprador: true },
-  { id: 'pro', nome: 'CMV Food Pro', desc: 'Inclui módulo de Metas de Lucro Bruto e painel visual.', custo: 15.00, precoDe: 99.99, precoPor: 79.99, imagem: 'https://images.unsplash.com/photo-1460925895917-afdab827c52f?w=500&auto=format&fit=crop&q=60', video: '', pdf: '', repasseJurosComprador: true },
-  { id: 'plus', nome: 'CMV Food Plus', desc: 'Versão definitiva com base de clientes e suporte VIP.', custo: 20.00, precoDe: 119.00, precoPor: 99.99, imagem: 'https://images.unsplash.com/photo-1507238691740-187a5b1d37b8?w=500&auto=format&fit=crop&q=60', video: '', pdf: '', repasseJurosComprador: true }
+  { id: 'lite', nome: 'CMV Food Lite', desc: 'Início prático e direto para controle de fichas técnicas básicas.', custo: 10.00, precoDe: 69.99, precoPor: 49.99, imagem: 'https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=500&auto=format&fit=crop&q=60', video: '', pdf: '', repasseJurosComprador: true, maxParcelasSemJuros: 1 },
+  { id: 'pro', nome: 'CMV Food Pro', desc: 'Inclui módulo de Metas de Lucro Bruto e painel visual.', custo: 15.00, precoDe: 99.99, precoPor: 79.99, imagem: 'https://images.unsplash.com/photo-1460925895917-afdab827c52f?w=500&auto=format&fit=crop&q=60', video: '', pdf: '', repasseJurosComprador: true, maxParcelasSemJuros: 1 },
+  { id: 'plus', nome: 'CMV Food Plus', desc: 'Versão definitiva com base de clientes e suporte VIP.', custo: 20.00, precoDe: 119.00, precoPor: 99.99, imagem: 'https://images.unsplash.com/photo-1507238691740-187a5b1d37b8?w=500&auto=format&fit=crop&q=60', video: '', pdf: '', repasseJurosComprador: true, maxParcelasSemJuros: 1 }
 ];
 
 const pool = new Pool({ connectionString: DATABASE_URL, ssl: { rejectUnauthorized: false }, max: 5 });
@@ -345,7 +351,8 @@ async function iniciarBanco() {
   const produtosSalvos = await lerConfig('produtos', PRODUTOS_INICIAIS);
   await gravarConfig('produtos', produtosSalvos.map(produto => ({
     ...produto,
-    repasseJurosComprador: produto.repasseJurosComprador !== false
+    repasseJurosComprador: produto.repasseJurosComprador !== false,
+    maxParcelasSemJuros: normalizarMaxParcelasSemJuros(produto.maxParcelasSemJuros)
   })));
   await q(`CREATE TABLE IF NOT EXISTS afiliado_cupons (
     id serial PRIMARY KEY,
@@ -406,6 +413,7 @@ async function iniciarBanco() {
   await q("ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS cupom_codigo text NOT NULL DEFAULT ''");
   await q('ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS cupom_desconto numeric(12,2) NOT NULL DEFAULT 0');
   await q('ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS repasse_juros_comprador boolean NOT NULL DEFAULT true');
+  await q('ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS max_parcelas_sem_juros integer NOT NULL DEFAULT 1');
   await q("UPDATE pedidos SET valor_original = valor WHERE valor_original = 0");
   await q(`CREATE TABLE IF NOT EXISTS vendas_aprovadas (
     payment_id text PRIMARY KEY,
@@ -831,7 +839,6 @@ app.delete('/api/admin/notificacoes/:id', auth, soAdmin, wrap(async (req, res) =
 
 // ----- Checkout, pedidos e confirmação de pagamento -----
 const FORMAS = ['pix', 'cartao', 'debito'];
-const MAX_PARCELAS_CARTAO = 12;
 
 // 1) Cliente finaliza o checkout: registra o pedido como AGUARDANDO (sem comissão).
 //    Preço vem do banco (nunca do navegador). Afiliado inválido ou o próprio comprador => venda direta.
@@ -883,15 +890,17 @@ app.post('/api/checkout', limitarTentativas, wrap(async (req, res) => {
   const valorOriginal = Number(prod.precoPor);
   const valorFinal = dinheiro(valorOriginal - desconto);
   const repasseJurosComprador = prod.repasseJurosComprador !== false;
+  const maxParcelasSemJuros = normalizarMaxParcelasSemJuros(prod.maxParcelasSemJuros);
   await q(`INSERT INTO pedidos (id, afiliado_usuario, produto_id, produto_nome, valor, valor_original,
-      cupom_codigo, cupom_desconto, repasse_juros_comprador, forma, cliente_nome, cliente_email, cliente_cpf, download_token)
-    VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`,
+      cupom_codigo, cupom_desconto, repasse_juros_comprador, max_parcelas_sem_juros,
+      forma, cliente_nome, cliente_email, cliente_cpf, download_token)
+    VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)`,
   [pedidoId, afiliadoValido ? afiliado : null, prod.id, prod.nome, valorFinal, valorOriginal,
-    codigoCupom, desconto, repasseJurosComprador, forma, nome, email, cpf, downloadToken]);
+    codigoCupom, desconto, repasseJurosComprador, maxParcelasSemJuros, forma, nome, email, cpf, downloadToken]);
 
   res.json({
     pedidoId, produtoNome: prod.nome, valor: valorFinal, valorOriginal, desconto, codigoCupom,
-    repasseJurosComprador, forma, afiliadoValido, downloadToken
+    repasseJurosComprador, maxParcelasSemJuros, forma, afiliadoValido, downloadToken
   });
 }));
 
@@ -951,7 +960,10 @@ app.post('/api/checkout/:id/pagar', limitarTentativas, wrap(async (req, res) => 
     description: pedido.produto_nome,
     statement_descriptor: 'TECH SOFTWARE',
     external_reference: pedido.id,
-    metadata: { repasse_juros_comprador: pedido.repasse_juros_comprador ? 'true' : 'false' },
+    metadata: {
+      repasse_juros_comprador: pedido.repasse_juros_comprador ? 'true' : 'false',
+      max_parcelas_sem_juros: String(pedido.max_parcelas_sem_juros || 1)
+    },
     notification_url: process.env.MERCADO_PAGO_WEBHOOK_URL || undefined,
     payer: {
       email: pedido.cliente_email,
@@ -1166,13 +1178,18 @@ app.get('/api/produtos', wrap(async (req, res) => {
   const produtos = await lerConfig('produtos', PRODUTOS_INICIAIS);
   res.json(produtos.map(({ pdf, ...produto }) => ({
     ...produto,
-    repasseJurosComprador: produto.repasseJurosComprador !== false
+    repasseJurosComprador: produto.repasseJurosComprador !== false,
+    maxParcelasSemJuros: normalizarMaxParcelasSemJuros(produto.maxParcelasSemJuros)
   })));
 }));
 
 app.get('/api/admin/produtos', auth, soAdmin, wrap(async (req, res) => {
   const produtos = await lerConfig('produtos', PRODUTOS_INICIAIS);
-  res.json(produtos.map(p => ({ ...p, repasseJurosComprador: p.repasseJurosComprador !== false })));
+  res.json(produtos.map(p => ({
+    ...p,
+    repasseJurosComprador: p.repasseJurosComprador !== false,
+    maxParcelasSemJuros: normalizarMaxParcelasSemJuros(p.maxParcelasSemJuros)
+  })));
 }));
 
 app.put('/api/produtos', auth, soAdmin, wrap(async (req, res) => {
@@ -1184,12 +1201,19 @@ app.put('/api/produtos', auth, soAdmin, wrap(async (req, res) => {
   if (imagens.some(imagem => imagem && !ehUrlWeb(imagem) && !ehCaminhoImagemLocal(imagem))) {
     return res.status(400).json({ erro: 'A imagem deve ser uma URL HTTP ou HTTPS válida ou um caminho local em /imagens, /uploads ou /img.' });
   }
+  if (lista.some(p => p.maxParcelasSemJuros !== undefined
+    && (!Number.isInteger(Number(p.maxParcelasSemJuros))
+      || Number(p.maxParcelasSemJuros) < 1
+      || Number(p.maxParcelasSemJuros) > MAX_PARCELAS_CARTAO))) {
+    return res.status(400).json({ erro: 'O máximo de parcelas sem juros deve ser um número inteiro entre 1 e 12.' });
+  }
   const limpa = lista.map((p, index) => ({
     id: txt(p.id, 40), nome: txt(p.nome, 120), desc: txt(p.desc, 500),
     custo: Number(p.custo) || 0, precoDe: Number(p.precoDe) || 0, precoPor: Number(p.precoPor) || 0,
     imagem: imagens[index],
     video: txt(p.video, 500), pdf: txt(p.pdf, 8192),
-    repasseJurosComprador: p.repasseJurosComprador !== false
+    repasseJurosComprador: p.repasseJurosComprador !== false,
+    maxParcelasSemJuros: normalizarMaxParcelasSemJuros(p.maxParcelasSemJuros)
   }));
   if (limpa.some(p => !p.id || !p.nome)) return res.status(400).json({ erro: 'Todo produto precisa de id e nome.' });
   if (limpa.some(p => p.pdf && /^[a-z][a-z0-9+.-]*:/i.test(p.pdf) && !ehUrlWeb(p.pdf))) {

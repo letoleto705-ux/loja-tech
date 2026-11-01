@@ -269,6 +269,7 @@
         let descontoCupom = 0;
         let codigoCupomAplicado = '';
         let repasseJurosComprador = true;
+        let maxParcelasSemJuros = 1;
         let formaPagtoAtual = 'pix';
         let afiliadoAtivoCodigo = "";
         let enviando = false;
@@ -298,9 +299,12 @@
                 precoCatalogo = Number(prod.precoPor);
                 precoBase = precoCatalogo;
                 repasseJurosComprador = prod.repasseJurosComprador !== false;
+                maxParcelasSemJuros = Math.min(12, Math.max(1, Number(prod.maxParcelasSemJuros) || 1));
                 document.getElementById('mensagemBrick').innerText = repasseJurosComprador
-                    ? 'O parcelamento e os encargos serão apresentados pelo Mercado Pago ao comprador.'
-                    : 'A loja absorve os encargos conforme os planos sem juros habilitados na conta Mercado Pago.';
+                    ? `Regra do produto: até ${maxParcelasSemJuros}x sem juros; acima disso, os encargos são repassados ao comprador.`
+                    : `Regra do produto: até ${maxParcelasSemJuros}x sem juros; acima disso, a loja absorve os encargos.`;
+                document.getElementById('avisoParcelamentoCartao').innerText =
+                    'Escolha as parcelas no formulário seguro. Disponibilidade e valores finais são apresentados pelo Mercado Pago conforme o cartão e as condições da conta.';
                 atualizarResumoTela();
             } catch (e) {
                 console.warn('Usando preço de reserva:', e.message);

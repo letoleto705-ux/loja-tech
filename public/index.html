@@ -469,6 +469,12 @@
                     </div>
                 </div>
 
+                <div>
+                    <label class="block mb-1 uppercase tracking-wider">Max. Parcelas Sem Juros</label>
+                    <input type="number" id="p_max_parcelas_sem_juros" required min="1" max="12" step="1" value="1" class="w-full px-4 py-3 rounded-xl border border-slate-200 outline-none">
+                    <p class="mt-1 text-[10px] font-normal text-slate-500">De 1 a 12 parcelas. As condições finais são apresentadas pelo Mercado Pago.</p>
+                </div>
+
                 <label class="flex items-start gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs leading-relaxed">
                     <input type="checkbox" id="p_repasse_juros" checked class="mt-0.5 h-4 w-4 accent-orange-600">
                     <span>Repassar juros do parcelamento para o cliente (Comprador)</span>
@@ -1260,6 +1266,7 @@
             document.getElementById('p_custo').value = p.custo;
             document.getElementById('p_preco_de').value = p.precoDe;
             document.getElementById('p_preco_por').value = p.precoPor;
+            document.getElementById('p_max_parcelas_sem_juros').value = p.maxParcelasSemJuros || 1;
             document.getElementById('p_imagem').value = p.imagem || '';
             document.getElementById('p_pdf').value = p.pdf || '';
             document.getElementById('p_repasse_juros').checked = p.repasseJurosComprador !== false;
@@ -1284,15 +1291,16 @@
             const custo = parseFloat(document.getElementById('p_custo').value);
             const precoDe = parseFloat(document.getElementById('p_preco_de').value);
             const precoPor = parseFloat(document.getElementById('p_preco_por').value);
+            const maxParcelasSemJuros = parseInt(document.getElementById('p_max_parcelas_sem_juros').value, 10);
             const imagem = document.getElementById('p_imagem').value.trim();
             const pdf = document.getElementById('p_pdf').value.trim();
             const repasseJurosComprador = document.getElementById('p_repasse_juros').checked;
 
             if (editIdx >= 0) {
-                produtos[editIdx] = { ...produtos[editIdx], id, nome, desc, custo, precoDe, precoPor, imagem, pdf, repasseJurosComprador };
+                produtos[editIdx] = { ...produtos[editIdx], id, nome, desc, custo, precoDe, precoPor, imagem, pdf, repasseJurosComprador, maxParcelasSemJuros };
                 alert("Produto atualizado!");
             } else {
-                produtos.push({ id, nome, desc, custo, precoDe, precoPor, imagem, pdf, repasseJurosComprador });
+                produtos.push({ id, nome, desc, custo, precoDe, precoPor, imagem, pdf, repasseJurosComprador, maxParcelasSemJuros });
                 alert("Produto criado!");
             }
 
