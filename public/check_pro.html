@@ -949,10 +949,21 @@
             const codigo = document.getElementById('modalPixChave').value;
             if (!codigo) return;
             if (navigator.clipboard) {
-                navigator.clipboard.writeText(codigo).then(() => alert('Código Pix copiado!'), () => prompt('Copie o código Pix:', codigo));
-            } else {
-                prompt('Copie o código Pix:', codigo);
+                navigator.clipboard.writeText(codigo)
+                    .then(() => alert('Código Pix copiado!'))
+                    .catch(() => selecionarECopiarPix());
+                return;
             }
+            selecionarECopiarPix();
+        }
+
+        function selecionarECopiarPix() {
+            const campo = document.getElementById('modalPixChave');
+            campo.focus();
+            campo.select();
+            campo.setSelectionRange(0, campo.value.length);
+            if (document.execCommand('copy')) alert('Código Pix copiado!');
+            else prompt('Copie o código Pix:', campo.value);
         }
     </script>
 </body>

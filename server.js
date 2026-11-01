@@ -54,7 +54,7 @@ const normUsuario = t => String(t == null ? '' : t)
 const txt = (t, max = 120) => String(t == null ? '' : t).trim().slice(0, max);
 const codigoPixValido = valor => {
   const codigo = String(valor == null ? '' : valor);
-  if (codigo.length < 20 || codigo.length > 3000 || !codigo.startsWith('000201')) return false;
+  if (codigo.length < 20 || codigo.length > 10000 || !codigo.startsWith('000201')) return false;
   const inicioCrc = codigo.length - 8;
   const crcInformado = codigo.slice(-4).toUpperCase();
   if (codigo.slice(inicioCrc, inicioCrc + 4) !== '6304' || !/^[0-9A-F]{4}$/.test(crcInformado)) return false;
@@ -1021,13 +1021,16 @@ app.post('/api/checkout/:id/pagar', limitarTentativas, wrap(async (req, res) => 
   if (!resposta.ok || !dados.id) return res.status(502).json({ erro: dados.message || 'Erro no pagamento.' });
 
   const qr = dados.point_of_interaction?.transaction_data || {};
-  const codigoPix = txt(qr.qr_code, 3000);
-  if (pedido.forma === 'pix' && dados.status !== 'approved' && !codigoPixValido(codigoPix)) {
-    console.error('Mercado Pago não retornou um código Pix válido.', { paymentId: String(dados.id), tamanhoCodigo: codigoPix.length });
-    return res.status(502).json({ erro: 'O Mercado Pago não retornou um código Pix válido. Nenhum pagamento foi confirmado; tente novamente ou fale com o suporte.' });
+  const codigoPix = typeof qr.qr_code === 'string' ? qr.qr_code : '';
+  const statusPagamento = String(dados.status || '').toLowerCase();
+  const pagamentoFinalizado = ['approved', 'rejected', 'cancelled', 'refunded', 'charged_back'].includes(statusPagamento);
+  if (pedido.forma === 'pix' && !pagamentoFinalizado && !codigoPixValido(codigoPix)) {
+    const motivo = codigoPix ? 'código Pix com formato ou CRC inválido' : 'código Pix ausente';
+    console.error(`Mercado Pago retornou ${motivo}.`, { paymentId: String(dados.id), tamanhoCodigo: codigoPix.length });
+    return res.status(502).json({ erro: 'O Mercado Pago não retornou um código Pix válido. O código não foi alterado nem exibido; tente novamente ou fale com o suporte.' });
   }
   await q(`UPDATE pedidos SET payment_id = $2, payment_status = $3, payment_qr_code = $4, payment_qr_code_base64 = $5 WHERE id = $1`,
-    [pedido.id, String(dados.id), txt(dados.status, 40), codigoPix, txt(qr.qr_code_base64, 100000)]);
+    [pedido.id, String(dados.id), txt(statusPagamento, 40), codigoPix, txt(qr.qr_code_base64, 100000)]);
 
   res.json({ pedidoId: pedido.id, paymentId: String(dados.id), status: dados.status, qrCode: codigoPix, qrCodeBase64: qr.qr_code_base64 || '' });
 }));
