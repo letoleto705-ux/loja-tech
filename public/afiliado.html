@@ -35,6 +35,18 @@
         .gradient-orange { background: linear-gradient(135deg, #FF5722 0%, #FF9800 100%); }
         .shadow-orange-glow { box-shadow: 0 10px 25px -5px rgba(255, 87, 34, 0.3); }
         .glass-header { background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(10px); }
+        @keyframes piscarTitulo {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.2; }
+        }
+        .comunicado-titulo-destaque {
+            color: #ff0000;
+            font-weight: bold;
+            animation: piscarTitulo 1.2s infinite;
+        }
+        @media (prefers-reduced-motion: reduce) {
+            .comunicado-titulo-destaque { animation: none; }
+        }
     </style>
 </head>
 <body class="bg-slate-100 text-slate-800 font-sans antialiased min-h-screen flex flex-col justify-between text-sm">
@@ -592,7 +604,7 @@
                 const banner = document.getElementById('bannerComunicadosAfiliado');
                 banner.innerHTML = avisos.map(aviso => `
                     <article class="rounded-2xl border border-blue-200 bg-blue-50 p-4">
-                        <h3 class="font-black text-blue-950">${esc(aviso.titulo)}</h3>
+                        <h3 class="comunicado-titulo-destaque">${esc(aviso.titulo)}</h3>
                         <p class="mt-1 whitespace-pre-line text-sm text-blue-900">${esc(aviso.mensagem)}</p>
                     </article>`).join('');
                 banner.classList.toggle('hidden', avisos.length === 0);
