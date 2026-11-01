@@ -126,7 +126,7 @@
                             <span>Pagamento via Pix com Liberação após Confirmação</span>
                         </div>
                         <p class="text-slate-600 leading-relaxed">O QR Code Pix e o código Copia e Cola serão gerados pelo Mercado Pago nesta tela. A liberação acontece após a confirmação.</p>
-                        <p class="text-xs font-bold text-emerald-800">Recebedor: Wellington jose dos santos (CEO TECH).</p>
+                        <p class="text-xs font-bold text-emerald-800">Pagamento processado pelo Mercado Pago.</p>
                     </div>
 
                     <!-- FORMULÁRIO SEGURO DE CARTÃO -->
@@ -241,7 +241,7 @@
 
             <div id="modalBoxPix" class="hidden space-y-2 bg-emerald-50/60 p-4 rounded-2xl border border-emerald-200">
                 <span class="text-[10px] uppercase font-bold text-emerald-700 block">QR Code Pix do Mercado Pago</span>
-                <span class="text-xs font-bold text-emerald-800 block">Recebedor: Wellington jose dos santos (CEO TECH)</span>
+                <span class="text-xs font-bold text-emerald-800 block">Pagamento processado pelo Mercado Pago</span>
                 <img id="modalPixQr" alt="QR Code Pix para pagamento" class="mx-auto max-w-[220px] rounded bg-white p-2">
                 <label for="modalPixChave" class="text-[10px] uppercase font-bold text-emerald-700 block">Pix Copia e Cola</label>
                 <textarea id="modalPixChave" readonly rows="4" class="w-full rounded-lg border border-emerald-200 p-2 font-mono text-xs text-slate-900"></textarea>
@@ -281,7 +281,7 @@
     <!-- JAVASCRIPT: RASTREIO DE AFILIADOS (15 DIAS) + PEDIDO NO SERVIDOR -->
     <script>
         const PRODUTO_ID = 'plus';
-        const API_URL = ''; // vazio = mesmo endereço do site (Render serve as páginas e a API juntas)
+        const API_URL = window.location.origin;
         const AFILIADO_KEY = 'tech_afiliado_ativo';
         const VALIDADE_AFILIADO_MS = 15 * 24 * 60 * 60 * 1000; // 15 dias
 
@@ -946,11 +946,12 @@
         }
 
         function copiarPixModal() {
-            if (!pixChaveAtual) return;
+            const codigo = document.getElementById('modalPixChave').value;
+            if (!codigo) return;
             if (navigator.clipboard) {
-                navigator.clipboard.writeText(pixChaveAtual).then(() => alert('Chave Pix copiada!'), () => prompt('Copie a chave Pix:', pixChaveAtual));
+                navigator.clipboard.writeText(codigo).then(() => alert('Código Pix copiado!'), () => prompt('Copie o código Pix:', codigo));
             } else {
-                prompt('Copie a chave Pix:', pixChaveAtual);
+                prompt('Copie o código Pix:', codigo);
             }
         }
     </script>

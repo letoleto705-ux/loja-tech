@@ -17,6 +17,8 @@ O Render serve todas as páginas e a API no mesmo endereço, então não há COR
 
 As imagens públicas dos produtos ficam em `public/imagens/` e são servidas em `/imagens/` pelo mesmo endereço do site. No painel administrativo, informe o caminho relativo da imagem (por exemplo, `/imagens/cmv-food-lite.png`); esse valor fica salvo junto ao produto em `config.produtos` no Neon. Inclua os arquivos de imagem no repositório para que sejam publicados no Render.
 
+Para liberar o produto após a aprovação do pagamento, configure também a URL pública do arquivo no campo **Arquivo para Download (PDF ou instalador)** de cada produto no painel administrativo.
+
 ## 1. Neon (banco)
 Copie a **connection string** do seu projeto (`postgresql://...`). O servidor cria/atualiza o schema na primeira inicialização. O script [database/neon-migration.sql](./database/neon-migration.sql) documenta as tabelas/campos novos para aplicar manualmente depois da inicialização do schema original.
 

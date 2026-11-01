@@ -52,6 +52,23 @@ const normUsuario = t => String(t == null ? '' : t)
   .toLowerCase()
   .replace(/\s+/g, '-');
 const txt = (t, max = 120) => String(t == null ? '' : t).trim().slice(0, max);
+const codigoPixValido = valor => {
+  const codigo = String(valor == null ? '' : valor);
+  if (codigo.length < 20 || codigo.length > 3000 || !codigo.startsWith('000201')) return false;
+  const inicioCrc = codigo.length - 8;
+  const crcInformado = codigo.slice(-4).toUpperCase();
+  if (codigo.slice(inicioCrc, inicioCrc + 4) !== '6304' || !/^[0-9A-F]{4}$/.test(crcInformado)) return false;
+
+  let crc = 0xFFFF;
+  for (const byte of Buffer.from(codigo.slice(0, -4), 'utf8')) {
+    crc ^= byte << 8;
+    for (let bit = 0; bit < 8; bit++) {
+      crc = crc & 0x8000 ? (crc << 1) ^ 0x1021 : crc << 1;
+      crc &= 0xFFFF;
+    }
+  }
+  return crc.toString(16).padStart(4, '0').toUpperCase() === crcInformado;
+};
 const RE_USUARIO = /^[a-z0-9_.-]{3,30}$/;
 const RE_EMAIL = /^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$/;
 const RE_CPF = /^[0-9.\-\s]{0,20}$/;
@@ -1004,26 +1021,46 @@ app.post('/api/checkout/:id/pagar', limitarTentativas, wrap(async (req, res) => 
   if (!resposta.ok || !dados.id) return res.status(502).json({ erro: dados.message || 'Erro no pagamento.' });
 
   const qr = dados.point_of_interaction?.transaction_data || {};
+  const codigoPix = txt(qr.qr_code, 3000);
+  if (pedido.forma === 'pix' && dados.status !== 'approved' && !codigoPixValido(codigoPix)) {
+    console.error('Mercado Pago não retornou um código Pix válido.', { paymentId: String(dados.id), tamanhoCodigo: codigoPix.length });
+    return res.status(502).json({ erro: 'O Mercado Pago não retornou um código Pix válido. Nenhum pagamento foi confirmado; tente novamente ou fale com o suporte.' });
+  }
   await q(`UPDATE pedidos SET payment_id = $2, payment_status = $3, payment_qr_code = $4, payment_qr_code_base64 = $5 WHERE id = $1`,
-    [pedido.id, String(dados.id), txt(dados.status, 40), txt(qr.qr_code, 3000), txt(qr.qr_code_base64, 100000)]);
+    [pedido.id, String(dados.id), txt(dados.status, 40), codigoPix, txt(qr.qr_code_base64, 100000)]);
 
-  res.json({ pedidoId: pedido.id, paymentId: String(dados.id), status: dados.status, qrCode: qr.qr_code || '', qrCodeBase64: qr.qr_code_base64 || '' });
+  res.json({ pedidoId: pedido.id, paymentId: String(dados.id), status: dados.status, qrCode: codigoPix, qrCodeBase64: qr.qr_code_base64 || '' });
 }));
 
-async function sincronizarPagamentoMercadoPago(idPagamento, pagamentoRecebido) {
-  const consulta = pagamentoRecebido ? { ok: true, dados: pagamentoRecebido } : await consultarPagamentoMercadoPago(idPagamento);
-  if (!consulta.ok) return null;
+async function sincronizarPagamentoMercadoPago(idPagamento, pagamentoRecebido, pedidoEsperadoId) {
+  if (!MERCADO_PAGO_ACCESS_TOKEN && !pagamentoRecebido) return { ok: false, statusCode: 503 };
+  let consulta;
+  try {
+    consulta = pagamentoRecebido ? { ok: true, dados: pagamentoRecebido } : await consultarPagamentoMercadoPago(idPagamento);
+  } catch (err) {
+    console.error('Erro ao consultar pagamento no Mercado Pago:', err);
+    return { ok: false, statusCode: 502 };
+  }
+  if (!consulta.ok) return { ok: false, statusCode: consulta.statusCode };
   const pagamento = consulta.dados;
   const pedidoId = txt(pagamento.external_reference, 64);
+  if (!pagamento.id || String(pagamento.id) !== String(idPagamento)
+    || !pedidoId || (pedidoEsperadoId && pedidoId !== pedidoEsperadoId)) {
+    return { ok: false, statusCode: 409 };
+  }
   const pedido = (await q('SELECT * FROM pedidos WHERE id = $1', [pedidoId])).rows[0];
   if (!pedido) return null;
 
+  const valorPagamento = Number(pagamento.transaction_amount);
+  if (!Number.isFinite(valorPagamento) || dinheiro(valorPagamento) !== dinheiro(pedido.valor)) {
+    return { ok: false, statusCode: 409 };
+  }
   const statusPagamento = String(pagamento.status || '').toLowerCase();
   await q('UPDATE pedidos SET payment_status = $2 WHERE id = $1', [pedido.id, statusPagamento]);
   if (statusPagamento === 'approved' && pedido.status === 'aguardando') {
     await confirmarPedido(pedido.id, pagamento.id || idPagamento);
   }
-  return { pedidoId: pedido.id, statusPagamento };
+  return { ok: true, pedidoId: pedido.id, statusPagamento };
 }
 
 app.get('/api/checkout/:id/status', limitarConsultasStatusCheckout, wrap(async (req, res) => {
@@ -1031,11 +1068,35 @@ app.get('/api/checkout/:id/status', limitarConsultasStatusCheckout, wrap(async (
   let pedido = (await q('SELECT id, status, payment_id, payment_status, download_token FROM pedidos WHERE id = $1', [req.params.id])).rows[0];
   if (!pedido || !igual(token, pedido.download_token)) return res.status(404).json({ erro: 'Pedido não encontrado.' });
   if (pedido.status !== 'pago' && pedido.payment_id) {
-    const sincronizacao = await sincronizarPagamentoMercadoPago(pedido.payment_id);
-    if (!sincronizacao) return res.status(502).json({ erro: 'Não foi possível sincronizar o status com o Mercado Pago.' });
+    const sincronizacao = await sincronizarPagamentoMercadoPago(pedido.payment_id, null, pedido.id);
+    if (!sincronizacao?.ok) {
+      if (sincronizacao?.statusCode === 409) {
+        return res.status(409).json({ erro: 'Os dados do pagamento não correspondem a este pedido. Entre em contato com o suporte.' });
+      }
+      if (sincronizacao?.statusCode === 503) {
+        return res.status(503).json({ erro: 'A consulta ao Mercado Pago não está configurada neste servidor.' });
+      }
+      return res.status(502).json({ erro: 'Não foi possível consultar o pagamento no Mercado Pago. Tente novamente.' });
+    }
     pedido = (await q('SELECT id, status, payment_status FROM pedidos WHERE id = $1', [pedido.id])).rows[0];
   }
   res.json({ pedidoId: pedido.id, status: pedido.status, paymentStatus: pedido.payment_status });
+}));
+
+app.get('/api/checkout/:id/download', wrap(async (req, res) => {
+  const token = txt(req.get('x-download-token'), 64);
+  const pedido = (await q('SELECT id, status, produto_id, download_token FROM pedidos WHERE id = $1', [req.params.id])).rows[0];
+  if (!pedido || !igual(token, pedido.download_token)) return res.status(404).json({ erro: 'Pedido não encontrado.' });
+  if (pedido.status !== 'pago') return res.status(409).json({ erro: 'Pagamento ainda não confirmado.' });
+
+  const produtos = await lerConfig('produtos', PRODUTOS_INICIAIS);
+  const produto = produtos.find(item => norm(item.id) === norm(pedido.produto_id));
+  const url = txt(produto?.pdf, 2000);
+  if (!ehUrlWeb(url)) {
+    return res.status(503).json({ erro: 'Pagamento aprovado, mas o link do arquivo não está configurado. Entre em contato com o suporte.' });
+  }
+  res.set('Cache-Control', 'no-store');
+  res.json({ url });
 }));
 
 async function confirmarPedido(id, paymentIdRecebido) {
@@ -1065,8 +1126,8 @@ async function confirmarPedido(id, paymentIdRecebido) {
         if (pai) {
           patrocinadorUsuario = pai.usuario;
           patrocinador = centavos(valor, taxas.taxaPatrocinador);
-          const avo = (await client.query('SELECT usuario FROM afiliados WHERE usuario = $1 OR id = $1', [pai.patrocinador_id])).rows[0];
-          if (avo) { avoUsuario = avo.usuario; avo = centavos(valor, taxas.taxaAvo); }
+          const afiliadoAvo = (await client.query('SELECT usuario FROM afiliados WHERE usuario = $1 OR id = $1', [pai.patrocinador_id])).rows[0];
+          if (afiliadoAvo) { avoUsuario = afiliadoAvo.usuario; avo = centavos(valor, taxas.taxaAvo); }
         }
       }
     }
@@ -1193,8 +1254,8 @@ app.post('/api/webhook/mercadopago', async (req, res) => {
 
 app.use('/api', (req, res) => res.status(404).json({ erro: 'Rota não encontrada.' }));
 app.use((err, req, res, next) => {
-  console.error('ERRO NO NEON:', err);
-  res.status(500).json({ erro: 'Erro interno ao processar a operação no banco de dados.' });
+  console.error(`Erro na API ${req.method} ${req.originalUrl}:`, err);
+  res.status(500).json({ erro: 'Erro interno no servidor. Tente novamente.' });
 });
 
 const PORT = process.env.PORT || 3000;
