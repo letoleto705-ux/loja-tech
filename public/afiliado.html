@@ -242,6 +242,29 @@
                 <div id="listaFilhosContainer" class="space-y-3"></div>
             </div>
 
+            <section id="painelExtratoComissoes" class="hidden bg-white rounded-3xl p-6 sm:p-8 border border-slate-200 shadow-sm space-y-4">
+                <div class="flex items-center justify-between gap-3 border-b border-slate-100 pb-3">
+                    <h3 class="text-lg font-black text-slate-900">
+                        <i class="fa-solid fa-receipt mr-2 text-orange-600"></i>Extrato de Comissões
+                    </h3>
+                    <span class="text-xs font-semibold text-slate-500">Vendas pagas por geração</span>
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="w-full min-w-[620px] text-left text-xs">
+                        <thead class="text-[10px] uppercase tracking-wider text-slate-500">
+                            <tr>
+                                <th class="px-3 py-2">Data</th>
+                                <th class="px-3 py-2">Pedido / Produto</th>
+                                <th class="px-3 py-2">Geração</th>
+                                <th class="px-3 py-2 text-right">Comissão</th>
+                                <th class="px-3 py-2">Situação</th>
+                            </tr>
+                        </thead>
+                        <tbody id="listaExtratoComissoes" class="divide-y divide-slate-100"></tbody>
+                    </table>
+                </div>
+            </section>
+
         </div>
 
     </main>
@@ -609,6 +632,21 @@
 
             document.getElementById('linkVendaInput').value = `${baseUrl}index.html?ref=admin&afiliado=${encodeURIComponent(eu.usuario)}`;
             document.getElementById('linkConviteInput').value = `${baseUrl}afiliado.html?cad=${encodeURIComponent(eu.usuario)}`;
+            document.getElementById('painelExtratoComissoes').classList.remove('hidden');
+            const linhasExtrato = rede.extrato || [];
+            document.getElementById('listaExtratoComissoes').innerHTML = linhasExtrato.length
+                ? linhasExtrato.map(item => `
+                    <tr>
+                        <td class="whitespace-nowrap px-3 py-3 text-slate-600">${esc(item.data ? dataBr(item.data) : '-')}</td>
+                        <td class="px-3 py-3">
+                            <span class="block font-mono text-[10px] text-slate-400">#${esc(item.pedidoId)}</span>
+                            <span class="font-semibold text-slate-800">${esc(item.produtoNome)}</span>
+                        </td>
+                        <td class="px-3 py-3 font-semibold text-slate-700">${esc(item.geracao)}</td>
+                        <td class="whitespace-nowrap px-3 py-3 text-right font-bold text-emerald-700">${esc(brl(item.valor))}</td>
+                        <td class="px-3 py-3 text-slate-600">${esc(String(item.situacao || '-').toLowerCase())}</td>
+                    </tr>`).join('')
+                : '<tr><td colspan="5" class="px-3 py-6 text-center text-slate-500">Ainda não há comissões de vendas pagas.</td></tr>';
 
             const container = document.getElementById('listaFilhosContainer');
             document.getElementById('badgeQtdEquipe').innerText = `${rede.filhos.length} Parceiro(s)`;

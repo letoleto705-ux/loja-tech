@@ -25,7 +25,12 @@ const MAX_PARCELAS_CARTAO = 12;
 
 const normalizarMaxParcelasSemJuros = valor => {
   const parcelas = Number(valor);
-  return Number.isInteger(parcelas) && parcelas >= 1 && parcelas <= MAX_PARCELAS_CARTAO ? parcelas : 1;
+  return Number.isInteger(parcelas) && parcelas >= 0 && parcelas <= MAX_PARCELAS_CARTAO ? parcelas : 1;
+};
+
+const dataIso = valor => {
+  if (!valor) return null;
+  return valor instanceof Date ? valor.toISOString().slice(0, 10) : String(valor).slice(0, 10);
 };
 
 const PRODUTOS_INICIAIS = [
@@ -695,8 +700,33 @@ app.get('/api/rede', auth, wrap(async (req, res) => {
     usuario: f.usuario, nome: f.nome, criadoEm: f.criadoEm, vendas: f.vendasDiretas,
     minhaComissao: dinheiro((ganhos.find(g => g.u === f.usuario) || {}).total)
   }));
+  const extrato = (await q(`SELECT pedido_id, produto_nome, data, geracao, valor, situacao
+    FROM (
+      SELECT id AS pedido_id, produto_nome, pago_em AS data, 'Direta' AS geracao,
+        comissao AS valor, status_comissao_direta AS situacao
+      FROM pedidos
+      WHERE status = 'pago' AND afiliado_usuario = $1 AND comissao > 0
+      UNION ALL
+      SELECT id AS pedido_id, produto_nome, pago_em AS data, 'Pai' AS geracao,
+        comissao_patrocinador AS valor, status_comissao_patrocinador AS situacao
+      FROM pedidos
+      WHERE status = 'pago' AND patrocinador_usuario = $1 AND comissao_patrocinador > 0
+      UNION ALL
+      SELECT id AS pedido_id, produto_nome, pago_em AS data, 'Avô' AS geracao,
+        comissao_avo AS valor, status_comissao_avo AS situacao
+      FROM pedidos
+      WHERE status = 'pago' AND avo_usuario = $1 AND comissao_avo > 0
+    ) comissoes
+    ORDER BY data DESC NULLS LAST, pedido_id DESC`, [eu.usuario])).rows.map(item => ({
+    pedidoId: item.pedido_id,
+    produtoNome: item.produto_nome,
+    data: item.data,
+    geracao: item.geracao,
+    valor: dinheiro(item.valor),
+    situacao: item.situacao
+  }));
   res.json({
-    visao: 'afiliado', taxas, filhos, valorMinimoSaque,
+    visao: 'afiliado', taxas, filhos, extrato, valorMinimoSaque,
     calendarioSaque,
     eu: {
       id: eu.id, usuario: eu.usuario, nome: eu.nome, vendasDiretas: eu.vendasDiretas, vendasRede: eu.vendasRede,
@@ -726,12 +756,16 @@ app.get('/api/admin/cupons', auth, soAdmin, wrap(async (req, res) => {
   res.json({ ...configuracao, afiliados: afiliados.rows.map(a => ({
     id: a.id, usuario: a.usuario, nome: a.nome, cupomId: a.cupom_id,
     codigo: a.codigo_cupom, ativo: a.cupom_ativo === true, expirado: a.expirado === true,
-    dataValidade: a.data_validade, atualizadoEm: a.atualizado_em
+    dataValidade: dataIso(a.data_validade), atualizadoEm: a.atualizado_em
   })) });
 }));
 
 app.put('/api/admin/cupons/config', auth, soAdmin, wrap(async (req, res) => {
-  const { ativo, percentualMaximo } = req.body;
+  const { ativo } = req.body;
+  const percentualMaximo = Number(req.body.percentualMaximo);
+  if (typeof ativo !== 'boolean' || !Number.isFinite(percentualMaximo) || percentualMaximo < 0 || percentualMaximo > 100) {
+    return res.status(400).json({ erro: 'Informe um percentual de cupom entre 0% e 100%.' });
+  }
   await gravarConfig('cupom_global_ativo', ativo);
   await gravarConfig('cupom_porcentagem_maxima', percentualMaximo);
   res.json({ ok: true, ativo, percentualMaximo });
@@ -740,18 +774,24 @@ app.put('/api/admin/cupons/config', auth, soAdmin, wrap(async (req, res) => {
 app.patch('/api/admin/cupons/:id', auth, soAdmin, wrap(async (req, res) => {
   const atualizaAtivo = Object.prototype.hasOwnProperty.call(req.body, 'ativo');
   const atualizaValidade = Object.prototype.hasOwnProperty.call(req.body, 'dataValidade');
-  let dataValidade = null;
-  if (atualizaValidade && req.body.dataValidade) dataValidade = String(req.body.dataValidade);
+  const dataValidade = atualizaValidade && req.body.dataValidade ? String(req.body.dataValidade) : null;
+  const dataValidadeParsed = dataValidade && /^\d{4}-\d{2}-\d{2}$/.test(dataValidade)
+    ? new Date(`${dataValidade}T00:00:00.000Z`)
+    : null;
+  if (dataValidade && (!dataValidadeParsed || Number.isNaN(dataValidadeParsed.getTime())
+    || dataValidadeParsed.toISOString().slice(0, 10) !== dataValidade)) {
+    return res.status(400).json({ erro: 'Informe a validade no formato AAAA-MM-DD.' });
+  }
 
   const result = await q(`UPDATE afiliado_cupons
     SET ativo = COALESCE($2, ativo),
-        data_validade = COALESCE($3, data_validade),
+        data_validade = CASE WHEN $3 THEN $4::date ELSE data_validade END,
         atualizado_em = now()
     WHERE id = $1
     RETURNING id, ativo, data_validade, (data_validade IS NOT NULL AND data_validade < CURRENT_DATE) AS expirado`,
-  [req.params.id, atualizaAtivo ? req.body.ativo : null, dataValidade]);
+  [req.params.id, atualizaAtivo ? req.body.ativo : null, atualizaValidade, dataValidade]);
   if (!result.rows.length) return res.status(404).json({ erro: 'Cupom não encontrado.' });
-  res.json({ ok: true, ...result.rows[0] });
+  res.json({ ok: true, ...result.rows[0], data_validade: dataIso(result.rows[0].data_validade) });
 }));
 
 app.get('/api/afiliado/cupom', auth, wrap(async (req, res) => {
@@ -762,7 +802,7 @@ app.get('/api/afiliado/cupom', auth, wrap(async (req, res) => {
       FROM afiliado_cupons WHERE afiliado_usuario = $1`, [req.user.usuario])
   ]);
   const cupom = result.rows[0];
-  res.json({ ...configuracao, cupom: cupom ? { id: cupom.id, codigo: cupom.codigo_cupom, ativo: cupom.ativo, dataValidade: cupom.data_validade, expirado: cupom.expirado } : null });
+  res.json({ ...configuracao, cupom: cupom ? { id: cupom.id, codigo: cupom.codigo_cupom, ativo: cupom.ativo, dataValidade: dataIso(cupom.data_validade), expirado: cupom.expirado } : null });
 }));
 
 app.put('/api/afiliado/cupom', auth, wrap(async (req, res) => {
@@ -777,6 +817,35 @@ app.put('/api/afiliado/cupom', auth, wrap(async (req, res) => {
     RETURNING id, codigo_cupom, ativo`,
   [req.user.usuario, codigo]);
   res.json({ ok: true, cupom: { id: result.rows[0].id, codigo: result.rows[0].codigo_cupom, ativo: result.rows[0].ativo } });
+}));
+
+app.post('/api/checkout/cupom', limitarTentativas, wrap(async (req, res) => {
+  const codigo = txt(req.body.codigoCupom, 50).toUpperCase();
+  const produtoId = norm(req.body.produtoId);
+  if (!codigo || !produtoId) return res.status(400).json({ erro: 'Informe o produto e o código do cupom.' });
+
+  const [configuracao, produtos] = await Promise.all([
+    configuracaoCupons(),
+    lerConfig('produtos', PRODUTOS_INICIAIS)
+  ]);
+  if (!configuracao.ativo || configuracao.percentualMaximo <= 0) {
+    return res.status(400).json({ erro: 'Campanha de cupons indisponível.' });
+  }
+  const produto = produtos.find(item => norm(item.id) === produtoId);
+  if (!produto) return res.status(400).json({ erro: 'Produto não encontrado.' });
+
+  const cupom = (await q(`SELECT codigo_cupom FROM afiliado_cupons
+    WHERE lower(codigo_cupom) = lower($1) AND ativo = true
+      AND (data_validade IS NULL OR data_validade >= CURRENT_DATE)`, [codigo])).rows[0];
+  if (!cupom) return res.status(400).json({ erro: 'Cupom inválido ou expirado.' });
+
+  const desconto = dinheiro(Number(produto.precoPor) * configuracao.percentualMaximo / 100);
+  res.json({
+    codigo: cupom.codigo_cupom,
+    percentual: configuracao.percentualMaximo,
+    desconto,
+    valor: dinheiro(Number(produto.precoPor) - desconto)
+  });
 }));
 
 app.get('/api/afiliado/notificacoes', auth, wrap(async (req, res) => {
@@ -838,11 +907,15 @@ app.post('/api/checkout', limitarTentativas, wrap(async (req, res) => {
   let desconto = 0;
   if (codigoCupom) {
     const cfgCupom = await configuracaoCupons();
-    const cupom = (await q(`SELECT c.afiliado_usuario FROM afiliado_cupons c WHERE lower(c.codigo_cupom) = lower($1) AND c.ativo = true`, [codigoCupom])).rows[0];
-    if (cfgCupom.ativo && cupom) {
-      afiliado = cupom.afiliado_usuario;
-      desconto = dinheiro(Number(prod.precoPor) * cfgCupom.percentualMaximo / 100);
+    const cupom = (await q(`SELECT c.afiliado_usuario FROM afiliado_cupons c
+      WHERE lower(c.codigo_cupom) = lower($1) AND c.ativo = true
+        AND (c.data_validade IS NULL OR c.data_validade >= CURRENT_DATE)`, [codigoCupom])).rows[0];
+    if (!cfgCupom.ativo || cfgCupom.percentualMaximo <= 0) {
+      return res.status(400).json({ erro: 'Campanha de cupons indisponível.' });
     }
+    if (!cupom) return res.status(400).json({ erro: 'Cupom inválido ou expirado.' });
+    afiliado = cupom.afiliado_usuario;
+    desconto = dinheiro(Number(prod.precoPor) * cfgCupom.percentualMaximo / 100);
   }
 
   let afiliadoValido = false;
@@ -886,6 +959,12 @@ app.post('/api/checkout/:id/pagar', limitarTentativas, wrap(async (req, res) => 
   }
   if (pedido.status === 'pago') return res.status(409).json({ erro: 'Pedido já pago.' });
 
+  const paymentIdempotencyKey = pedido.payment_idempotency_key || crypto.randomUUID();
+  const idempotencyResult = await q(`UPDATE pedidos
+    SET payment_idempotency_key = COALESCE(NULLIF(payment_idempotency_key, ''), $2)
+    WHERE id = $1
+    RETURNING payment_idempotency_key`, [pedido.id, paymentIdempotencyKey]);
+
   const pagamento = {
     transaction_amount: Number(pedido.valor),
     description: pedido.produto_nome,
@@ -897,7 +976,11 @@ app.post('/api/checkout/:id/pagar', limitarTentativas, wrap(async (req, res) => 
 
   const resposta = await fetch('https://api.mercadopago.com/v1/payments', {
     method: 'POST',
-    headers: { Authorization: `Bearer ${MERCADO_PAGO_ACCESS_TOKEN}`, 'Content-Type': 'application/json' },
+    headers: {
+      Authorization: `Bearer ${MERCADO_PAGO_ACCESS_TOKEN}`,
+      'Content-Type': 'application/json',
+      'X-Idempotency-Key': idempotencyResult.rows[0].payment_idempotency_key
+    },
     body: JSON.stringify(pagamento)
   });
   const dados = await resposta.json();
@@ -997,9 +1080,43 @@ app.get('/api/config', wrap(async (req, res) => {
 }));
 
 app.put('/api/config', auth, soAdmin, wrap(async (req, res) => {
-  if (req.body.valorMinimoSaque !== undefined) await gravarConfig('valorMinimoSaque', req.body.valorMinimoSaque);
+  const chavesTaxa = ['taxaComissao', 'taxaPatrocinador', 'taxaAvo'];
+  const novasTaxas = {};
+  for (const chave of chavesTaxa) {
+    if (req.body[chave] === undefined) continue;
+    const valor = Number(req.body[chave]);
+    if (!Number.isFinite(valor) || valor < 0 || valor > 100) {
+      return res.status(400).json({ erro: 'Informe cada comissão entre 0% e 100%.' });
+    }
+    novasTaxas[chave] = valor;
+  }
+  const taxasAtuais = await lerTaxas();
+  const taxasFinais = {
+    taxaComissao: novasTaxas.taxaComissao ?? taxasAtuais.taxaComissao,
+    taxaPatrocinador: novasTaxas.taxaPatrocinador ?? taxasAtuais.taxaPatrocinador,
+    taxaAvo: novasTaxas.taxaAvo ?? taxasAtuais.taxaAvo
+  };
+  if (Object.keys(novasTaxas).length
+    && taxasFinais.taxaComissao + taxasFinais.taxaPatrocinador + taxasFinais.taxaAvo > 100) {
+    return res.status(400).json({ erro: 'A soma das comissões não pode ultrapassar 100%.' });
+  }
+
+  let valorMinimo;
+  if (req.body.valorMinimoSaque !== undefined) {
+    valorMinimo = Number(req.body.valorMinimoSaque);
+    if (!Number.isFinite(valorMinimo) || valorMinimo < 0) {
+      return res.status(400).json({ erro: 'Informe um valor mínimo de saque válido.' });
+    }
+  }
+
+  for (const [chave, valor] of Object.entries(novasTaxas)) await gravarConfig(chave, valor);
+  if (valorMinimo !== undefined) await gravarConfig('valorMinimoSaque', valorMinimo);
   if (req.body.whatsappSuporte !== undefined) await gravarConfig('whatsappSuporte', req.body.whatsappSuporte);
-  res.json({ ok: true, ...(await lerTaxas()) });
+  res.json({
+    ok: true,
+    ...(await lerTaxas()),
+    valorMinimoSaque: Number(await lerConfig('valorMinimoSaque', VALOR_MINIMO_SAQUE_PADRAO))
+  });
 }));
 
 app.get('/api/admin/contas', auth, soAdmin, wrap(async (req, res) => {

@@ -332,15 +332,15 @@
                 <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs font-semibold text-slate-700">
                     <div>
                         <label class="block mb-1 uppercase tracking-wider text-emerald-900">Comissão Direta do Afiliado (%)</label>
-                        <input type="number" id="af_comissao_direta" min="0" max="100" step="0.01" value="35" class="w-full px-3 py-2.5 rounded-xl border border-emerald-300 bg-white font-bold text-emerald-700">
+                        <input type="number" id="af_comissao_direta" min="0" max="100" step="0.01" class="w-full px-3 py-2.5 rounded-xl border border-emerald-300 bg-white font-bold text-emerald-700">
                     </div>
                     <div>
                         <label class="block mb-1 uppercase tracking-wider text-emerald-900">Comissão do Patrocinador (%)</label>
-                        <input type="number" id="af_comissao_patrocinador" min="0" max="100" step="0.01" value="10" class="w-full px-3 py-2.5 rounded-xl border border-emerald-300 bg-white font-bold text-emerald-700">
+                        <input type="number" id="af_comissao_patrocinador" min="0" max="100" step="0.01" class="w-full px-3 py-2.5 rounded-xl border border-emerald-300 bg-white font-bold text-emerald-700">
                     </div>
                     <div>
                         <label class="block mb-1 uppercase tracking-wider text-emerald-900">Comissão do Avô (%)</label>
-                        <input type="number" id="af_comissao_avo" min="0" max="100" step="0.01" value="5" class="w-full px-3 py-2.5 rounded-xl border border-emerald-300 bg-white font-bold text-emerald-700">
+                        <input type="number" id="af_comissao_avo" min="0" max="100" step="0.01" class="w-full px-3 py-2.5 rounded-xl border border-emerald-300 bg-white font-bold text-emerald-700">
                     </div>
                     <div>
                         <label class="block mb-1 uppercase tracking-wider text-emerald-900">Valor Mínimo de Saque (R$)</label>
@@ -477,8 +477,8 @@
 
                 <div>
                     <label class="block mb-1 uppercase tracking-wider">Max. Parcelas Sem Juros</label>
-                    <input type="number" id="p_max_parcelas_sem_juros" required min="1" max="12" step="1" value="1" class="w-full px-4 py-3 rounded-xl border border-slate-200 outline-none">
-                    <p class="mt-1 text-[10px] font-normal text-slate-500">De 1 a 12 parcelas. As condições finais são apresentadas pelo Mercado Pago.</p>
+                    <input type="number" id="p_max_parcelas_sem_juros" required min="0" max="12" step="1" value="1" class="w-full px-4 py-3 rounded-xl border border-slate-200 outline-none">
+                    <p class="mt-1 text-[10px] font-normal text-slate-500">De 0 a 12 parcelas; 0 significa nenhuma parcela sem juros. As condições finais são apresentadas pelo Mercado Pago.</p>
                 </div>
 
                 <label class="flex items-start gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs leading-relaxed">
@@ -708,7 +708,7 @@
 
         let produtos = produtosIniciais;
         let afiliadosBase = [];
-        let taxasComissao = { taxaComissao: 35, taxaPatrocinador: 10, taxaAvo: 5 };
+        let taxasComissao = { taxaComissao: 0, taxaPatrocinador: 0, taxaAvo: 0 };
 
         // ===== SUPORTE (WhatsApp) E TROCA OBRIGATÓRIA DE SENHA =====
         let whatsappSuporte = '';
@@ -1311,7 +1311,7 @@
             document.getElementById('p_custo').value = p.custo;
             document.getElementById('p_preco_de').value = p.precoDe;
             document.getElementById('p_preco_por').value = p.precoPor;
-            document.getElementById('p_max_parcelas_sem_juros').value = p.maxParcelasSemJuros || 1;
+            document.getElementById('p_max_parcelas_sem_juros').value = p.maxParcelasSemJuros ?? 1;
             document.getElementById('p_imagem').value = p.imagem || '';
             document.getElementById('p_pdf').value = p.pdf || '';
             document.getElementById('p_repasse_juros').checked = p.repasseJurosComprador !== false;
@@ -1340,6 +1340,11 @@
             const imagem = document.getElementById('p_imagem').value.trim();
             const pdf = document.getElementById('p_pdf').value.trim();
             const repasseJurosComprador = document.getElementById('p_repasse_juros').checked;
+
+            if (!Number.isInteger(maxParcelasSemJuros) || maxParcelasSemJuros < 0 || maxParcelasSemJuros > 12) {
+                alert('Informe um número de parcelas sem juros entre 0 e 12.');
+                return;
+            }
 
             if (editIdx >= 0) {
                 produtos[editIdx] = { ...produtos[editIdx], id, nome, desc, custo, precoDe, precoPor, imagem, pdf, repasseJurosComprador, maxParcelasSemJuros };
