@@ -110,14 +110,13 @@ async function gravarConfig(chave, valor) {
 }
 
 async function lerTaxas() {
-  const [taxaComissao, taxaPatrocinador, taxaAvo] = await Promise.all([
-    lerConfig('taxaComissao', TAXA_COMISSAO_PADRAO),
-    lerConfig('taxaPatrocinador', TAXA_PATROCINADOR_PADRAO),
-    lerConfig('taxaAvo', TAXA_AVO_PADRAO)
-  ]);
-  const direta = Number(taxaComissao);
-  const patrocinador = Number(taxaPatrocinador);
-  const avo = Number(taxaAvo);
+  const resultado = await q(
+    "SELECT chave, valor FROM config WHERE chave IN ('taxaComissao', 'taxaPatrocinador', 'taxaAvo')"
+  );
+  const configuracoes = Object.fromEntries(resultado.rows.map(({ chave, valor }) => [chave, valor]));
+  const direta = Number(configuracoes.taxaComissao ?? TAXA_COMISSAO_PADRAO);
+  const patrocinador = Number(configuracoes.taxaPatrocinador ?? TAXA_PATROCINADOR_PADRAO);
+  const avo = Number(configuracoes.taxaAvo ?? TAXA_AVO_PADRAO);
   return {
     taxaComissao: direta,
     taxaPatrocinador: patrocinador,
@@ -1267,7 +1266,7 @@ app.put('/api/config', auth, soAdmin, wrap(async (req, res) => {
     if (d && (d.length < 10 || d.length > 15)) return res.status(400).json({ erro: 'Informe o WhatsApp do suporte com DDD (somente números).' });
     await gravarConfig('whatsappSuporte', d ? paraWhatsApp(d) : '');
   }
-  res.json({ ok: true });
+  res.json({ ok: true, ...(await lerTaxas()) });
 }));
 
 // ----- Suporte: busca de contas, senha temporária e troca obrigatória -----
