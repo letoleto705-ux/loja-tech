@@ -177,8 +177,15 @@
                     <div id="boxPagtoCartao" class="hidden space-y-4 text-sm font-semibold text-slate-700">
                         <p id="mensagemBrick" class="text-xs text-slate-600">Preencha os campos seguros do Mercado Pago. Os dados do cartão são tokenizados e não são enviados ao nosso servidor.</p>
                         <p id="avisoParcelamentoCartao" class="hidden rounded-xl border border-blue-200 bg-blue-50 p-3 text-xs font-medium text-blue-900" role="status">
-                            Após informar o cartão, selecione no formulário seguro a opção de parcelas disponível. O Mercado Pago apresenta o valor por parcela antes de concluir.
+                            Informe os dados do cartão para consultar e selecionar uma condição de parcelamento.
                         </p>
+                        <div id="boxSeletorParcelas" class="hidden space-y-2 rounded-xl border border-slate-200 bg-slate-50 p-3">
+                            <label for="selectParcelasCartao" class="block text-xs font-bold text-slate-700">Quantidade de parcelas</label>
+                            <select id="selectParcelasCartao" onchange="atualizarResumoTela()" disabled class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm font-semibold text-slate-800 disabled:bg-slate-100">
+                                <option value="">Informe o cartão para consultar as parcelas</option>
+                            </select>
+                            <p id="statusParcelasCartao" class="text-xs font-normal text-slate-500" role="status">As opções e os valores serão consultados conforme o cartão informado.</p>
+                        </div>
                         <div id="cardPaymentBrick_container"></div>
                         <p id="erroBrick" class="text-sm text-red-600" role="status"></p>
                     </div>
@@ -270,6 +277,8 @@
         let codigoCupomAplicado = '';
         let repasseJurosComprador = true;
         let maxParcelasSemJuros = 1;
+        let parcelasDisponiveis = [];
+        let consultaParcelasAtual = 0;
         let formaPagtoAtual = 'pix';
         let afiliadoAtivoCodigo = "";
         let enviando = false;
@@ -304,7 +313,9 @@
                     ? `Regra do produto: até ${maxParcelasSemJuros}x sem juros; acima disso, os encargos são repassados ao comprador.`
                     : `Regra do produto: até ${maxParcelasSemJuros}x sem juros; acima disso, a loja absorve os encargos.`;
                 document.getElementById('avisoParcelamentoCartao').innerText =
-                    'Escolha as parcelas no formulário seguro. Disponibilidade e valores finais são apresentados pelo Mercado Pago conforme o cartão e as condições da conta.';
+                    'Os valores por parcela são consultados no Mercado Pago conforme os dados do cartão.';
+                document.getElementById('statusParcelasCartao').innerText =
+                    `Regra do produto: até ${maxParcelasSemJuros}x sem juros. As condições efetivas dependem do cartão e da conta Mercado Pago.`;
                 atualizarResumoTela();
             } catch (e) {
                 console.warn('Usando preço de reserva:', e.message);
@@ -354,6 +365,7 @@
             document.getElementById('boxPagtoPix').classList.add('hidden');
             document.getElementById('boxPagtoCartao').classList.add('hidden');
             document.getElementById('boxPagtoDebito').classList.add('hidden');
+            document.getElementById('boxSeletorParcelas').classList.toggle('hidden', tipo !== 'cartao');
 
             if (tipo === 'pix') {
                 document.getElementById('btnTabPix').className = "py-3.5 px-2 rounded-2xl border-2 border-orange-500 bg-orange-50/40 text-orange-600 font-extrabold text-sm flex flex-col items-center gap-1 transition";
@@ -388,6 +400,82 @@
             resumoParcelaEl.innerText = formaPagtoAtual === 'pix'
                 ? 'À vista via Pix'
                 : formaPagtoAtual === 'debito' ? 'Débito via Mercado Pago' : 'Cartão via Mercado Pago';
+            const selectParcelas = document.getElementById('selectParcelasCartao');
+            const parcelaEscolhida = parcelasDisponiveis.find(parcela => String(parcela.installments) === selectParcelas.value);
+            if (formaPagtoAtual === 'cartao' && parcelaEscolhida) {
+                resumoParcelaEl.innerText = selectParcelas.options[selectParcelas.selectedIndex].text;
+            }
+        }
+
+        function formatarMoeda(valor) {
+            return Number(valor).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+        }
+
+        async function atualizarParcelasDisponiveis(bin, mp) {
+            const consultaAtual = ++consultaParcelasAtual;
+            const select = document.getElementById('selectParcelasCartao');
+            const status = document.getElementById('statusParcelasCartao');
+            parcelasDisponiveis = [];
+            select.innerHTML = '<option value="">Consultando parcelas disponíveis...</option>';
+            select.disabled = true;
+
+            const binCartao = String(bin || '').replace(/\D/g, '');
+            if (!/^\d{6,8}$/.test(binCartao)) {
+                select.innerHTML = '<option value="">Informe o cartão para consultar as parcelas</option>';
+                status.innerText = `Regra do produto: até ${maxParcelasSemJuros}x sem juros.`;
+                atualizarResumoTela();
+                return;
+            }
+
+            status.innerText = 'Consultando as condições reais do Mercado Pago...';
+            try {
+                const resposta = await mp.getInstallments({
+                    amount: precoBase.toFixed(2),
+                    bin: binCartao,
+                    locale: 'pt-BR',
+                    processingMode: 'aggregator'
+                });
+                if (consultaAtual !== consultaParcelasAtual || formaPagtoAtual !== 'cartao') return;
+
+                const parcelasUnicas = new Map();
+                (resposta || []).flatMap(metodo => metodo.payer_costs || []).forEach(parcela => {
+                    const quantidade = Number(parcela.installments);
+                    if (Number.isInteger(quantidade) && quantidade >= 1 && quantidade <= 12
+                        && Number.isFinite(Number(parcela.installment_amount))
+                        && Number.isFinite(Number(parcela.total_amount))
+                        && !parcelasUnicas.has(quantidade)) {
+                        parcelasUnicas.set(quantidade, parcela);
+                    }
+                });
+                parcelasDisponiveis = [...parcelasUnicas.values()]
+                    .sort((a, b) => Number(a.installments) - Number(b.installments));
+                if (!parcelasDisponiveis.length) {
+                    throw new Error('O Mercado Pago não retornou parcelas disponíveis para este cartão.');
+                }
+
+                select.innerHTML = '<option value="">Selecione a quantidade de parcelas</option>';
+                parcelasDisponiveis.forEach(parcela => {
+                    const quantidade = Number(parcela.installments);
+                    const semJuros = Number(parcela.total_amount) <= precoBase + 0.01;
+                    const classificacao = semJuros ? 'sem juros' : 'com juros';
+                    const observacao = quantidade <= maxParcelasSemJuros && semJuros
+                        ? classificacao
+                        : !semJuros
+                            ? classificacao
+                            : 'sem juros conforme Mercado Pago';
+                    select.add(new Option(
+                        `${quantidade}x de ${formatarMoeda(parcela.installment_amount)} ${observacao}`,
+                        String(quantidade)
+                    ));
+                });
+                select.disabled = false;
+                status.innerText = `Produto configurado para até ${maxParcelasSemJuros}x sem juros. A cobrança segue os valores e a disponibilidade retornados pelo Mercado Pago.`;
+            } catch (erro) {
+                if (consultaAtual !== consultaParcelasAtual) return;
+                select.innerHTML = '<option value="">Não foi possível consultar as parcelas</option>';
+                status.innerText = erro.message || 'Não foi possível consultar as parcelas no Mercado Pago.';
+            }
+            atualizarResumoTela();
         }
 
         async function aplicarCupomCheckout() {
@@ -455,6 +543,12 @@
             const erro = document.getElementById('erroBrick');
             const inicializacaoAtual = ++brickInicializacao;
             erro.innerText = '';
+            parcelasDisponiveis = [];
+            consultaParcelasAtual++;
+            const selectParcelas = document.getElementById('selectParcelasCartao');
+            selectParcelas.innerHTML = '<option value="">Informe o cartão para consultar as parcelas</option>';
+            selectParcelas.disabled = true;
+            atualizarResumoTela();
             try {
                 if (!window.MercadoPago) throw new Error('Não foi possível carregar o formulário seguro do Mercado Pago.');
                 if (!publicKeyPagamento) await carregarConfigPagamento();
@@ -473,13 +567,16 @@
                     initialization,
                     customization: {
                         paymentMethods: {
-                            maxInstallments: 12,
+                            maxInstallments: 1,
                             minInstallments: 1,
                             types: { included: tipos }
                         }
                     },
                     callbacks: {
                         onReady: () => {},
+                        onBinChange: bin => {
+                            if (forma === 'cartao') atualizarParcelasDisponiveis(bin, mp);
+                        },
                         onError: () => {
                             erro.innerText = 'Não foi possível carregar o formulário de pagamento. Atualize a página e tente novamente.';
                         },
@@ -568,6 +665,14 @@
             const erro = document.getElementById('erroBrick');
             erro.innerText = '';
             try {
+                if (forma === 'cartao') {
+                    const parcelas = Number(document.getElementById('selectParcelasCartao').value);
+                    const parcelaDisponivel = parcelasDisponiveis.find(parcela => Number(parcela.installments) === parcelas);
+                    if (!parcelaDisponivel) {
+                        throw new Error('Selecione uma opção de parcelamento disponível para o cartão informado.');
+                    }
+                    formData.installments = parcelas;
+                }
                 const cliente = lerDadosCliente();
                 const pedido = await registrarPedido(cliente, forma);
                 const pagamento = await enviarPagamento(pedido, formData);
