@@ -11,6 +11,7 @@
     <!-- Google Fonts Inter -->
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="responsive.css">
+    <script src="i18n.js" defer></script>
     
     <script>
         tailwind.config = {
@@ -54,7 +55,7 @@
                     <div class="flex justify-end mb-4">
                         <label for="seletorIdioma" class="flex items-center gap-2 text-[11px] font-bold text-slate-500">
                             <span data-i18n="languageLabel">Idioma</span>
-                            <select id="seletorIdioma" onchange="alterarIdioma(this.value)" class="rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-xs text-slate-700 outline-none focus:border-orange-500">
+                            <select id="seletorIdioma" data-tech-language onchange="alterarIdioma(this.value)" class="rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-xs text-slate-700 outline-none focus:border-orange-500">
                                 <option value="pt-BR">Português</option>
                                 <option value="en">English</option>
                                 <option value="es">Español</option>
@@ -613,6 +614,7 @@
         function alterarIdioma(idioma) {
             const idiomaAtual = Object.prototype.hasOwnProperty.call(traducoes, idioma) ? idioma : IDIOMA_PADRAO;
             localStorage.setItem('tech_language', idiomaAtual);
+            if (window.TechI18n) window.TechI18n.setLanguage(idiomaAtual);
             document.documentElement.lang = idiomaAtual;
             document.title = traducoes[idiomaAtual].pageTitle;
             document.getElementById('seletorIdioma').value = idiomaAtual;
