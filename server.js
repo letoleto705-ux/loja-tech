@@ -998,6 +998,8 @@ app.post('/api/checkout/:id/pagar', limitarTentativas, wrap(async (req, res) => 
     SET payment_idempotency_key = COALESCE(NULLIF(payment_idempotency_key, ''), $2)
     WHERE id = $1
     RETURNING payment_idempotency_key`, [pedido.id, paymentIdempotencyKey]);
+  const chaveIdempotencia = idempotencyResult.rows[0]?.payment_idempotency_key;
+  if (!chaveIdempotencia) throw new Error('Não foi possível garantir a idempotência do pagamento.');
 
   const pagamento = {
     transaction_amount: Number(pedido.valor),
@@ -1013,12 +1015,25 @@ app.post('/api/checkout/:id/pagar', limitarTentativas, wrap(async (req, res) => 
     headers: {
       Authorization: `Bearer ${MERCADO_PAGO_ACCESS_TOKEN}`,
       'Content-Type': 'application/json',
-      'X-Idempotency-Key': idempotencyResult.rows[0].payment_idempotency_key
+      'X-Idempotency-Key': chaveIdempotencia
     },
     body: JSON.stringify(pagamento)
   });
   const dados = await resposta.json();
   if (!resposta.ok || !dados.id) return res.status(502).json({ erro: dados.message || 'Erro no pagamento.' });
+
+  const valorPagamento = Number(dados.transaction_amount);
+  if (String(dados.external_reference || '') !== pedido.id
+    || !Number.isFinite(valorPagamento)
+    || dinheiro(valorPagamento) !== dinheiro(pedido.valor)) {
+    console.error('Mercado Pago retornou pagamento incompatível com o pedido.', {
+      pedidoId: pedido.id,
+      paymentId: String(dados.id),
+      externalReference: String(dados.external_reference || ''),
+      transactionAmount: dados.transaction_amount
+    });
+    return res.status(502).json({ erro: 'O Mercado Pago retornou um pagamento que não corresponde a este pedido. O Pix não foi exibido; fale com o suporte.' });
+  }
 
   const qr = dados.point_of_interaction?.transaction_data || {};
   const codigoPix = typeof qr.qr_code === 'string' ? qr.qr_code : '';
