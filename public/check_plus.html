@@ -36,8 +36,10 @@
         .gradient-orange { background: linear-gradient(135deg, #FF5722 0%, #FF9800 100%); }
         .shadow-orange-glow { box-shadow: 0 10px 25px -5px rgba(255, 87, 34, 0.3); }
         .btn-pix-direto:not(.hidden) {
-            display: block;
-            width: 100%;
+            display: inline-flex;
+            flex: 1 1 160px;
+            align-items: center;
+            justify-content: center;
             padding: 0.75rem 1rem;
             border-radius: 0.5rem;
             background: #059669;
@@ -45,6 +47,7 @@
             font-size: 0.75rem;
             font-weight: 800;
             text-align: center;
+            line-height: 1.25;
         }
         .btn-pix-direto:hover { background: #047857; }
         @media (min-width: 640px) {
@@ -258,15 +261,17 @@
                 <span class="text-[10px] uppercase font-bold text-emerald-700 block">QR Code Pix do Mercado Pago</span>
                 <span class="text-xs font-bold text-emerald-800 block">Pagamento processado pelo Mercado Pago</span>
                 <img id="modalPixQr" alt="QR Code Pix para pagamento" class="mx-auto max-w-[220px] rounded bg-white p-2">
-                <button type="button" id="btnDeepLinkPix" class="btn-pix-direto" onclick="copiarPixModal(true)">
-                    📱 COPIAR PIX E ABRIR APP DO BANCO
-                </button>
-                <p class="text-xs text-emerald-800 sm:hidden">Depois de copiar, abra o app do banco, escolha Pix Copia e Cola e cole o código.</p>
                 <label for="modalPixChave" class="text-[10px] uppercase font-bold text-emerald-700 block">Pix Copia e Cola</label>
-                <textarea id="modalPixChave" readonly rows="4" class="w-full rounded-lg border border-emerald-200 p-2 font-mono text-xs text-slate-900"></textarea>
-                <button type="button" id="btnCopiarPix" onclick="copiarPixModal()" class="py-2 px-4 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-bold transition">
-                    <i class="fa-solid fa-copy mr-1"></i> Copiar código Pix
-                </button>
+                <input id="modalPixChave" type="text" readonly autocomplete="off" spellcheck="false" class="w-full rounded-lg border border-emerald-200 p-2 font-mono text-xs text-slate-900">
+                <div class="flex flex-wrap gap-2">
+                    <button type="button" id="btnCopiarPix" onclick="copiarPixModal()" class="flex-1 rounded-lg bg-slate-900 px-4 py-2 text-xs font-bold text-white transition hover:bg-slate-800">
+                        <i class="fa-solid fa-copy mr-1"></i> Copiar código Pix
+                    </button>
+                    <button type="button" id="btnSelecionarCopiarPix" class="btn-pix-direto" onclick="copiarPixModal(true)">
+                        SELECIONAR TUDO E COPIAR
+                    </button>
+                </div>
+                <p class="text-xs text-emerald-800 sm:hidden">Depois de copiar, abra o app do banco, escolha Pix Copia e Cola e cole o código.</p>
                 <p class="text-xs text-slate-600 leading-relaxed">Pague pelo aplicativo do seu banco. Não feche esta tela enquanto aguardamos a confirmação.</p>
             </div>
 
@@ -915,7 +920,7 @@
             pixChaveAtual = pixPuro;
             document.getElementById('modalPixChave').value = pixChaveAtual;
             document.getElementById('btnCopiarPix').classList.toggle('hidden', !pixChaveAtual);
-            document.getElementById('btnDeepLinkPix').classList.toggle('hidden', !pixChaveAtual);
+            document.getElementById('btnSelecionarCopiarPix').classList.toggle('hidden', !pixChaveAtual);
             if (r.forma === 'pix') document.getElementById('modalBoxPix').classList.remove('hidden');
             else document.getElementById('modalBoxOutro').classList.remove('hidden');
             document.getElementById('modalPedido').classList.remove('hidden');
@@ -966,32 +971,46 @@
             }
         }
 
-        function copiarPixModal(orientarBanco = false) {
-            const codigoPuro = document.getElementById('modalPixChave').value.replace(/[\s\u200B-\u200D\uFEFF]/g, '').trim();
-            if (!codigoPuro) return;
-            document.getElementById('modalPixChave').value = codigoPuro;
-            if (navigator.clipboard) {
-                navigator.clipboard.writeText(codigoPuro)
-                    .then(() => informarPixCopiado(orientarBanco))
-                    .catch(() => selecionarECopiarPix(codigoPuro, orientarBanco));
-                return;
-            }
-            selecionarECopiarPix(codigoPuro, orientarBanco);
-        }
-
-        function selecionarECopiarPix(codigoPuro, orientarBanco) {
-            const campo = document.getElementById('modalPixChave');
-            campo.value = codigoPuro;
+        function selecionarPixCompleto(campo) {
             campo.focus();
             campo.select();
-            campo.setSelectionRange(0, campo.value.length);
-            if (document.execCommand('copy')) informarPixCopiado(orientarBanco);
-            else prompt(orientarBanco ? 'Copie o Pix, abra o app do banco e cole o código:' : 'Copie o código Pix:', codigoPuro);
+            campo.setSelectionRange(0, 99999);
+        }
+
+        async function copiarPixModal(orientarBanco = false) {
+            const campo = document.getElementById('modalPixChave');
+            const codigoPuro = pixChaveAtual;
+            if (!codigoPuro) {
+                document.getElementById('statusPedido').innerText = 'Não há código Pix disponível para copiar.';
+                return;
+            }
+
+            campo.value = codigoPuro;
+            selecionarPixCompleto(campo);
+            try {
+                if (!navigator.clipboard || typeof navigator.clipboard.writeText !== 'function') {
+                    throw new Error('A cópia automática não está disponível neste navegador.');
+                }
+                await navigator.clipboard.writeText(codigoPuro);
+                informarPixCopiado(orientarBanco);
+            } catch (err) {
+                console.error('Falha ao copiar o código Pix pela área de transferência.', err);
+                try {
+                    if (document.execCommand('copy')) {
+                        informarPixCopiado(orientarBanco);
+                        return;
+                    }
+                } catch (fallbackErr) {
+                    console.error('Falha no método alternativo de cópia do Pix.', fallbackErr);
+                }
+                selecionarPixCompleto(campo);
+                document.getElementById('statusPedido').innerText = 'Não foi possível copiar automaticamente. O código completo está selecionado; use Copiar no menu do aparelho.';
+            }
         }
 
         function informarPixCopiado(orientarBanco) {
             if (orientarBanco) {
-                document.getElementById('statusPedido').innerText = 'Pix copiado. Abra o app do seu banco, escolha Pix Copia e Cola e cole o código.';
+                document.getElementById('statusPedido').innerText = 'Pix completo copiado. Abra o app do seu banco, escolha Pix Copia e Cola e cole o código.';
             } else {
                 alert('Código Pix copiado!');
             }
