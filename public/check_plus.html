@@ -59,16 +59,16 @@
     </header>
 
     <!-- CORPO DO CHECKOUT -->
-    <main class="max-w-6xl mx-auto px-4 py-8 w-full flex-1">
-        <div class="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+    <main class="max-w-3xl mx-auto px-4 py-8 w-full flex-1">
+        <div class="flex flex-col gap-6">
 
-            <!-- COLUNA ESQUERDA: FORMULÁRIO (7 COLS) -->
-            <div class="lg:col-span-7 space-y-6">
+            <!-- DADOS E PAGAMENTO -->
+            <div id="checkoutFormulario" class="contents">
 
-                <!-- ETAPA 1: DADOS -->
-                <div class="bg-white rounded-3xl p-6 border border-slate-200 shadow-sm">
+                <!-- ETAPA 2: DADOS -->
+                <div class="order-2 bg-white rounded-3xl p-6 border border-slate-200 shadow-sm">
                     <div class="flex items-center gap-3 mb-6 pb-3 border-b border-slate-100">
-                        <div class="w-8 h-8 rounded-full gradient-orange text-white flex items-center justify-center font-black text-sm">1</div>
+                        <div class="w-8 h-8 rounded-full gradient-orange text-white flex items-center justify-center font-black text-sm">2</div>
                         <div>
                             <h2 class="text-base font-black text-slate-900">Identificação & Chave de Acesso</h2>
                             <p class="text-sm text-slate-500">Dados para envio da licença definitiva do CMV Food Plus.</p>
@@ -93,10 +93,10 @@
                     </div>
                 </div>
 
-                <!-- ETAPA 2: PAGAMENTO -->
-                <div class="bg-white rounded-3xl p-6 border border-slate-200 shadow-sm">
+                <!-- ETAPA 3: PAGAMENTO -->
+                <div class="order-3 bg-white rounded-3xl p-6 border border-slate-200 shadow-sm">
                     <div class="flex items-center gap-3 mb-6 pb-3 border-b border-slate-100">
-                        <div class="w-8 h-8 rounded-full gradient-orange text-white flex items-center justify-center font-black text-sm">2</div>
+                        <div class="w-8 h-8 rounded-full gradient-orange text-white flex items-center justify-center font-black text-sm">3</div>
                         <div>
                             <h2 class="text-base font-black text-slate-900">Forma de Pagamento</h2>
                             <p class="text-sm text-slate-500">Selecione a modalidade desejada.</p>
@@ -132,6 +132,9 @@
                     <!-- FORMULÁRIO SEGURO DE CARTÃO -->
                     <div id="boxPagtoCartao" class="hidden space-y-4 text-sm font-semibold text-slate-700">
                         <p id="mensagemBrick" class="text-xs text-slate-600">Preencha os campos seguros do Mercado Pago. Os dados do cartão são tokenizados e não são enviados ao nosso servidor.</p>
+                        <p id="avisoParcelamentoCartao" class="hidden rounded-xl border border-blue-200 bg-blue-50 p-3 text-xs font-medium text-blue-900" role="status">
+                            Após informar o cartão, selecione no formulário seguro a opção de parcelas disponível. O Mercado Pago apresenta o valor por parcela antes de concluir.
+                        </p>
                         <div id="cardPaymentBrick_container"></div>
                         <p id="erroBrick" class="text-sm text-red-600" role="status"></p>
                     </div>
@@ -149,10 +152,11 @@
                 </div>
             </div>
 
-            <!-- COLUNA DIREITA: RESUMO (5 COLS) -->
-            <div class="lg:col-span-5 space-y-6">
-                <div class="bg-white rounded-3xl p-6 border border-slate-200 shadow-sm sticky top-24">
+            <!-- ETAPA 1: RESUMO DO PEDIDO -->
+            <div id="checkoutResumo" class="order-1">
+                <div class="bg-white rounded-3xl p-6 border border-slate-200 shadow-sm">
                     <h3 class="text-base font-black text-slate-900 pb-3 border-b border-slate-100 mb-4 flex items-center gap-2">
+                        <span class="w-8 h-8 rounded-full gradient-orange text-white flex items-center justify-center font-black text-sm">1</span>
                         <i class="fa-solid fa-cart-shopping text-orange-600"></i>
                         <span>Resumo do Pedido</span>
                     </h3>
@@ -282,12 +286,17 @@
         let afiliadoAtivoCodigo = "";
         let enviando = false;
         let pedidoDownloadAtual = null;
+        let carregamentoPreco = null;
         const CHAVE_PEDIDO_DOWNLOAD = `tech_pedido_download_${PRODUTO_ID}`;
 
         window.addEventListener('DOMContentLoaded', async () => {
             gerenciarRastreioAfiliado();
+            const resumo = document.getElementById('checkoutResumo');
+            const formulario = document.getElementById('checkoutFormulario');
+            formulario.before(resumo);
             atualizarResumoTela();
-            await carregarPrecoDoCatalogo();
+            carregamentoPreco = carregarPrecoDoCatalogo();
+            await carregamentoPreco;
             restaurarPedidoDownload();
         });
 
@@ -340,7 +349,10 @@
             }
         }
 
-        function setFormaPagto(tipo) {
+        async function setFormaPagto(tipo) {
+            if (tipo === 'cartao') {
+                await (carregamentoPreco || (carregamentoPreco = carregarPrecoDoCatalogo()));
+            }
             formaPagtoAtual = tipo;
             if (tipo === 'pix') brickInicializacao++;
 
@@ -367,6 +379,7 @@
             atualizarResumoTela();
             const btnFinalizar = document.getElementById('btnFinalizar');
             btnFinalizar.classList.toggle('hidden', tipo !== 'pix');
+            document.getElementById('avisoParcelamentoCartao').classList.toggle('hidden', tipo !== 'cartao');
             if (tipo !== 'pix') inicializarBrickCartao(tipo);
         }
 
