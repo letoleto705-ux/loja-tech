@@ -363,6 +363,53 @@
         </div>
     </div>
 
+    <!-- MODAL: SOLICITAÇÃO DE AFILIAÇÃO -->
+    <div id="modalSolicitarAfiliacao" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm hidden flex items-center justify-center p-4 z-[60]" role="dialog" aria-modal="true" aria-labelledby="tituloModalAfiliacao">
+        <div class="bg-white rounded-3xl max-w-lg w-full p-6 sm:p-8 relative shadow-2xl border border-slate-200 max-h-[90vh] overflow-y-auto">
+            <button type="button" onclick="fecharModalSolicitarAfiliacao()" class="absolute top-5 right-5 text-slate-400 hover:text-slate-700" aria-label="Fechar solicitação de afiliação">
+                <i class="fa-solid fa-xmark text-xl"></i>
+            </button>
+            <div class="flex items-center gap-3 mb-6">
+                <div class="w-10 h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center">
+                    <i class="fa-solid fa-user-plus"></i>
+                </div>
+                <div>
+                    <h3 id="tituloModalAfiliacao" class="text-lg font-black text-slate-900">Solicitar Afiliação</h3>
+                    <p class="text-xs text-slate-500">Confira seus dados e informe apenas o que estiver faltando.</p>
+                </div>
+            </div>
+            <form id="formSolicitarAfiliacao" onsubmit="enviarSolicitacaoAfiliacao(event)" class="space-y-4 text-xs font-semibold text-slate-700">
+                <div>
+                    <label for="afiliacao_nome" class="block mb-1 uppercase tracking-wider">Nome completo</label>
+                    <input type="text" id="afiliacao_nome" required autocomplete="name" class="w-full px-4 py-3 rounded-xl border border-slate-200 outline-none focus:border-emerald-500">
+                </div>
+                <div>
+                    <label for="afiliacao_email" class="block mb-1 uppercase tracking-wider">E-mail</label>
+                    <input type="email" id="afiliacao_email" required autocomplete="email" class="w-full px-4 py-3 rounded-xl border border-slate-200 outline-none focus:border-emerald-500">
+                </div>
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                        <label for="afiliacao_cpf" class="block mb-1 uppercase tracking-wider">CPF</label>
+                        <input type="text" id="afiliacao_cpf" required autocomplete="off" class="w-full px-4 py-3 rounded-xl border border-slate-200 outline-none focus:border-emerald-500">
+                    </div>
+                    <div>
+                        <label for="afiliacao_telefone" class="block mb-1 uppercase tracking-wider">Telefone / WhatsApp</label>
+                        <input type="tel" id="afiliacao_telefone" required autocomplete="tel" class="w-full px-4 py-3 rounded-xl border border-slate-200 outline-none focus:border-emerald-500">
+                    </div>
+                </div>
+                <div>
+                    <label for="afiliacao_pix" class="block mb-1 uppercase tracking-wider">Chave Pix para receber comissões</label>
+                    <input type="text" id="afiliacao_pix" required autocomplete="off" class="w-full px-4 py-3 rounded-xl border border-slate-200 outline-none focus:border-emerald-500">
+                </div>
+                <p id="erroSolicitacaoAfiliacao" class="hidden text-xs font-semibold text-red-600" role="alert"></p>
+                <div class="flex gap-3 pt-1">
+                    <button type="button" onclick="fecharModalSolicitarAfiliacao()" class="flex-1 py-3 rounded-xl border border-slate-200 text-slate-600 font-bold hover:bg-slate-50">Cancelar</button>
+                    <button type="submit" id="btnEnviarSolicitacaoAfiliacao" class="flex-1 py-3 rounded-xl bg-emerald-600 text-white font-bold hover:bg-emerald-700 transition">Confirmar solicitação</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <!-- MODAL: ÁREA GERENCIAL (ADMIN) -->
     <div id="modalLojista" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm hidden flex items-center justify-center p-4 z-50">
         <div class="bg-white rounded-3xl max-w-lg w-full p-6 sm:p-8 relative shadow-2xl border border-slate-200 max-h-[90vh] overflow-y-auto">
@@ -934,26 +981,62 @@
         }
 
         async function solicitarAfiliacaoModalCompleto() {
-            if (!usuarioSessaoAtual) return;
+            if (!usuarioSessaoAtual) {
+                alert('Faça login para solicitar sua afiliação.');
+                return;
+            }
+            const dados = {
+                nome: usuarioSessaoAtual.nome,
+                email: usuarioSessaoAtual.email,
+                cpf: usuarioSessaoAtual.cpf,
+                telefone: usuarioSessaoAtual.telefone,
+                pix: usuarioSessaoAtual.pix
+            };
+            Object.entries(dados).forEach(([campo, valor]) => {
+                const input = document.getElementById(`afiliacao_${campo}`);
+                input.value = String(valor || '');
+                input.readOnly = Boolean(String(valor || '').trim());
+                input.classList.toggle('bg-slate-50', input.readOnly);
+            });
+            document.getElementById('erroSolicitacaoAfiliacao').classList.add('hidden');
+            document.getElementById('modalSolicitarAfiliacao').classList.remove('hidden');
+            document.getElementById('afiliacao_pix').focus();
+        }
 
-            const nome = prompt("Confirme seu Nome Completo para a Central:", usuarioSessaoAtual.nome || '');
-            if (!nome) return;
-            const email = prompt("Confirme seu E-mail:", usuarioSessaoAtual.email || '');
-            if (!email) return;
-            const cpf = prompt("Digite seu CPF:", usuarioSessaoAtual.cpf || '');
-            if (!cpf) return;
-            const pix = prompt("Digite sua Chave Pix para receber comissões:", usuarioSessaoAtual.pix || '');
-            if (!pix) return;
-            const telefone = prompt("Telefone / WhatsApp de contato (com DDD):", usuarioSessaoAtual.telefone || '');
-            if (!telefone) return;
+        function fecharModalSolicitarAfiliacao() {
+            document.getElementById('modalSolicitarAfiliacao').classList.add('hidden');
+        }
 
+        async function enviarSolicitacaoAfiliacao(e) {
+            e.preventDefault();
+            const form = e.currentTarget;
+            if (!form.reportValidity()) return;
+            const valores = ['nome', 'email', 'cpf', 'telefone', 'pix'].reduce((dados, campo) => {
+                dados[campo] = document.getElementById(`afiliacao_${campo}`).value.trim();
+                return dados;
+            }, {});
+            if (Object.values(valores).some(valor => !valor)) {
+                document.getElementById('erroSolicitacaoAfiliacao').innerText = 'Preencha todos os dados obrigatórios antes de continuar.';
+                document.getElementById('erroSolicitacaoAfiliacao').classList.remove('hidden');
+                return;
+            }
+            const botao = document.getElementById('btnEnviarSolicitacaoAfiliacao');
+            const erro = document.getElementById('erroSolicitacaoAfiliacao');
+            botao.disabled = true;
+            botao.innerText = 'Enviando...';
+            erro.classList.add('hidden');
             try {
-                const r = await api('POST', '/api/afiliar', { nome, email, cpf, pix, telefone, indicador: localStorage.getItem(CHAVE_INDICADOR) || '' });
+                const r = await api('POST', '/api/afiliar', { ...valores, indicador: localStorage.getItem(CHAVE_INDICADOR) || '' });
                 const origemMsg = r.patrocinadorUsuario ? `à rede do patrocinador @${r.patrocinadorUsuario}` : 'diretamente à Central';
+                fecharModalSolicitarAfiliacao();
                 alert(`Solicitação de afiliação aprovada pela Central! A filial foi vinculada ${origemMsg}. Faça login novamente para acessar o seu painel.`);
                 efetuarLogoutGeral();
             } catch (err) {
-                alert(err.message);
+                erro.innerText = err.message;
+                erro.classList.remove('hidden');
+            } finally {
+                botao.disabled = false;
+                botao.innerText = 'Confirmar solicitação';
             }
         }
 
