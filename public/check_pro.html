@@ -12,7 +12,6 @@
     <!-- Google Fonts Inter -->
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="responsive.css">
-    <script src="i18n.js" defer></script>
 
     <script>
         tailwind.config = {
@@ -42,7 +41,7 @@
 
     <!-- CABEÇALHO CHECKOUT PRO -->
     <header class="bg-white border-b border-slate-200 py-4 px-4 sticky top-0 z-30 shadow-sm">
-        <div class="max-w-6xl mx-auto flex flex-wrap items-center justify-between gap-2">
+        <div class="max-w-6xl mx-auto flex items-center justify-between">
             <a href="index.html" class="flex items-center gap-3">
                 <div class="w-10 h-10 rounded-xl gradient-orange flex items-center justify-center text-white shadow-orange-glow">
                     <i class="fa-solid fa-utensils text-base"></i>
@@ -52,19 +51,9 @@
                     <span class="text-[11px] text-slate-500 font-semibold tracking-wider uppercase block -mt-1">Checkout Pro Oficial</span>
                 </div>
             </a>
-            <div class="flex items-center gap-2">
-                <select data-tech-language aria-label="Idioma" class="max-w-[108px] rounded-lg border border-slate-200 bg-white px-2 py-2 text-xs text-slate-700 outline-none focus:border-orange-500">
-                    <option value="pt-BR">Português</option>
-                    <option value="en">English</option>
-                    <option value="es">Español</option>
-                    <option value="zh">中文</option>
-                    <option value="it">Italiano</option>
-                    <option value="fr">Français</option>
-                </select>
-                <div class="flex items-center gap-2 text-emerald-600 text-sm font-extrabold bg-emerald-50 px-3 py-1.5 rounded-full border border-emerald-200">
-                    <i class="fa-solid fa-shield-halved"></i>
-                    <span>Ambiente Seguro & Criptografado</span>
-                </div>
+            <div class="flex items-center gap-2 text-emerald-600 text-sm font-extrabold bg-emerald-50 px-3 py-1.5 rounded-full border border-emerald-200">
+                <i class="fa-solid fa-shield-halved"></i>
+                <span>Ambiente Seguro & Criptografado</span>
             </div>
         </div>
     </header>
