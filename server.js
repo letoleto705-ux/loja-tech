@@ -47,6 +47,17 @@ const ehUrlWeb = valor => {
     return false;
   }
 };
+const ehCaminhoImagemLocal = valor => {
+  if (!valor.startsWith('/') || valor.startsWith('//') || valor.includes('\\') || /[\u0000-\u001f]/.test(valor)) return false;
+  try {
+    const pathname = decodeURIComponent(new URL(valor, 'http://localhost').pathname);
+    const segmentos = pathname.split('/').slice(1);
+    return /^\/(?:imagens|uploads|img)\//i.test(pathname)
+      && segmentos.every(segmento => segmento && segmento !== '.' && segmento !== '..');
+  } catch {
+    return false;
+  }
+};
 const hash256 = s => crypto.createHash('sha256').update(String(s)).digest();
 const igual = (a, b) => crypto.timingSafeEqual(hash256(a), hash256(b));
 const soDigitos = t => String(t == null ? '' : t).replace(/\D/g, '');
@@ -399,6 +410,7 @@ const app = express();
 app.disable('x-powered-by');
 app.set('trust proxy', 1);
 app.use(express.json({ limit: '200kb' }));
+app.use('/imagens', express.static(path.join(__dirname, 'public', 'imagens')));
 app.use(express.static(path.join(__dirname, 'public')));
 
 const tentativas = new Map();
@@ -1140,11 +1152,17 @@ app.get('/api/admin/produtos', auth, soAdmin, wrap(async (req, res) => {
 
 app.put('/api/produtos', auth, soAdmin, wrap(async (req, res) => {
   const lista = req.body;
-  if (!Array.isArray(lista) || lista.length > 100) return res.status(400).json({ erro: 'Lista de produtos inválida.' });
+  if (!Array.isArray(lista) || lista.length > 100 || lista.some(p => !p || typeof p !== 'object' || Array.isArray(p))) {
+    return res.status(400).json({ erro: 'Lista de produtos inválida.' });
+  }
+  const imagens = lista.map(p => txt(p.imagem, 500));
+  if (imagens.some(imagem => imagem && !ehUrlWeb(imagem) && !ehCaminhoImagemLocal(imagem))) {
+    return res.status(400).json({ erro: 'A imagem deve ser uma URL HTTP ou HTTPS válida ou um caminho local em /imagens, /uploads ou /img.' });
+  }
   const limpa = lista.map(p => ({
     id: txt(p.id, 40), nome: txt(p.nome, 120), desc: txt(p.desc, 500),
     custo: Number(p.custo) || 0, precoDe: Number(p.precoDe) || 0, precoPor: Number(p.precoPor) || 0,
-    imagem: /^https?:\/\//.test(txt(p.imagem, 500)) ? txt(p.imagem, 500) : '',
+    imagem: txt(p.imagem, 500),
     video: txt(p.video, 500), pdf: txt(p.pdf, 8192),
     repasseJurosComprador: p.repasseJurosComprador !== false
   }));
