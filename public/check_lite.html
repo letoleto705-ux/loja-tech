@@ -429,9 +429,30 @@
         }
 
         function textoLimiteParcelasSemJuros() {
-            return maxParcelasSemJuros < 2
-                ? 'nenhuma parcela sem juros'
-                : `até ${maxParcelasSemJuros}x sem juros`;
+            return maxParcelasSemJuros >= 2
+                ? `até ${maxParcelasSemJuros}x sem juros; acima disso, estimativa de 2,99% a.m.`
+                : '1x sem juros; acima disso, estimativa de 2,99% a.m.';
+        }
+
+        function calcularParcelaEstimada(quantidade) {
+            const taxaMensal = 0.0299;
+            const semJuros = quantidade === 1 || quantidade <= maxParcelasSemJuros;
+            if (semJuros) {
+                return {
+                    valorParcela: precoBase / quantidade,
+                    valorTotal: precoBase,
+                    semJuros
+                };
+            }
+
+            const fatorComposto = Math.pow(1 + taxaMensal, quantidade);
+            const valorParcela = precoBase * taxaMensal * fatorComposto / (fatorComposto - 1);
+            const valorParcelaArredondado = Math.round(valorParcela * 100) / 100;
+            return {
+                valorParcela: valorParcelaArredondado,
+                valorTotal: valorParcelaArredondado * quantidade,
+                semJuros
+            };
         }
 
         function popularParcelasEstimadas() {
@@ -439,13 +460,12 @@
             const quantidadeSelecionada = select.value || '1';
             select.innerHTML = '';
             for (let quantidade = 1; quantidade <= 12; quantidade++) {
-                const valorPrincipal = precoBase / quantidade;
-                const semJurosConfigurado = maxParcelasSemJuros >= 2 && quantidade <= maxParcelasSemJuros;
-                const descricao = semJurosConfigurado
-                    ? 'sem juros (estimativa; confirme no Mercado Pago)'
-                    : 'com juros (estimativa; valor final no Mercado Pago)';
+                const parcela = calcularParcelaEstimada(quantidade);
+                const descricao = parcela.semJuros
+                    ? 'sem juros'
+                    : 'com juros estimados de 2,99% a.m.';
                 select.add(new Option(
-                    `${quantidade}x de ${formatarMoeda(valorPrincipal)} — ${descricao}`,
+                    `${quantidade}x de ${formatarMoeda(parcela.valorParcela)} — ${descricao} — Total: ${formatarMoeda(parcela.valorTotal)}`,
                     String(quantidade)
                 ));
             }
@@ -501,7 +521,7 @@
                     const quantidade = Number(parcela.installments);
                     const total = Number(parcela.total_amount);
                     const semJurosMercadoPago = total <= precoBase + 0.01;
-                    const semJurosConfigurado = maxParcelasSemJuros >= 2 && quantidade <= maxParcelasSemJuros;
+                    const semJurosConfigurado = quantidade === 1 || quantidade <= maxParcelasSemJuros;
                     const classificacao = !semJurosMercadoPago
                         ? 'com juros'
                         : semJurosConfigurado
