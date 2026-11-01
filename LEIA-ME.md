@@ -113,7 +113,9 @@ Proteções: o afiliado só ganha se existir; se o CPF ou e-mail do comprador fo
 ## 10. Cupons, campanhas e parcelamento
 - No Tech Payments, o administrador define o liga/desliga global e a porcentagem máxima dos cupons, aprova os códigos submetidos pelos afiliados e publica/desativa comunicados internos.
 - O afiliado cria o próprio código na Área do Afiliado. Cupons novos aguardam ativação do administrador. No checkout, o servidor valida o status e calcula o desconto sobre o preço cadastrado; comissões são calculadas sobre o valor final pago e a venda fica atribuída ao dono do cupom.
-- As regras de porcentagem são salvas em `config` (JSONB); cupons e comunicados ficam em `afiliado_cupons` e `notificacoes_afiliados`.
+- A validade de cada cupom é opcional e definida pelo administrador; a data informada permanece válida durante todo aquele dia. Cupons expirados são recusados pelo servidor no checkout e indicados como expirados nos painéis. Deixar a validade vazia mantém o cupom sem expiração.
+- A tabela `afiliado_cupons` referencia `afiliados(usuario)` com `ON DELETE CASCADE`: a exclusão de um afiliado remove seu cupom. Pedidos mantêm o código e o desconto como snapshot histórico, sem depender do registro do cupom.
+- As regras de porcentagem são salvas em `config` (JSONB); cupons e comunicados ficam em `afiliado_cupons` e `notificacoes_afiliados`. O script de atualização está em [database/neon-migration.sql](./database/neon-migration.sql).
 - Produtos seguem armazenados na lista JSONB `config.produtos`; a opção administrativa `repasseJurosComprador` é salva nesse produto e copiada para o pedido. A opção é enviada como metadado no pagamento, sem permitir alteração pelo checkout.
 - O checkout seguro de cartão usa o Brick do Mercado Pago. O modo sem juros também depende de planos/campanhas sem juros habilitados na conta Mercado Pago da loja; essa regra comercial da conta não pode ser criada por um campo da API de pagamento. Valide os planos disponíveis na conta de produção antes de anunciar parcelamento sem juros.
 - As telas da loja, checkout, afiliado e administração compartilham as regras mobile de `public/responsive.css`.

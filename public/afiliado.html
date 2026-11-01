@@ -542,7 +542,13 @@
                 botao.disabled = !config.ativo;
                 botao.classList.toggle('opacity-50', !config.ativo);
                 document.getElementById('estadoCupomAfiliado').innerText = config.cupom
-                    ? `Status: ${!config.ativo ? 'campanha desativada pelo administrador' : config.cupom.ativo ? 'ativo' : 'aguardando ativação pelo administrador'}.`
+                    ? `${config.cupom.dataValidade
+                        ? `Válido até ${new Date(`${config.cupom.dataValidade}T00:00:00`).toLocaleDateString('pt-BR')}. `
+                        : 'Sem data de expiração definida. '}${config.cupom.expirado
+                        ? 'Cupom expirado.'
+                        : !config.ativo ? 'Campanha desativada pelo administrador.'
+                          : config.cupom.ativo ? 'Cupom ativo.'
+                            : 'Aguardando ativação pelo administrador.'}`
                     : '';
             } catch (err) {
                 painel.insertAdjacentHTML('beforeend', `<p class="text-xs text-red-600">${esc(err.message)}</p>`);

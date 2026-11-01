@@ -632,12 +632,18 @@
                 document.getElementById('adminCuponsPercentual').value = dados.percentualMaximo;
                 lista.innerHTML = dados.afiliados.length ? dados.afiliados.map(af => `
                     <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs">
-                        <div>
+                    <div class="min-w-0">
                             <strong class="text-slate-900">${esc(af.nome)} (@${esc(af.usuario)})</strong>
                             <span class="ml-2 text-slate-600">${af.codigo ? esc(af.codigo) : 'Ainda não cadastrou cupom'}</span>
-                            ${af.codigo ? `<span class="ml-2 font-bold ${af.ativo ? 'text-emerald-700' : 'text-amber-700'}">${af.ativo ? 'Ativo' : 'Inativo'}</span>` : ''}
+                        ${af.codigo ? `<span class="ml-2 font-bold ${af.expirado ? 'text-red-700' : af.ativo ? 'text-emerald-700' : 'text-amber-700'}">${af.expirado ? 'Expirado' : af.ativo ? 'Ativo' : 'Inativo'}</span>` : ''}
                         </div>
-                        ${af.codigo ? `<button type="button" onclick="alterarStatusCupom(${Number(af.cupomId)}, ${!af.ativo})" class="rounded-lg px-3 py-2 font-bold ${af.ativo ? 'bg-red-100 text-red-700' : 'bg-emerald-100 text-emerald-700'}">${af.ativo ? 'Desativar' : 'Ativar'}</button>` : ''}
+                    ${af.codigo ? `<div class="flex flex-col sm:flex-row sm:items-end gap-2">
+                        <label class="text-[10px] font-bold text-slate-500">Válido até (em branco = sem expiração)
+                            <input type="date" id="validadeCupom-${Number(af.cupomId)}" value="${esc(af.dataValidade || '')}" class="mt-1 block rounded-lg border border-slate-200 bg-white px-2 py-2 text-xs">
+                        </label>
+                        <button type="button" onclick="salvarValidadeCupom(${Number(af.cupomId)})" class="rounded-lg bg-blue-100 px-3 py-2 font-bold text-blue-800">Salvar validade</button>
+                        <button type="button" onclick="alterarStatusCupom(${Number(af.cupomId)}, ${!af.ativo})" class="rounded-lg px-3 py-2 font-bold ${af.ativo ? 'bg-red-100 text-red-700' : 'bg-emerald-100 text-emerald-700'}">${af.ativo ? 'Desativar' : 'Ativar'}</button>
+                    </div>` : ''}
                     </div>`).join('') : '<p class="text-xs text-slate-500">Nenhum afiliado cadastrado.</p>';
             } catch (err) {
                 lista.innerHTML = `<p class="text-xs text-red-600">${esc(err.message)}</p>`;
@@ -663,6 +669,16 @@
         async function alterarStatusCupom(id, ativo) {
             try {
                 await api('PATCH', `/api/admin/cupons/${encodeURIComponent(id)}`, { ativo });
+                await carregarGestaoCupons();
+            } catch (err) {
+                alert(err.message);
+            }
+        }
+
+        async function salvarValidadeCupom(id) {
+            const dataValidade = document.getElementById(`validadeCupom-${id}`).value || null;
+            try {
+                await api('PATCH', `/api/admin/cupons/${encodeURIComponent(id)}`, { dataValidade });
                 await carregarGestaoCupons();
             } catch (err) {
                 alert(err.message);

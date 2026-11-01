@@ -311,9 +311,46 @@ async function iniciarBanco() {
     afiliado_usuario text NOT NULL UNIQUE REFERENCES afiliados(usuario) ON DELETE CASCADE,
     codigo_cupom varchar(50) NOT NULL UNIQUE,
     ativo boolean NOT NULL DEFAULT false,
+    data_validade date,
     criado_em timestamptz NOT NULL DEFAULT now(),
     atualizado_em timestamptz NOT NULL DEFAULT now()
   )`);
+  await q('ALTER TABLE afiliado_cupons ADD COLUMN IF NOT EXISTS data_validade date');
+  await q(`DO $$
+    DECLARE chave_fk record;
+            campo_afiliado smallint;
+    BEGIN
+      SELECT attnum INTO campo_afiliado
+      FROM pg_attribute
+      WHERE attrelid = 'afiliado_cupons'::regclass
+        AND attname = 'afiliado_usuario' AND NOT attisdropped;
+
+      FOR chave_fk IN
+        SELECT conname, confdeltype
+        FROM pg_constraint
+        WHERE conrelid = 'afiliado_cupons'::regclass
+          AND confrelid = 'afiliados'::regclass
+          AND contype = 'f'
+          AND campo_afiliado = ANY(conkey)
+      LOOP
+        IF chave_fk.confdeltype <> 'c' THEN
+          EXECUTE format('ALTER TABLE afiliado_cupons DROP CONSTRAINT %I', chave_fk.conname);
+        END IF;
+      END LOOP;
+
+      IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conrelid = 'afiliado_cupons'::regclass
+          AND confrelid = 'afiliados'::regclass
+          AND contype = 'f'
+          AND campo_afiliado = ANY(conkey)
+          AND confdeltype = 'c'
+      ) THEN
+        ALTER TABLE afiliado_cupons
+          ADD CONSTRAINT afiliado_cupons_afiliado_usuario_fkey
+          FOREIGN KEY (afiliado_usuario) REFERENCES afiliados(usuario) ON DELETE CASCADE;
+      END IF;
+    END $$`);
   await q('CREATE UNIQUE INDEX IF NOT EXISTS afiliado_cupons_codigo_lower_uidx ON afiliado_cupons (lower(codigo_cupom))');
   await q(`CREATE TABLE IF NOT EXISTS notificacoes_afiliados (
     id serial PRIMARY KEY,
@@ -609,12 +646,15 @@ async function configuracaoCupons() {
 app.get('/api/admin/cupons', auth, soAdmin, wrap(async (req, res) => {
   const configuracao = await configuracaoCupons();
   const afiliados = await q(`SELECT a.id, a.usuario, a.nome, c.id AS cupom_id,
-      c.codigo_cupom, c.ativo AS cupom_ativo, c.atualizado_em
+      c.codigo_cupom, c.ativo AS cupom_ativo, c.data_validade,
+      (c.data_validade IS NOT NULL AND c.data_validade < CURRENT_DATE) AS expirado,
+      c.atualizado_em
     FROM afiliados a LEFT JOIN afiliado_cupons c ON c.afiliado_usuario = a.usuario
     ORDER BY a.nome, a.usuario`);
   res.json({ ...configuracao, afiliados: afiliados.rows.map(a => ({
     id: a.id, usuario: a.usuario, nome: a.nome, cupomId: a.cupom_id,
-    codigo: a.codigo_cupom, ativo: a.cupom_ativo === true, atualizadoEm: a.atualizado_em
+    codigo: a.codigo_cupom, ativo: a.cupom_ativo === true, expirado: a.expirado === true,
+    dataValidade: a.data_validade, atualizadoEm: a.atualizado_em
   })) });
 }));
 
@@ -631,21 +671,52 @@ app.put('/api/admin/cupons/config', auth, soAdmin, wrap(async (req, res) => {
 }));
 
 app.patch('/api/admin/cupons/:id', auth, soAdmin, wrap(async (req, res) => {
-  if (typeof req.body.ativo !== 'boolean') return res.status(400).json({ erro: 'Informe um status válido para o cupom.' });
-  const result = await q('UPDATE afiliado_cupons SET ativo = $2, atualizado_em = now() WHERE id = $1 RETURNING id, ativo',
-    [req.params.id, req.body.ativo]);
-  if (!result.rows.length) return res.status(404).json({ erro: 'Cupom não encontrado.' });
-  res.json({ ok: true, ...result.rows[0] });
+  const atualizaAtivo = Object.prototype.hasOwnProperty.call(req.body, 'ativo');
+  const atualizaValidade = Object.prototype.hasOwnProperty.call(req.body, 'dataValidade');
+  if (!atualizaAtivo && !atualizaValidade) return res.status(400).json({ erro: 'Informe o status ou a data de validade do cupom.' });
+  if (atualizaAtivo && typeof req.body.ativo !== 'boolean') return res.status(400).json({ erro: 'Informe um status válido para o cupom.' });
+
+  let dataValidade = null;
+  if (atualizaValidade && req.body.dataValidade !== null && req.body.dataValidade !== '') {
+    const valor = String(req.body.dataValidade);
+    const data = new Date(`${valor}T00:00:00.000Z`);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(valor) || Number.isNaN(data.getTime()) || data.toISOString().slice(0, 10) !== valor) {
+      return res.status(400).json({ erro: 'Informe uma data de validade válida no formato AAAA-MM-DD.' });
+    }
+    dataValidade = valor;
+  }
+
+  const result = await q(`UPDATE afiliado_cupons
+    SET ativo = CASE WHEN $2::boolean IS NULL THEN ativo ELSE $2 END,
+        data_validade = CASE WHEN $3::boolean THEN $4::date ELSE data_validade END,
+        atualizado_em = now()
+    WHERE id = $1
+      AND ($2::boolean IS DISTINCT FROM TRUE OR data_validade IS NULL OR data_validade >= CURRENT_DATE)
+    RETURNING id, ativo, data_validade,
+      (data_validade IS NOT NULL AND data_validade < CURRENT_DATE) AS expirado`,
+  [req.params.id, atualizaAtivo ? req.body.ativo : null, atualizaValidade, dataValidade]);
+  if (!result.rows.length) {
+    const exists = await q('SELECT 1 FROM afiliado_cupons WHERE id = $1', [req.params.id]);
+    if (exists.rowCount) return res.status(400).json({ erro: 'Não é possível ativar um cupom com validade expirada.' });
+    return res.status(404).json({ erro: 'Cupom não encontrado.' });
+  }
+  const cupom = result.rows[0];
+  res.json({ ok: true, id: cupom.id, ativo: cupom.ativo, dataValidade: cupom.data_validade, expirado: cupom.expirado });
 }));
 
 app.get('/api/afiliado/cupom', auth, wrap(async (req, res) => {
   if (req.user.perfil !== 'afiliado') return res.status(403).json({ erro: 'Acesso exclusivo para afiliados.' });
   const [configuracao, result] = await Promise.all([
     configuracaoCupons(),
-    q('SELECT id, codigo_cupom, ativo FROM afiliado_cupons WHERE afiliado_usuario = $1', [req.user.usuario])
+    q(`SELECT id, codigo_cupom, ativo, data_validade,
+        (data_validade IS NOT NULL AND data_validade < CURRENT_DATE) AS expirado
+      FROM afiliado_cupons WHERE afiliado_usuario = $1`, [req.user.usuario])
   ]);
   const cupom = result.rows[0];
-  res.json({ ...configuracao, cupom: cupom ? { id: cupom.id, codigo: cupom.codigo_cupom, ativo: cupom.ativo } : null });
+  res.json({ ...configuracao, cupom: cupom ? {
+    id: cupom.id, codigo: cupom.codigo_cupom, ativo: cupom.ativo,
+    dataValidade: cupom.data_validade, expirado: cupom.expirado
+  } : null });
 }));
 
 app.put('/api/afiliado/cupom', auth, wrap(async (req, res) => {
@@ -741,7 +812,8 @@ app.post('/api/checkout', limitarTentativas, wrap(async (req, res) => {
     const cfgCupom = await configuracaoCupons();
     const cupom = (await q(`SELECT c.codigo_cupom, c.afiliado_usuario, a.cpf, a.email
       FROM afiliado_cupons c JOIN afiliados a ON a.usuario = c.afiliado_usuario
-      WHERE lower(c.codigo_cupom) = lower($1) AND c.ativo = true`, [codigoCupom])).rows[0];
+      WHERE lower(c.codigo_cupom) = lower($1) AND c.ativo = true
+        AND (c.data_validade IS NULL OR c.data_validade >= CURRENT_DATE)`, [codigoCupom])).rows[0];
     if (!cfgCupom.ativo || cfgCupom.percentualMaximo <= 0 || !cupom) {
       return res.status(400).json({ erro: 'Cupom inválido ou inativo.' });
     }
@@ -787,7 +859,9 @@ app.post('/api/checkout/cupom', limitarTentativas, wrap(async (req, res) => {
   const produto = produtos.find(p => norm(p.id) === produtoId);
   if (!produto) return res.status(404).json({ erro: 'Produto não encontrado.' });
   const configuracao = await configuracaoCupons();
-  const cupom = (await q('SELECT codigo_cupom FROM afiliado_cupons WHERE lower(codigo_cupom) = lower($1) AND ativo = true', [codigo])).rows[0];
+  const cupom = (await q(`SELECT codigo_cupom FROM afiliado_cupons
+    WHERE lower(codigo_cupom) = lower($1) AND ativo = true
+      AND (data_validade IS NULL OR data_validade >= CURRENT_DATE)`, [codigo])).rows[0];
   if (!configuracao.ativo || configuracao.percentualMaximo <= 0 || !cupom) {
     return res.status(404).json({ erro: 'Cupom inválido ou inativo.' });
   }
