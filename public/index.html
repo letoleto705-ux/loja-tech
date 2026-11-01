@@ -1197,7 +1197,7 @@
                 const comissaoPendenteAf = Number(af.comissaoPendente) || 0;
                 totalGeralComissao += comissaoPendenteAf;
                 container.innerHTML += `
-                    <div class="bg-slate-50 border border-slate-200 p-3 rounded-xl flex items-center justify-between text-xs">
+                    <div data-afiliado-id="${esc(af.id)}" class="bg-slate-50 border border-slate-200 p-3 rounded-xl flex items-center justify-between text-xs">
                         <div>
                             <strong class="text-slate-900 block">Filial: ${esc(af.nome)} (@${esc(af.usuario)})</strong>
                             <span class="text-[10px] text-slate-400 font-mono">Pix: ${esc(af.pix)} | CPF: ${esc(af.cpf)}</span>
@@ -1222,8 +1222,18 @@
                 await api('DELETE', '/api/afiliados/' + encodeURIComponent(id));
             } catch (err) {
                 alert(err.message);
+                return;
             }
-            carregarListaGerenciaAfiliados();
+            afiliadosBase = afiliadosBase.filter(af => String(af.id) !== String(id));
+            const container = document.getElementById('listaGerenciaAfiliadosContainer');
+            const linha = Array.from(container.children).find(item => item.dataset.afiliadoId === String(id));
+            if (linha) linha.remove();
+
+            if (!afiliadosBase.length) {
+                container.innerHTML = `<div class="text-xs text-slate-500 py-3 text-center border border-dashed rounded-xl">Nenhuma filial cadastrada na Central até o momento.</div>`;
+            }
+            const totalPendente = afiliadosBase.reduce((total, af) => total + (Number(af.comissaoPendente) || 0), 0);
+            document.getElementById('af_total_geral_pagar').value = `R$ ${totalPendente.toFixed(2)}`;
         }
 
         function setModoLojista(modo) {
