@@ -55,8 +55,8 @@ As porcentagens de comissão direta e de patrocinador são ajustáveis na loja: 
 | **O avô de quem vendeu** | 5% (fixos) | o preço do produto, quando houver essa geração |
 | **A Central (administrador)** | **todo o resto** | o preço do produto, em qualquer geração |
 
-- Só o patrocinador **direto** recebe a taxa de patrocinador. O avô recebe somente os 5% fixos; gerações acima dele não recebem comissão. O filho não ganha nada sobre o pai.
-- Não existe uma porcentagem para a Central: ela fica com o que sobra. O total distribuído aos afiliados (direta, patrocinador e avô, quando aplicável) nunca pode ultrapassar 100%; portanto, a soma das taxas direta e de patrocinador é limitada a 95%.
+- Só o patrocinador **direto** recebe a taxa de patrocinador. O percentual do avô é definido pelo administrador; gerações acima dele não recebem comissão. O filho não ganha nada sobre o pai.
+- Não existe uma porcentagem configurável para a Central: ela fica com o que sobra. O total das taxas direta, do patrocinador e do avô, quando aplicáveis, não pode ultrapassar 100%.
 - Mudar uma taxa vale só para as vendas confirmadas dali em diante.
 - As comissões são gravadas quando o webhook ou a consulta de status confirma a aprovação do Mercado Pago; os totais de cada afiliado são somados dos pedidos pagos.
 - O administrador configura o **valor mínimo de saque** em "Regra Geral de Comissões e Pagamentos" (padrão R$ 50,00). Os saldos abaixo do mínimo permanecem pendentes e acumulam.
@@ -116,6 +116,7 @@ Proteções: o afiliado só ganha se existir; se o CPF ou e-mail do comprador fo
 - A validade de cada cupom é opcional e definida pelo administrador; a data informada permanece válida durante todo aquele dia. Cupons expirados são recusados pelo servidor no checkout e indicados como expirados nos painéis. Deixar a validade vazia mantém o cupom sem expiração.
 - A tabela `afiliado_cupons` referencia `afiliados(usuario)` com `ON DELETE CASCADE`: a exclusão de um afiliado remove seu cupom. Pedidos mantêm o código e o desconto como snapshot histórico, sem depender do registro do cupom.
 - As regras de porcentagem são salvas em `config` (JSONB); cupons e comunicados ficam em `afiliado_cupons` e `notificacoes_afiliados`. O script de atualização está em [database/neon-migration.sql](./database/neon-migration.sql).
+- As taxas de comissão direta, do patrocinador e do avô são editáveis separadamente pelo administrador e são aplicadas às vendas aprovadas após a alteração. A taxa do avô fica em `config` na chave `taxaAvo` (padrão inicial 5%).
 - Produtos seguem armazenados na lista JSONB `config.produtos`; a opção administrativa `repasseJurosComprador` é salva nesse produto e copiada para o pedido. A opção é enviada como metadado no pagamento, sem permitir alteração pelo checkout.
 - O checkout seguro de cartão usa o Brick do Mercado Pago. O modo sem juros também depende de planos/campanhas sem juros habilitados na conta Mercado Pago da loja; essa regra comercial da conta não pode ser criada por um campo da API de pagamento. Valide os planos disponíveis na conta de produção antes de anunciar parcelamento sem juros.
 - As telas da loja, checkout, afiliado e administração compartilham as regras mobile de `public/responsive.css`.

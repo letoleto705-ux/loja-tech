@@ -70,17 +70,19 @@ async function gravarConfig(chave, valor) {
 }
 
 async function lerTaxas() {
-  const [taxaComissao, taxaPatrocinador] = await Promise.all([
+  const [taxaComissao, taxaPatrocinador, taxaAvo] = await Promise.all([
     lerConfig('taxaComissao', TAXA_COMISSAO_PADRAO),
-    lerConfig('taxaPatrocinador', TAXA_PATROCINADOR_PADRAO)
+    lerConfig('taxaPatrocinador', TAXA_PATROCINADOR_PADRAO),
+    lerConfig('taxaAvo', TAXA_AVO_PADRAO)
   ]);
   const direta = Number(taxaComissao);
   const patrocinador = Number(taxaPatrocinador);
+  const avo = Number(taxaAvo);
   return {
     taxaComissao: direta,
     taxaPatrocinador: patrocinador,
-    taxaAvo: TAXA_AVO_PADRAO,
-    taxaCentral: 100 - direta - patrocinador - TAXA_AVO_PADRAO
+    taxaAvo: avo,
+    taxaCentral: 100 - direta - patrocinador - avo
   };
 }
 const centavos = (valor, taxa) => Math.round(valor * taxa) / 100;
@@ -302,6 +304,10 @@ async function iniciarBanco() {
   await q("ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS payment_qr_code_base64 text NOT NULL DEFAULT ''");
   await q(`CREATE TABLE IF NOT EXISTS config (chave text PRIMARY KEY, valor jsonb NOT NULL)`);
   await q("DELETE FROM config WHERE chave = 'pixChave'");
+  await q(`INSERT INTO config (chave, valor) VALUES
+    ('taxaComissao', $1::jsonb), ('taxaPatrocinador', $2::jsonb), ('taxaAvo', $3::jsonb)
+    ON CONFLICT (chave) DO NOTHING`,
+  [JSON.stringify(TAXA_COMISSAO_PADRAO), JSON.stringify(TAXA_PATROCINADOR_PADRAO), JSON.stringify(TAXA_AVO_PADRAO)]);
   const produtosSalvos = await lerConfig('produtos', PRODUTOS_INICIAIS);
   await gravarConfig('produtos', produtosSalvos.map(produto => ({
     ...produto,
@@ -1092,7 +1098,7 @@ async function confirmarPedido(id) {
           const avoAfiliado = await afiliadoPorReferencia(client, pai.patrocinador_id);
           if (avoAfiliado && avoAfiliado.usuario !== af.usuario && avoAfiliado.usuario !== pai.usuario) {
             avoUsuario = avoAfiliado.usuario;
-            avo = centavos(valor, TAXA_AVO_PADRAO);
+            avo = centavos(valor, taxas.taxaAvo);
             pixAvo = avoAfiliado.pix || '';
           }
         }
@@ -1164,12 +1170,14 @@ app.put('/api/config', auth, soAdmin, wrap(async (req, res) => {
   const taxasAtuais = await lerTaxas();
   const taxaComissao = req.body.taxaComissao === undefined ? taxasAtuais.taxaComissao : req.body.taxaComissao;
   const taxaPatrocinador = req.body.taxaPatrocinador === undefined ? taxasAtuais.taxaPatrocinador : req.body.taxaPatrocinador;
+  const taxaAvo = req.body.taxaAvo === undefined ? taxasAtuais.taxaAvo : req.body.taxaAvo;
   if (typeof taxaComissao !== 'number' || !Number.isFinite(taxaComissao) || taxaComissao < 0 || taxaComissao > 100
-    || typeof taxaPatrocinador !== 'number' || !Number.isFinite(taxaPatrocinador) || taxaPatrocinador < 0 || taxaPatrocinador > 100) {
+    || typeof taxaPatrocinador !== 'number' || !Number.isFinite(taxaPatrocinador) || taxaPatrocinador < 0 || taxaPatrocinador > 100
+    || typeof taxaAvo !== 'number' || !Number.isFinite(taxaAvo) || taxaAvo < 0 || taxaAvo > 100) {
     return res.status(400).json({ erro: 'As comissões devem ser números entre 0% e 100%.' });
   }
-  if (taxaComissao + taxaPatrocinador + TAXA_AVO_PADRAO > 100) {
-    return res.status(400).json({ erro: `A soma das comissões distribuídas, incluindo os ${TAXA_AVO_PADRAO}% do avô, não pode ultrapassar 100%.` });
+  if (taxaComissao + taxaPatrocinador + taxaAvo > 100) {
+    return res.status(400).json({ erro: 'A soma das comissões direta, do patrocinador e do avô não pode ultrapassar 100%.' });
   }
 
   if (req.body.valorMinimoSaque !== undefined) {
@@ -1180,8 +1188,12 @@ app.put('/api/config', auth, soAdmin, wrap(async (req, res) => {
     await gravarConfig('valorMinimoSaque', dinheiro(valorMinimoSaque));
   }
 
-  if (req.body.taxaComissao !== undefined) await gravarConfig('taxaComissao', taxaComissao);
-  if (req.body.taxaPatrocinador !== undefined) await gravarConfig('taxaPatrocinador', taxaPatrocinador);
+  if (req.body.taxaComissao !== undefined || req.body.taxaPatrocinador !== undefined || req.body.taxaAvo !== undefined) {
+    await q(`INSERT INTO config (chave, valor) VALUES
+      ('taxaComissao', $1::jsonb), ('taxaPatrocinador', $2::jsonb), ('taxaAvo', $3::jsonb)
+      ON CONFLICT (chave) DO UPDATE SET valor = EXCLUDED.valor`,
+    [JSON.stringify(taxaComissao), JSON.stringify(taxaPatrocinador), JSON.stringify(taxaAvo)]);
+  }
 
   if (req.body.whatsappSuporte !== undefined) {
     const d = soDigitos(req.body.whatsappSuporte);

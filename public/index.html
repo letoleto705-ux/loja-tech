@@ -339,6 +339,10 @@
                         <input type="number" id="af_comissao_patrocinador" min="0" max="100" step="0.01" value="10" onchange="salvarTaxasComissao()" class="w-full px-3 py-2.5 rounded-xl border border-emerald-300 bg-white font-bold text-emerald-700">
                     </div>
                     <div>
+                        <label class="block mb-1 uppercase tracking-wider text-emerald-900">Comissão do Avô (%)</label>
+                        <input type="number" id="af_comissao_avo" min="0" max="100" step="0.01" value="5" onchange="salvarTaxasComissao()" class="w-full px-3 py-2.5 rounded-xl border border-emerald-300 bg-white font-bold text-emerald-700">
+                    </div>
+                    <div>
                         <label class="block mb-1 uppercase tracking-wider text-emerald-900">Valor Mínimo de Saque (R$)</label>
                         <input type="number" id="af_valor_minimo_saque" min="0" step="0.01" value="50" required onchange="salvarValorMinimoSaque()" class="w-full px-3 py-2.5 rounded-xl border border-emerald-300 bg-white font-bold text-emerald-700">
                     </div>
@@ -347,7 +351,7 @@
                         <input type="text" id="af_total_geral_pagar" readonly value="R$ 0,00" class="w-full px-3 py-2.5 rounded-xl border border-emerald-300 bg-white font-bold text-emerald-700">
                     </div>
                     <p class="sm:col-span-2 text-[11px] font-medium text-emerald-900/80 leading-relaxed normal-case">
-                        <strong>Direta:</strong> quem vendeu ganha esse % do valor da venda. <strong>Patrocinador:</strong> somente o patrocinador direto (o "pai" de quem vendeu) ganha esse % sobre a venda do filho. Os 5% do avô permanecem fixos quando houver essa geração; a distribuição total a afiliados não pode ultrapassar 100%. A taxa vale para as vendas confirmadas daqui para frente.
+                        <strong>Direta:</strong> quem vendeu recebe o percentual configurado. <strong>Patrocinador:</strong> o pai recebe o percentual configurado. <strong>Avô:</strong> o avô recebe o percentual configurado quando essa geração existir. Os três valores são definidos manualmente pelo administrador e sua soma não pode ultrapassar 100%. As taxas valem para vendas aprovadas daqui para frente.
                     </p>
                 </div>
             </div>
@@ -644,7 +648,7 @@
 
         let produtos = produtosIniciais;
         let afiliadosBase = [];
-        let taxasComissao = { taxaComissao: 35, taxaPatrocinador: 10 };
+        let taxasComissao = { taxaComissao: 35, taxaPatrocinador: 10, taxaAvo: 5 };
 
         // ===== SUPORTE (WhatsApp) E TROCA OBRIGATÓRIA DE SENHA =====
         let whatsappSuporte = '';
@@ -734,7 +738,7 @@
                 const lista = await api('GET', '/api/produtos');
                 if (Array.isArray(lista) && lista.length) produtos = lista;
                 const cfg = await api('GET', '/api/config');
-                taxasComissao = { taxaComissao: cfg.taxaComissao, taxaPatrocinador: cfg.taxaPatrocinador };
+                taxasComissao = { taxaComissao: cfg.taxaComissao, taxaPatrocinador: cfg.taxaPatrocinador, taxaAvo: cfg.taxaAvo };
                 whatsappSuporte = cfg.whatsappSuporte || '';
                 configurarSuporte();
             } catch (e) {
@@ -1034,26 +1038,28 @@
         async function atualizarTaxasNaTela() {
             try {
                 const cfg = await api('GET', '/api/config');
-                taxasComissao = { taxaComissao: cfg.taxaComissao, taxaPatrocinador: cfg.taxaPatrocinador };
+                taxasComissao = { taxaComissao: cfg.taxaComissao, taxaPatrocinador: cfg.taxaPatrocinador, taxaAvo: cfg.taxaAvo };
                 document.getElementById('af_valor_minimo_saque').value = cfg.valorMinimoSaque;
             } catch (err) {
                 console.warn(err.message);
             }
             document.getElementById('af_comissao_direta').value = taxasComissao.taxaComissao;
             document.getElementById('af_comissao_patrocinador').value = taxasComissao.taxaPatrocinador;
+            document.getElementById('af_comissao_avo').value = taxasComissao.taxaAvo;
         }
 
         async function salvarTaxasComissao() {
             const novas = {
                 taxaComissao: parseFloat(document.getElementById('af_comissao_direta').value),
-                taxaPatrocinador: parseFloat(document.getElementById('af_comissao_patrocinador').value)
+                taxaPatrocinador: parseFloat(document.getElementById('af_comissao_patrocinador').value),
+                taxaAvo: parseFloat(document.getElementById('af_comissao_avo').value)
             };
             try {
                 if (Object.values(novas).some(v => !Number.isFinite(v) || v < 0 || v > 100)) {
                     throw new Error('Informe cada comissão entre 0% e 100%.');
                 }
-                if (novas.taxaComissao + novas.taxaPatrocinador + 5 > 100) {
-                    throw new Error('A soma das comissões distribuídas, incluindo os 5% do avô, não pode ultrapassar 100%.');
+                if (novas.taxaComissao + novas.taxaPatrocinador + novas.taxaAvo > 100) {
+                    throw new Error('A soma das comissões direta, do patrocinador e do avô não pode ultrapassar 100%.');
                 }
                 await api('PUT', '/api/config', novas);
                 taxasComissao = novas;

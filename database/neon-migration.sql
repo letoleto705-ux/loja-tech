@@ -87,6 +87,13 @@ ON CONFLICT (chave) DO NOTHING;
 
 DELETE FROM config WHERE chave = 'pixChave';
 
+INSERT INTO config (chave, valor)
+VALUES
+  ('taxaComissao', '35'::jsonb),
+  ('taxaPatrocinador', '10'::jsonb),
+  ('taxaAvo', '5'::jsonb)
+ON CONFLICT (chave) DO NOTHING;
+
 UPDATE config
 SET valor = (
   SELECT jsonb_agg(
