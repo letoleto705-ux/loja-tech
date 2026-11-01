@@ -45,6 +45,12 @@ pool.on('error', err => console.error('ERRO NO NEON:', err));
 
 // ===== Utilitários =====
 const norm = t => (t == null ? '' : String(t).trim().toLowerCase());
+const normUsuario = t => String(t == null ? '' : t)
+  .normalize('NFD')
+  .replace(/[\u0300-\u036f]/g, '')
+  .trim()
+  .toLowerCase()
+  .replace(/\s+/g, '-');
 const txt = (t, max = 120) => String(t == null ? '' : t).trim().slice(0, max);
 const RE_USUARIO = /^[a-z0-9_.-]{3,30}$/;
 const RE_EMAIL = /^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$/;
@@ -96,6 +102,17 @@ const normalizarCaminhoImagem = valor => {
 const hash256 = s => crypto.createHash('sha256').update(String(s)).digest();
 const igual = (a, b) => crypto.timingSafeEqual(hash256(a), hash256(b));
 const soDigitos = t => String(t == null ? '' : t).replace(/\D/g, '');
+const cpfValido = valor => {
+  const cpf = soDigitos(valor);
+  if (!/^\d{11}$/.test(cpf) || /^(\d)\1{10}$/.test(cpf)) return false;
+  const calcularDigito = tamanho => {
+    let soma = 0;
+    for (let i = 0; i < tamanho; i++) soma += Number(cpf[i]) * (tamanho + 1 - i);
+    const resto = (soma * 10) % 11;
+    return resto === 10 ? 0 : resto;
+  };
+  return calcularDigito(9) === Number(cpf[9]) && calcularDigito(10) === Number(cpf[10]);
+};
 const RE_TEL = /^\d{10,13}$/;
 const paraWhatsApp = t => { const d = soDigitos(t); return d.length === 10 || d.length === 11 ? '55' + d : d; };
 const gerarToken = (usuario, perfil, trocar = false) => jwt.sign({ usuario, perfil, trocar }, JWT_SECRET, { expiresIn: trocar ? '1h' : '7d' });
@@ -504,7 +521,7 @@ function exigirUmaLinhaPersistida(resultado, tabela) {
 }
 
 app.post('/api/registrar', limitarTentativas, wrap(async (req, res) => {
-  const usuario = norm(req.body.usuario);
+  const usuario = normUsuario(req.body.usuario);
   const nome = txt(req.body.nome, 100), email = txt(req.body.email, 120);
   const cpf = txt(req.body.cpf, 20), pix = txt(req.body.pix, 100);
   const telefone = soDigitos(req.body.telefone);
@@ -537,7 +554,7 @@ app.post('/api/registrar', limitarTentativas, wrap(async (req, res) => {
 
     if (perfil === 'afiliado') {
       let patrocinadorId = 'admin', patrocinadorUsuario = null;
-      const indicador = norm(req.body.indicador);
+      const indicador = normUsuario(req.body.indicador);
       if (indicador && indicador !== 'admin' && indicador !== usuario) {
         const pai = (await client.query('SELECT id, usuario FROM afiliados WHERE usuario = $1', [indicador])).rows[0];
         if (pai) {
@@ -572,7 +589,7 @@ app.post('/api/registrar', limitarTentativas, wrap(async (req, res) => {
 }));
 
 app.post('/api/login', limitarTentativas, wrap(async (req, res) => {
-  const usuario = norm(req.body.usuario);
+  const usuario = normUsuario(req.body.usuario);
   const senha = String(req.body.senha || '');
 
   if (usuario === ADMIN_USUARIO && igual(senha, ADMIN_SENHA)) {
@@ -630,7 +647,7 @@ app.post('/api/afiliar', auth, wrap(async (req, res) => {
     }
 
     let patrocinadorId = 'admin', patrocinadorUsuario = null;
-    const indicador = norm(req.body.indicador);
+    const indicador = normUsuario(req.body.indicador);
     if (indicador && indicador !== 'admin' && indicador !== usuario) {
       const pai = (await client.query('SELECT id, usuario FROM afiliados WHERE usuario = $1', [indicador])).rows[0];
       if (pai) { patrocinadorId = pai.id; patrocinadorUsuario = pai.usuario; }
@@ -652,7 +669,7 @@ app.post('/api/afiliar', auth, wrap(async (req, res) => {
 }));
 
 app.get('/api/patrocinador/:usuario', limitarTentativas, wrap(async (req, res) => {
-  const u = norm(req.params.usuario);
+  const u = normUsuario(req.params.usuario);
   if (u === 'admin' || u === ADMIN_USUARIO) return res.json({ usuario: 'admin', nome: 'Central (Administrador)' });
   const r = await q('SELECT usuario, nome FROM afiliados WHERE usuario = $1 OR lower(id) = $1', [u]);
   if (!r.rows.length) return res.status(404).json({ erro: 'Patrocinador não encontrado.' });
@@ -892,12 +909,12 @@ app.post('/api/checkout', limitarTentativas, wrap(async (req, res) => {
   const nome = txt(req.body.nome, 100), email = txt(req.body.email, 120);
   const cpf = soDigitos(req.body.cpf);
   const forma = norm(req.body.forma);
-  let afiliado = norm(req.body.afiliado).replace(/[^a-z0-9_.-]/g, '');
+  let afiliado = normUsuario(req.body.afiliado).replace(/[^a-z0-9_.-]/g, '');
   const codigoCupom = txt(req.body.codigoCupom, 50).toUpperCase();
 
   if (!nome || !semTags(nome)) return res.status(400).json({ erro: 'Informe seu nome.' });
   if (!RE_EMAIL.test(email)) return res.status(400).json({ erro: 'E-mail inválido.' });
-  if (cpf.length !== 11) return res.status(400).json({ erro: 'CPF inválido.' });
+  if (!cpfValido(cpf)) return res.status(400).json({ erro: 'CPF inválido. Informe um CPF válido com 11 números.' });
   if (!FORMAS.includes(forma)) return res.status(400).json({ erro: 'Forma de pagamento inválida.' });
 
   const produtos = await lerConfig('produtos', PRODUTOS_INICIAIS);
@@ -1004,7 +1021,7 @@ async function sincronizarPagamentoMercadoPago(idPagamento, pagamentoRecebido) {
   const statusPagamento = String(pagamento.status || '').toLowerCase();
   await q('UPDATE pedidos SET payment_status = $2 WHERE id = $1', [pedido.id, statusPagamento]);
   if (statusPagamento === 'approved' && pedido.status === 'aguardando') {
-    await confirmarPedido(pedido.id);
+    await confirmarPedido(pedido.id, pagamento.id || idPagamento);
   }
   return { pedidoId: pedido.id, statusPagamento };
 }
@@ -1017,12 +1034,19 @@ app.get('/api/checkout/:id/status', limitarConsultasStatusCheckout, wrap(async (
   res.json({ pedidoId: pedido.id, status: pedido.status });
 }));
 
-async function confirmarPedido(id) {
+async function confirmarPedido(id, paymentIdRecebido) {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
     const ped = (await client.query('SELECT * FROM pedidos WHERE id = $1 FOR UPDATE', [id])).rows[0];
     if (!ped || ped.status !== 'aguardando') { await client.query('ROLLBACK'); return; }
+    const paymentId = txt(paymentIdRecebido || ped.payment_id, 100);
+    const cpf = soDigitos(ped.cliente_cpf);
+    if (!paymentId) throw new Error(`Pagamento aprovado sem payment_id para o pedido ${ped.id}.`);
+    if (!cpfValido(cpf)) throw new Error(`Pedido ${ped.id} possui CPF ausente ou inválido para ativação da licença.`);
+    if (!ped.cliente_email || !ped.produto_nome || !Number.isFinite(Number(ped.valor))) {
+      throw new Error(`Pedido ${ped.id} não possui os dados obrigatórios para sincronizar a licença.`);
+    }
     
     const taxas = await lerTaxas(client);
     const valor = Number(ped.valor);
@@ -1044,9 +1068,21 @@ async function confirmarPedido(id) {
     }
     const central = dinheiro(valor - vendedor - patrocinador - avo);
 
-    await client.query(`UPDATE pedidos SET status = 'pago', comissao = $2, patrocinador_usuario = $3,
+    await client.query(`UPDATE pedidos SET status = 'pago', payment_id = $8, comissao = $2, patrocinador_usuario = $3,
        comissao_patrocinador = $4, avo_usuario = $5, comissao_avo = $6, comissao_central = $7, pago_em = now() WHERE id = $1`,
-      [ped.id, vendedor, patrocinadorUsuario, patrocinador, avoUsuario, avo, central]);
+      [ped.id, vendedor, patrocinadorUsuario, patrocinador, avoUsuario, avo, central, paymentId]);
+    const vendaSincronizada = await client.query(`INSERT INTO vendas_aprovadas (payment_id, cpf, email, produto, valor, status, ativa)
+      VALUES ($1, $2, $3, $4, $5, 'APROVADO', true)
+      ON CONFLICT (payment_id) DO UPDATE SET
+        cpf = EXCLUDED.cpf,
+        email = EXCLUDED.email,
+        produto = EXCLUDED.produto,
+        valor = EXCLUDED.valor,
+        status = EXCLUDED.status,
+        ativa = EXCLUDED.ativa
+      RETURNING payment_id`,
+    [paymentId, cpf, ped.cliente_email, ped.produto_nome, dinheiro(ped.valor)]);
+    exigirUmaLinhaPersistida(vendaSincronizada, 'vendas_aprovadas');
     await client.query('COMMIT');
   } catch (e) {
     await client.query('ROLLBACK');

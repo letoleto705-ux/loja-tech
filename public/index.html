@@ -810,6 +810,15 @@
             return txt ? txt.toString().trim().toLowerCase() : '';
         }
 
+        function normalizarUsuario(valor) {
+            return String(valor || '')
+                .normalize('NFD')
+                .replace(/[\u0300-\u036f]/g, '')
+                .trim()
+                .toLowerCase()
+                .replace(/\s+/g, '-');
+        }
+
         function sincronizarParametrosURL() {
             const urlParams = new URLSearchParams(window.location.search);
             let ref = urlParams.get('ref');
@@ -850,7 +859,9 @@
 
         async function processarLoginPortao(e) {
             e.preventDefault();
-            const usuarioInput = normalizarTexto(document.getElementById('portao_usuario').value);
+            const campoUsuario = document.getElementById('portao_usuario');
+            const usuarioInput = normalizarUsuario(campoUsuario.value);
+            campoUsuario.value = usuarioInput;
             const senhaInput = document.getElementById('portao_senha').value;
             const btn = document.getElementById('btnPortaoSubmit');
             btn.disabled = true;

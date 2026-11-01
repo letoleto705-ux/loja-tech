@@ -360,6 +360,14 @@
         function normalizarTexto(texto) {
             return texto ? texto.toString().trim().toLowerCase() : '';
         }
+        function normalizarUsuario(valor) {
+            return String(valor || '')
+                .normalize('NFD')
+                .replace(/[\u0300-\u036f]/g, '')
+                .trim()
+                .toLowerCase()
+                .replace(/\s+/g, '-');
+        }
         function brl(n) {
             return 'R$ ' + (Number(n) || 0).toFixed(2).replace('.', ',');
         }
@@ -455,7 +463,9 @@
 
         async function processarAutenticacao(e) {
             e.preventDefault();
-            const usuario = normalizarTexto(document.getElementById('auth_usuario').value);
+            const campoUsuario = document.getElementById('auth_usuario');
+            const usuario = normalizarUsuario(campoUsuario.value);
+            campoUsuario.value = usuario;
             const senha = document.getElementById('auth_senha').value;
             const nome = document.getElementById('auth_nome').value.trim();
             const cpf = document.getElementById('auth_cpf').value.trim();

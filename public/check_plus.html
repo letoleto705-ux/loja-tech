@@ -644,14 +644,26 @@
             const nome = document.getElementById('chk_nome').value.trim();
             const email = document.getElementById('chk_email').value.trim();
             const cpf = document.getElementById('chk_cpf').value.trim();
-            if (!nome || !email || soDigitosLocal(cpf).length !== 11) {
-                throw new Error('Preencha seu nome, e-mail válido e CPF com 11 números.');
+            if (!nome || !email || !cpfValidoLocal(cpf)) {
+                throw new Error('Preencha seu nome, e-mail válido e informe um CPF válido.');
             }
             return { nome, email, cpf };
         }
 
         function soDigitosLocal(valor) {
             return String(valor || '').replace(/\D/g, '');
+        }
+
+        function cpfValidoLocal(valor) {
+            const cpf = soDigitosLocal(valor);
+            if (!/^\d{11}$/.test(cpf) || /^(\d)\1{10}$/.test(cpf)) return false;
+            const calcularDigito = tamanho => {
+                let soma = 0;
+                for (let i = 0; i < tamanho; i++) soma += Number(cpf[i]) * (tamanho + 1 - i);
+                const resto = (soma * 10) % 11;
+                return resto === 10 ? 0 : resto;
+            };
+            return calcularDigito(9) === Number(cpf[9]) && calcularDigito(10) === Number(cpf[10]);
         }
 
         async function registrarPedido(cliente, forma) {
