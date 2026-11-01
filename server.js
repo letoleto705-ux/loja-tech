@@ -831,6 +831,7 @@ app.delete('/api/admin/notificacoes/:id', auth, soAdmin, wrap(async (req, res) =
 
 // ----- Checkout, pedidos e confirmação de pagamento -----
 const FORMAS = ['pix', 'cartao', 'debito'];
+const MAX_PARCELAS_CARTAO = 12;
 
 // 1) Cliente finaliza o checkout: registra o pedido como AGUARDANDO (sem comissão).
 //    Preço vem do banco (nunca do navegador). Afiliado inválido ou o próprio comprador => venda direta.
@@ -967,9 +968,10 @@ app.post('/api/checkout/:id/pagar', limitarTentativas, wrap(async (req, res) => 
     const paymentMethodId = txt(formData && formData.payment_method_id, 60);
     const issuerId = txt(formData && formData.issuer_id, 30);
     const installments = Number(formData && formData.installments);
+    const limiteParcelas = metodo === 'cartao' ? MAX_PARCELAS_CARTAO : 1;
     if (!cardToken || !/^[a-zA-Z0-9_-]+$/.test(cardToken)
       || !/^[a-zA-Z0-9_-]+$/.test(paymentMethodId)
-      || !Number.isInteger(installments) || installments < 1 || installments > 12) {
+      || !Number.isInteger(installments) || installments < 1 || installments > limiteParcelas) {
       return res.status(400).json({ erro: 'Os dados tokenizados do cartão são inválidos. Revise os dados e tente novamente.' });
     }
     if (formData.transaction_amount !== undefined
