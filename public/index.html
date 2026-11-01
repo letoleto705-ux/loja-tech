@@ -51,62 +51,75 @@
             <!-- ESQUERDA: LOGIN / CADASTRO -->
             <div class="order-2 lg:order-1 flex justify-center lg:justify-start">
                 <div class="bg-white rounded-3xl w-full max-w-md p-6 sm:p-8 shadow-2xl border border-slate-200">
+                    <div class="flex justify-end mb-4">
+                        <label for="seletorIdioma" class="flex items-center gap-2 text-[11px] font-bold text-slate-500">
+                            <span data-i18n="languageLabel">Idioma</span>
+                            <select id="seletorIdioma" onchange="alterarIdioma(this.value)" class="rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-xs text-slate-700 outline-none focus:border-orange-500">
+                                <option value="pt-BR">Português</option>
+                                <option value="en">English</option>
+                                <option value="es">Español</option>
+                                <option value="zh">中文</option>
+                                <option value="it">Italiano</option>
+                                <option value="fr">Français</option>
+                            </select>
+                        </label>
+                    </div>
                     <div class="text-center space-y-3 mb-6">
                         <div class="w-14 h-14 rounded-2xl gradient-orange flex items-center justify-center text-white shadow-orange-glow mx-auto">
                             <i class="fa-solid fa-utensils text-2xl"></i>
                         </div>
                         <div>
                             <h2 class="text-2xl font-black text-slate-900 tracking-tight">LOJA TECH</h2>
-                            <p id="portaoSubtitulo" class="text-xs text-slate-500 font-semibold uppercase tracking-wider">Identifique-se para acessar a plataforma</p>
+                            <p id="portaoSubtitulo" data-i18n="loginSubtitle" class="text-xs text-slate-500 font-semibold uppercase tracking-wider">Identifique-se para acessar a plataforma</p>
                         </div>
                     </div>
 
         <form id="formPortaoEntrada" onsubmit="processarLoginPortao(event)" class="space-y-4">
             <div id="boxCamposNovoCliente" class="hidden space-y-3 pt-2 border-t border-slate-100">
                 <div>
-                    <label class="block mb-1 text-[11px] font-bold uppercase tracking-wider text-slate-700">Nome Completo</label>
-                    <input type="text" id="portao_nome" disabled placeholder="Seu nome completo" class="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-orange-500 outline-none text-xs font-semibold bg-slate-50">
+                    <label data-i18n="fullName" class="block mb-1 text-[11px] font-bold uppercase tracking-wider text-slate-700">Nome Completo</label>
+                    <input type="text" id="portao_nome" disabled data-i18n-placeholder="fullNamePlaceholder" placeholder="Seu nome completo" class="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-orange-500 outline-none text-xs font-semibold bg-slate-50">
                 </div>
                 <div>
-                    <label class="block mb-1 text-[11px] font-bold uppercase tracking-wider text-slate-700">E-mail</label>
-                    <input type="email" id="portao_email" disabled placeholder="seu@email.com" class="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-orange-500 outline-none text-xs font-semibold bg-slate-50">
+                    <label data-i18n="email" class="block mb-1 text-[11px] font-bold uppercase tracking-wider text-slate-700">E-mail</label>
+                    <input type="email" id="portao_email" disabled data-i18n-placeholder="emailPlaceholder" placeholder="seu@email.com" class="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-orange-500 outline-none text-xs font-semibold bg-slate-50">
                 </div>
                 <div>
-                    <label class="block mb-1 text-[11px] font-bold uppercase tracking-wider text-slate-700">Telefone / WhatsApp (com DDD)</label>
-                    <input type="tel" id="portao_telefone" disabled placeholder="(11) 91234-5678" class="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-orange-500 outline-none text-xs font-semibold bg-slate-50">
+                    <label data-i18n="phone" class="block mb-1 text-[11px] font-bold uppercase tracking-wider text-slate-700">Telefone / WhatsApp (com DDD)</label>
+                    <input type="tel" id="portao_telefone" disabled data-i18n-placeholder="phonePlaceholder" placeholder="(11) 91234-5678" class="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-orange-500 outline-none text-xs font-semibold bg-slate-50">
                 </div>
                 <div>
-                    <label class="block mb-1 text-[11px] font-bold uppercase tracking-wider text-slate-700">CPF</label>
-                    <input type="text" id="portao_cpf" disabled placeholder="000.000.000-00" class="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-orange-500 outline-none text-xs font-semibold bg-slate-50">
+                    <label data-i18n="cpf" class="block mb-1 text-[11px] font-bold uppercase tracking-wider text-slate-700">CPF</label>
+                    <input type="text" id="portao_cpf" disabled data-i18n-placeholder="cpfPlaceholder" placeholder="000.000.000-00" class="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-orange-500 outline-none text-xs font-semibold bg-slate-50">
                 </div>
             </div>
 
             <div>
-                <label class="block mb-1 text-[11px] font-bold uppercase tracking-wider text-slate-700">Usuário / Apelido</label>
-                <input type="text" id="portao_usuario" required placeholder="Digite seu usuário ou admin" class="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-orange-500 outline-none text-xs font-semibold bg-slate-50">
+                <label data-i18n="username" class="block mb-1 text-[11px] font-bold uppercase tracking-wider text-slate-700">Usuário / Apelido</label>
+                <input type="text" id="portao_usuario" required data-i18n-placeholder="usernamePlaceholder" placeholder="Digite seu usuário ou admin" class="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-orange-500 outline-none text-xs font-semibold bg-slate-50">
             </div>
 
             <div>
-                <label class="block mb-1 text-[11px] font-bold uppercase tracking-wider text-slate-700">Senha</label>
-                <input type="password" id="portao_senha" required placeholder="••••••••" class="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-orange-500 outline-none text-xs font-semibold bg-slate-50">
+                <label data-i18n="password" class="block mb-1 text-[11px] font-bold uppercase tracking-wider text-slate-700">Senha</label>
+                <input type="password" id="portao_senha" required data-i18n-placeholder="passwordPlaceholder" placeholder="••••••••" class="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-orange-500 outline-none text-xs font-semibold bg-slate-50">
             </div>
 
             <button type="submit" id="btnPortaoSubmit" class="w-full py-4 text-xs font-extrabold uppercase tracking-wider text-white gradient-orange rounded-xl shadow-orange-glow hover:opacity-95 transition">
-                Entrar na Loja Tech
+                <span data-i18n="loginButton">Entrar na Loja Tech</span>
             </button>
         </form>
 
                     <div class="mt-6 pt-4 border-t border-slate-100 text-center space-y-2">
                         <button type="button" onclick="alternarModoPortao()" id="btnPortaoAlternar" class="text-xs font-bold text-orange-600 hover:underline">
-                            Primeiro acesso? Crie sua conta de cliente
+                            <span data-i18n="toggleToSignup">Primeiro acesso? Crie sua conta de cliente</span>
                         </button>
                         <div class="text-[11px] text-slate-500 pt-1">
-                            Esqueceu a senha?
-                            <a id="linkEsqueciSenha" href="#" target="_blank" rel="noopener" class="hidden font-bold text-orange-600 hover:underline">Fale com o suporte</a>
-                            <span id="textoEsqueciSemZap" class="font-semibold">Entre em contato com o suporte da loja.</span>
+                            <span data-i18n="forgotPassword">Esqueceu a senha?</span>
+                            <a id="linkEsqueciSenha" href="#" target="_blank" rel="noopener" class="hidden font-bold text-orange-600 hover:underline" data-i18n="contactSupport">Fale com o suporte</a>
+                            <span id="textoEsqueciSemZap" class="font-semibold" data-i18n="contactStoreSupport">Entre em contato com o suporte da loja.</span>
                         </div>
                         <div class="text-[10px] text-slate-400">
-                            <i class="fa-solid fa-shield-halved mr-1"></i> Central & Filiais - Sistema Integrado
+                            <i class="fa-solid fa-shield-halved mr-1"></i> <span data-i18n="integratedSystem">Central & Filiais - Sistema Integrado</span>
                         </div>
                     </div>
                 </div>
@@ -114,43 +127,43 @@
 
             <!-- DIREITA: MENSAGEM DE BOAS-VINDAS -->
             <div class="order-1 lg:order-2 text-center lg:text-left space-y-6 text-white">
-                <span class="inline-block px-4 py-1.5 rounded-full bg-orange-500/15 text-orange-300 text-xs font-extrabold uppercase tracking-widest border border-orange-400/30">
+                <span data-i18n="heroEyebrow" class="inline-block px-4 py-1.5 rounded-full bg-orange-500/15 text-orange-300 text-xs font-extrabold uppercase tracking-widest border border-orange-400/30">
                     Tecnologia Profissional para Food Service
                 </span>
 
                 <h2 class="text-3xl sm:text-5xl font-black tracking-tight leading-tight">
-                    Sistemas de Gestão, Ficha Técnica e CMV <span class="text-orange-500">Sob Medida</span>
+                    <span data-i18n="heroTitle">Sistemas de Gestão, Ficha Técnica e CMV</span> <span class="text-orange-500" data-i18n="heroTitleAccent">Sob Medida</span>
                 </h2>
 
-                <p class="text-slate-300 text-base sm:text-lg max-w-xl mx-auto lg:mx-0 font-normal">
+                <p data-i18n="heroDescription" class="text-slate-300 text-base sm:text-lg max-w-xl mx-auto lg:mx-0 font-normal">
                     Confira o catálogo oficial dos softwares da Tech e escolha a versão ideal para multiplicar o lucro do seu restaurante ou delivery.
                 </p>
 
                 <div class="bg-white/5 border border-white/10 rounded-3xl p-5 sm:p-6 max-w-xl mx-auto lg:mx-0 text-left space-y-4 backdrop-blur-sm">
                     <h3 class="text-xl font-black text-white flex items-center gap-2">
                         <i class="fa-solid fa-hand-sparkles text-orange-400"></i>
-                        <span>Seja bem-vindo à Loja Tech!</span>
+                        <span data-i18n="welcomeTitle">Seja bem-vindo à Loja Tech!</span>
                     </h3>
                     <ul class="space-y-3 text-sm text-slate-200">
                         <li class="flex gap-3">
                             <span class="w-7 h-7 shrink-0 rounded-full gradient-orange text-white flex items-center justify-center text-xs font-black">1</span>
-                            <span><strong class="text-white">Já tem conta?</strong> Digite seu usuário e senha ao lado e entre para ver o catálogo.</span>
+                            <span><strong data-i18n="step1Title" class="text-white">Já tem conta?</strong> <span data-i18n="step1Text">Digite seu usuário e senha ao lado e entre para ver o catálogo.</span></span>
                         </li>
                         <li class="flex gap-3">
                             <span class="w-7 h-7 shrink-0 rounded-full gradient-orange text-white flex items-center justify-center text-xs font-black">2</span>
-                            <span><strong class="text-white">Primeira vez por aqui?</strong> Clique em <em>"Crie sua conta de cliente"</em>. É rápido e gratuito.</span>
+                            <span><strong data-i18n="step2Title" class="text-white">Primeira vez por aqui?</strong> <span data-i18n-html="step2Text">Clique em <em>"Crie sua conta de cliente"</em>. É rápido e gratuito.</span></span>
                         </li>
                         <li class="flex gap-3">
                             <span class="w-7 h-7 shrink-0 rounded-full gradient-orange text-white flex items-center justify-center text-xs font-black">3</span>
-                            <span><strong class="text-white">Quer ganhar indicando?</strong> Depois de entrar, clique em <em>"Afilia-se"</em> e faça parte da nossa rede de afiliados.</span>
+                            <span><strong data-i18n="step3Title" class="text-white">Quer ganhar indicando?</strong> <span data-i18n-html="step3Text">Depois de entrar, clique em <em>"Afilia-se"</em> e faça parte da nossa rede de afiliados.</span></span>
                         </li>
                     </ul>
                 </div>
 
                 <div class="flex flex-wrap justify-center lg:justify-start gap-3 text-xs font-bold text-slate-200">
-                    <span class="px-3 py-2 rounded-xl bg-white/5 border border-white/10"><i class="fa-solid fa-clipboard-list text-orange-400 mr-1.5"></i> Ficha Técnica</span>
-                    <span class="px-3 py-2 rounded-xl bg-white/5 border border-white/10"><i class="fa-solid fa-chart-line text-orange-400 mr-1.5"></i> CMV e Lucro</span>
-                    <span class="px-3 py-2 rounded-xl bg-white/5 border border-white/10"><i class="fa-solid fa-handshake text-orange-400 mr-1.5"></i> Programa de Afiliados</span>
+                    <span class="px-3 py-2 rounded-xl bg-white/5 border border-white/10"><i class="fa-solid fa-clipboard-list text-orange-400 mr-1.5"></i> <span data-i18n="featureTechnicalSheet">Ficha Técnica</span></span>
+                    <span class="px-3 py-2 rounded-xl bg-white/5 border border-white/10"><i class="fa-solid fa-chart-line text-orange-400 mr-1.5"></i> <span data-i18n="featureCostProfit">CMV e Lucro</span></span>
+                    <span class="px-3 py-2 rounded-xl bg-white/5 border border-white/10"><i class="fa-solid fa-handshake text-orange-400 mr-1.5"></i> <span data-i18n="featureAffiliates">Programa de Afiliados</span></span>
                 </div>
             </div>
 
@@ -438,6 +451,196 @@
 
         let modoCadastroPortao = false;
         let usuarioSessaoAtual = null;
+        const IDIOMA_PADRAO = 'pt-BR';
+        const traducoes = {
+            'pt-BR': {
+                pageTitle: 'Tech - Sistema de Gestão para o Seu Negócio',
+                languageLabel: 'Idioma', loginSubtitle: 'Identifique-se para acessar a plataforma',
+                fullName: 'Nome completo', fullNamePlaceholder: 'Seu nome completo', email: 'E-mail',
+                emailPlaceholder: 'seu@email.com', phone: 'Telefone / WhatsApp (com DDD)',
+                phonePlaceholder: '(11) 91234-5678', cpf: 'CPF', cpfPlaceholder: '000.000.000-00',
+                username: 'Usuário / Apelido', usernamePlaceholder: 'Digite seu usuário ou admin',
+                password: 'Senha', passwordPlaceholder: 'Digite sua senha', loginButton: 'Entrar na Loja Tech',
+                createAccountButton: 'Criar conta de cliente', toggleToSignup: 'Primeiro acesso? Crie sua conta de cliente',
+                toggleToLogin: 'Já possui uma conta? Faça login', signupSubtitle: 'Crie sua conta de cliente gratuita',
+                forgotPassword: 'Esqueceu a senha?', contactSupport: 'Fale com o suporte',
+                contactStoreSupport: 'Entre em contato com o suporte da loja.',
+                integratedSystem: 'Central & Filiais - Sistema Integrado', heroEyebrow: 'Tecnologia profissional para Food Service',
+                heroTitle: 'Sistemas de Gestão, Ficha Técnica e CMV', heroTitleAccent: 'Sob medida',
+                heroDescription: 'Confira o catálogo oficial dos softwares da Tech e escolha a versão ideal para multiplicar o lucro do seu restaurante ou delivery.',
+                welcomeTitle: 'Seja bem-vindo à Loja Tech!', step1Title: 'Já tem conta?',
+                step1Text: 'Digite seu usuário e senha ao lado e entre para ver o catálogo.',
+                step2Title: 'Primeira vez por aqui?',
+                step2Text: 'Clique em <em>"Crie sua conta de cliente"</em>. É rápido e gratuito.',
+                step3Title: 'Quer ganhar indicando?',
+                step3Text: 'Depois de entrar, clique em <em>"Afilia-se"</em> e faça parte da nossa rede de afiliados.',
+                featureTechnicalSheet: 'Ficha Técnica', featureCostProfit: 'CMV e Lucro',
+                featureAffiliates: 'Programa de Afiliados', waiting: 'Aguarde...'
+            },
+            en: {
+                pageTitle: 'Tech - Business Management System',
+                languageLabel: 'Language', loginSubtitle: 'Sign in to access the platform',
+                fullName: 'Full name', fullNamePlaceholder: 'Your full name', email: 'Email',
+                emailPlaceholder: 'you@email.com', phone: 'Phone / WhatsApp (with area code)',
+                phonePlaceholder: '+1 555 123 4567', cpf: 'CPF (Brazilian tax ID)', cpfPlaceholder: '000.000.000-00',
+                username: 'Username / Nickname', usernamePlaceholder: 'Enter your username or admin',
+                password: 'Password', passwordPlaceholder: 'Enter your password', loginButton: 'Enter Tech Store',
+                createAccountButton: 'Create customer account', toggleToSignup: 'New here? Create your customer account',
+                toggleToLogin: 'Already have an account? Sign in', signupSubtitle: 'Create your free customer account',
+                forgotPassword: 'Forgot your password?', contactSupport: 'Contact support',
+                contactStoreSupport: 'Contact the store support team.',
+                integratedSystem: 'Central & Branches - Integrated System', heroEyebrow: 'Professional technology for food service',
+                heroTitle: 'Management Systems, Recipe Costing & COGS', heroTitleAccent: 'Tailored to you',
+                heroDescription: 'Browse Tech’s official software catalog and choose the right edition to grow your restaurant or delivery business.',
+                welcomeTitle: 'Welcome to Tech Store!', step1Title: 'Already have an account?',
+                step1Text: 'Enter your username and password to access the catalog.',
+                step2Title: 'First time here?',
+                step2Text: 'Click <em>"Create your customer account"</em>. It’s quick and free.',
+                step3Title: 'Want to earn by referring?',
+                step3Text: 'After signing in, click <em>"Become an affiliate"</em> and join our affiliate network.',
+                featureTechnicalSheet: 'Recipe Costing', featureCostProfit: 'COGS & Profit',
+                featureAffiliates: 'Affiliate Program', waiting: 'Please wait...'
+            },
+            es: {
+                pageTitle: 'Tech - Sistema de gestión empresarial',
+                languageLabel: 'Idioma', loginSubtitle: 'Identifícate para acceder a la plataforma',
+                fullName: 'Nombre completo', fullNamePlaceholder: 'Tu nombre completo', email: 'Correo electrónico',
+                emailPlaceholder: 'tu@email.com', phone: 'Teléfono / WhatsApp (con código de área)',
+                phonePlaceholder: '+34 600 123 456', cpf: 'CPF (identificación fiscal brasileña)', cpfPlaceholder: '000.000.000-00',
+                username: 'Usuario / Apodo', usernamePlaceholder: 'Escribe tu usuario o admin',
+                password: 'Contraseña', passwordPlaceholder: 'Escribe tu contraseña', loginButton: 'Entrar en Tech Store',
+                createAccountButton: 'Crear cuenta de cliente', toggleToSignup: '¿Primera vez? Crea tu cuenta de cliente',
+                toggleToLogin: '¿Ya tienes una cuenta? Inicia sesión', signupSubtitle: 'Crea gratis tu cuenta de cliente',
+                forgotPassword: '¿Olvidaste tu contraseña?', contactSupport: 'Contactar con soporte',
+                contactStoreSupport: 'Ponte en contacto con el soporte de la tienda.',
+                integratedSystem: 'Central y Sucursales - Sistema Integrado', heroEyebrow: 'Tecnología profesional para Food Service',
+                heroTitle: 'Sistemas de gestión, fichas técnicas y CMV', heroTitleAccent: 'A tu medida',
+                heroDescription: 'Consulta el catálogo oficial de software de Tech y elige la versión ideal para impulsar tu restaurante o negocio de delivery.',
+                welcomeTitle: '¡Te damos la bienvenida a Tech Store!', step1Title: '¿Ya tienes una cuenta?',
+                step1Text: 'Introduce tu usuario y contraseña para ver el catálogo.',
+                step2Title: '¿Es tu primera vez?',
+                step2Text: 'Haz clic en <em>"Crear cuenta de cliente"</em>. Es rápido y gratis.',
+                step3Title: '¿Quieres ganar recomendando?',
+                step3Text: 'Después de entrar, haz clic en <em>"Hazte afiliado"</em> y únete a nuestra red.',
+                featureTechnicalSheet: 'Ficha técnica', featureCostProfit: 'CMV y ganancias',
+                featureAffiliates: 'Programa de afiliados', waiting: 'Espera...'
+            },
+            zh: {
+                pageTitle: 'Tech - 企业管理系统',
+                languageLabel: '语言', loginSubtitle: '登录以访问平台',
+                fullName: '姓名', fullNamePlaceholder: '请输入您的姓名', email: '电子邮箱',
+                emailPlaceholder: 'you@email.com', phone: '电话 / WhatsApp（含区号）',
+                phonePlaceholder: '+86 138 0000 0000', cpf: 'CPF（巴西税号）', cpfPlaceholder: '000.000.000-00',
+                username: '用户名 / 昵称', usernamePlaceholder: '请输入用户名或 admin',
+                password: '密码', passwordPlaceholder: '请输入密码', loginButton: '进入 Tech 商店',
+                createAccountButton: '创建客户账户', toggleToSignup: '首次使用？创建客户账户',
+                toggleToLogin: '已有账户？登录', signupSubtitle: '免费创建客户账户',
+                forgotPassword: '忘记密码？', contactSupport: '联系支持',
+                contactStoreSupport: '请联系商店客服。',
+                integratedSystem: '总部与分店 - 集成系统', heroEyebrow: '餐饮服务专业技术',
+                heroTitle: '管理系统、配方成本与 CMV', heroTitleAccent: '量身定制',
+                heroDescription: '浏览 Tech 官方软件目录，选择适合您餐厅或外卖业务的版本，提升经营收益。',
+                welcomeTitle: '欢迎来到 Tech 商店！', step1Title: '已有账户？',
+                step1Text: '输入用户名和密码即可查看产品目录。',
+                step2Title: '第一次使用？',
+                step2Text: '点击 <em>“创建客户账户”</em>，快速免费注册。',
+                step3Title: '想通过推荐赚取收益？',
+                step3Text: '登录后点击 <em>“成为联盟伙伴”</em>，加入我们的联盟网络。',
+                featureTechnicalSheet: '配方成本', featureCostProfit: 'CMV 与利润',
+                featureAffiliates: '联盟计划', waiting: '请稍候...'
+            },
+            it: {
+                pageTitle: 'Tech - Sistema di gestione aziendale',
+                languageLabel: 'Lingua', loginSubtitle: 'Accedi per entrare nella piattaforma',
+                fullName: 'Nome completo', fullNamePlaceholder: 'Il tuo nome completo', email: 'E-mail',
+                emailPlaceholder: 'tu@email.com', phone: 'Telefono / WhatsApp (con prefisso)',
+                phonePlaceholder: '+39 333 123 4567', cpf: 'CPF (codice fiscale brasiliano)', cpfPlaceholder: '000.000.000-00',
+                username: 'Utente / Nickname', usernamePlaceholder: 'Inserisci il tuo utente o admin',
+                password: 'Password', passwordPlaceholder: 'Inserisci la password', loginButton: 'Entra nel Tech Store',
+                createAccountButton: 'Crea account cliente', toggleToSignup: 'Prima volta? Crea il tuo account cliente',
+                toggleToLogin: 'Hai già un account? Accedi', signupSubtitle: 'Crea gratuitamente il tuo account cliente',
+                forgotPassword: 'Password dimenticata?', contactSupport: 'Contatta il supporto',
+                contactStoreSupport: 'Contatta il supporto del negozio.',
+                integratedSystem: 'Sede centrale e filiali - Sistema integrato', heroEyebrow: 'Tecnologia professionale per la ristorazione',
+                heroTitle: 'Sistemi gestionali, schede tecniche e CMV', heroTitleAccent: 'Su misura',
+                heroDescription: 'Consulta il catalogo ufficiale dei software Tech e scegli la versione ideale per far crescere il tuo ristorante o servizio delivery.',
+                welcomeTitle: 'Benvenuto nel Tech Store!', step1Title: 'Hai già un account?',
+                step1Text: 'Inserisci utente e password per accedere al catalogo.',
+                step2Title: 'È la prima volta?',
+                step2Text: 'Clicca su <em>"Crea account cliente"</em>. È rapido e gratuito.',
+                step3Title: 'Vuoi guadagnare con le referenze?',
+                step3Text: 'Dopo l’accesso, clicca su <em>"Diventa affiliato"</em> e unisciti alla rete.',
+                featureTechnicalSheet: 'Scheda tecnica', featureCostProfit: 'CMV e profitto',
+                featureAffiliates: 'Programma affiliati', waiting: 'Attendere...'
+            },
+            fr: {
+                pageTitle: 'Tech - Système de gestion d’entreprise',
+                languageLabel: 'Langue', loginSubtitle: 'Identifiez-vous pour accéder à la plateforme',
+                fullName: 'Nom complet', fullNamePlaceholder: 'Votre nom complet', email: 'E-mail',
+                emailPlaceholder: 'vous@email.com', phone: 'Téléphone / WhatsApp (avec indicatif)',
+                phonePlaceholder: '+33 6 12 34 56 78', cpf: 'CPF (identifiant fiscal brésilien)', cpfPlaceholder: '000.000.000-00',
+                username: 'Identifiant / Pseudo', usernamePlaceholder: 'Saisissez votre identifiant ou admin',
+                password: 'Mot de passe', passwordPlaceholder: 'Saisissez votre mot de passe', loginButton: 'Entrer dans Tech Store',
+                createAccountButton: 'Créer un compte client', toggleToSignup: 'Première visite ? Créez votre compte client',
+                toggleToLogin: 'Vous avez déjà un compte ? Connectez-vous', signupSubtitle: 'Créez gratuitement votre compte client',
+                forgotPassword: 'Mot de passe oublié ?', contactSupport: 'Contacter le support',
+                contactStoreSupport: 'Contactez le support de la boutique.',
+                integratedSystem: 'Central et succursales - Système intégré', heroEyebrow: 'Technologie professionnelle pour la restauration',
+                heroTitle: 'Gestion, fiches techniques et CMV', heroTitleAccent: 'Sur mesure',
+                heroDescription: 'Découvrez le catalogue officiel des logiciels Tech et choisissez la version idéale pour développer votre restaurant ou service de livraison.',
+                welcomeTitle: 'Bienvenue chez Tech Store !', step1Title: 'Vous avez déjà un compte ?',
+                step1Text: 'Saisissez votre identifiant et votre mot de passe pour accéder au catalogue.',
+                step2Title: 'Première visite ?',
+                step2Text: 'Cliquez sur <em>"Créer un compte client"</em>. C’est rapide et gratuit.',
+                step3Title: 'Envie de gagner en recommandant ?',
+                step3Text: 'Après connexion, cliquez sur <em>"Devenir affilié"</em> et rejoignez notre réseau.',
+                featureTechnicalSheet: 'Fiche technique', featureCostProfit: 'CMV et bénéfices',
+                featureAffiliates: 'Programme d’affiliation', waiting: 'Veuillez patienter...'
+            }
+        };
+
+        function traduzir(chave) {
+            const idioma = localStorage.getItem('tech_language') || IDIOMA_PADRAO;
+            return (traducoes[idioma] || traducoes[IDIOMA_PADRAO])[chave]
+                || traducoes[IDIOMA_PADRAO][chave]
+                || chave;
+        }
+
+        function alterarIdioma(idioma) {
+            const idiomaAtual = Object.prototype.hasOwnProperty.call(traducoes, idioma) ? idioma : IDIOMA_PADRAO;
+            localStorage.setItem('tech_language', idiomaAtual);
+            document.documentElement.lang = idiomaAtual;
+            document.title = traducoes[idiomaAtual].pageTitle;
+            document.getElementById('seletorIdioma').value = idiomaAtual;
+            document.querySelectorAll('[data-i18n]').forEach(elemento => {
+                const chave = elemento.getAttribute('data-i18n');
+                const valor = traducoes[idiomaAtual][chave] || traducoes[IDIOMA_PADRAO][chave];
+                if (valor !== undefined) elemento.textContent = valor;
+            });
+            document.querySelectorAll('[data-i18n-placeholder]').forEach(elemento => {
+                const chave = elemento.getAttribute('data-i18n-placeholder');
+                const valor = traducoes[idiomaAtual][chave] || traducoes[IDIOMA_PADRAO][chave];
+                if (valor !== undefined) elemento.placeholder = valor;
+            });
+            document.querySelectorAll('[data-i18n-html]').forEach(elemento => {
+                const chave = elemento.getAttribute('data-i18n-html');
+                const valor = traducoes[idiomaAtual][chave] || traducoes[IDIOMA_PADRAO][chave];
+                if (valor !== undefined) elemento.innerHTML = valor;
+            });
+            atualizarTextoModoPortao();
+        }
+
+        function atualizarTextoModoPortao() {
+            document.getElementById('btnPortaoSubmit').innerText = modoCadastroPortao
+                ? traduzir('createAccountButton')
+                : traduzir('loginButton');
+            document.getElementById('btnPortaoAlternar').innerText = modoCadastroPortao
+                ? traduzir('toggleToLogin')
+                : traduzir('toggleToSignup');
+            document.getElementById('portaoSubtitulo').innerText = modoCadastroPortao
+                ? traduzir('signupSubtitle')
+                : traduzir('loginSubtitle');
+        }
 
         let produtos = produtosIniciais;
         let afiliadosBase = [];
@@ -520,6 +723,7 @@
         }
 
         window.addEventListener('DOMContentLoaded', async () => {
+            alterarIdioma(localStorage.getItem('tech_language') || IDIOMA_PADRAO);
             sincronizarParametrosURL();
             await carregarDadosPublicos();
             verificarSessaoInicial();
@@ -565,8 +769,6 @@
 
         function alternarModoPortao() {
             modoCadastroPortao = !modoCadastroPortao;
-            const btnSubmit = document.getElementById('btnPortaoSubmit');
-            const btnAlternar = document.getElementById('btnPortaoAlternar');
             const boxCampos = document.getElementById('boxCamposNovoCliente');
             ['portao_nome', 'portao_email', 'portao_telefone', 'portao_cpf'].forEach(id => {
                 const campo = document.getElementById(id);
@@ -575,16 +777,11 @@
             });
 
             if (modoCadastroPortao) {
-                btnSubmit.innerText = "Criar Conta de Cliente";
-                btnAlternar.innerText = "Já possui uma conta? Faça Login";
-                document.getElementById('portaoSubtitulo').innerText = "Crie sua conta de cliente gratuita";
                 boxCampos.classList.remove('hidden');
             } else {
-                btnSubmit.innerText = "Entrar na Loja Tech";
-                btnAlternar.innerText = "Primeiro acesso? Crie sua conta de cliente";
-                document.getElementById('portaoSubtitulo').innerText = "Identifique-se para acessar a plataforma";
                 boxCampos.classList.add('hidden');
             }
+            atualizarTextoModoPortao();
         }
 
         async function processarLoginPortao(e) {
@@ -592,9 +789,8 @@
             const usuarioInput = normalizarTexto(document.getElementById('portao_usuario').value);
             const senhaInput = document.getElementById('portao_senha').value;
             const btn = document.getElementById('btnPortaoSubmit');
-            const textoBtn = btn.innerText;
             btn.disabled = true;
-            btn.innerText = 'Aguarde...';
+            btn.innerText = traduzir('waiting');
 
             try {
                 let resp;
@@ -623,7 +819,7 @@
                 alert(err.message);
             } finally {
                 btn.disabled = false;
-                btn.innerText = textoBtn;
+                atualizarTextoModoPortao();
             }
         }
 

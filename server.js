@@ -301,6 +301,7 @@ async function iniciarBanco() {
   await q("ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS payment_qr_code text NOT NULL DEFAULT ''");
   await q("ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS payment_qr_code_base64 text NOT NULL DEFAULT ''");
   await q(`CREATE TABLE IF NOT EXISTS config (chave text PRIMARY KEY, valor jsonb NOT NULL)`);
+  await q("DELETE FROM config WHERE chave = 'pixChave'");
   const produtosSalvos = await lerConfig('produtos', PRODUTOS_INICIAIS);
   await gravarConfig('produtos', produtosSalvos.map(produto => ({
     ...produto,
@@ -316,6 +317,8 @@ async function iniciarBanco() {
     atualizado_em timestamptz NOT NULL DEFAULT now()
   )`);
   await q('ALTER TABLE afiliado_cupons ADD COLUMN IF NOT EXISTS data_validade date');
+  await q(`DELETE FROM afiliado_cupons c
+    WHERE NOT EXISTS (SELECT 1 FROM afiliados a WHERE a.usuario = c.afiliado_usuario)`);
   await q(`DO $$
     DECLARE chave_fk record;
             campo_afiliado smallint;
@@ -846,8 +849,7 @@ app.post('/api/checkout', limitarTentativas, wrap(async (req, res) => {
 
   res.json({
     pedidoId, produtoNome: prod.nome, valor: valorFinal, valorOriginal, desconto, codigoCupom,
-    repasseJurosComprador, forma, pixChave: String(await lerConfig('pixChave', '')),
-    afiliadoValido, downloadToken
+    repasseJurosComprador, forma, afiliadoValido, downloadToken
   });
 }));
 
@@ -1039,21 +1041,7 @@ app.get('/api/checkout/:id/status', limitarConsultasStatusCheckout, wrap(async (
   res.json({ pedidoId: pedido.id, status: pedido.status, paymentStatus: pedido.payment_status || '' });
 }));
 
-// 2) Administração dos pedidos
-app.get('/api/pedidos', auth, soAdmin, wrap(async (req, res) => {
-  const r = await q(`SELECT * FROM pedidos
-    ORDER BY (status = 'aguardando') DESC, criado_em DESC LIMIT 100`);
-  res.json(r.rows.map(p => ({
-    id: p.id, afiliado: p.afiliado_usuario, produtoId: p.produto_id, produtoNome: p.produto_nome,
-    valor: Number(p.valor), comissao: Number(p.comissao), status: p.status, forma: p.forma,
-    valorOriginal: Number(p.valor_original), cupomCodigo: p.cupom_codigo,
-    cupomDesconto: Number(p.cupom_desconto), repasseJurosComprador: p.repasse_juros_comprador,
-    clienteNome: p.cliente_nome, clienteEmail: p.cliente_email, clienteCpf: p.cliente_cpf,
-    criadoEm: p.criado_em, pagoEm: p.pago_em
-  })));
-}));
-
-// Muda o status de um pedido numa transação (só as transições válidas passam)
+// Serializa transições de status; a aprovação financeira vem somente do Mercado Pago.
 async function mudarPedido(id, de, fn) {
   const client = await pool.connect();
   try {
@@ -1071,7 +1059,6 @@ async function mudarPedido(id, de, fn) {
     client.release();
   }
 }
-const responder = (res, r) => res.status(r.codigo).json(r.codigo === 200 ? { ok: true, ...r } : { erro: r.erro });
 
 async function afiliadoPorReferencia(client, referencia) {
   const ref = norm(referencia);
@@ -1082,7 +1069,7 @@ async function afiliadoPorReferencia(client, referencia) {
   )).rows[0] || null;
 }
 
-// Confirmação de recebimento: grava os três níveis, sem comissões abaixo do avô.
+// Confirmação automática após aprovação do Mercado Pago.
 async function confirmarPedido(id) {
   return mudarPedido(id, 'aguardando', async (client, ped) => {
     const taxas = await lerTaxas();
@@ -1131,36 +1118,6 @@ async function confirmarPedido(id) {
   });
 }
 
-app.post('/api/pedidos/:id/confirmar', auth, soAdmin, wrap(async (req, res) => {
-  const pedido = (await q('SELECT payment_id FROM pedidos WHERE id = $1', [req.params.id])).rows[0];
-  if (pedido && pedido.payment_id) {
-    await sincronizarPagamentoMercadoPago(pedido.payment_id);
-    const atualizado = (await q('SELECT status FROM pedidos WHERE id = $1', [req.params.id])).rows[0];
-    if (atualizado?.status !== 'pago') {
-      return res.status(409).json({ erro: 'Este pagamento ainda não foi aprovado pelo Mercado Pago.' });
-    }
-    return res.json({ ok: true, status: 'pago' });
-  }
-  const r = await confirmarPedido(req.params.id);
-  responder(res, r);
-}));
-
-app.post('/api/pedidos/:id/cancelar', auth, soAdmin, wrap(async (req, res) => {
-  const r = await mudarPedido(req.params.id, 'aguardando', async (client, ped) => {
-    await client.query("UPDATE pedidos SET status = 'cancelado' WHERE id = $1", [ped.id]);
-    return {};
-  });
-  responder(res, r);
-}));
-
-app.post('/api/pedidos/:id/estornar', auth, soAdmin, wrap(async (req, res) => {
-  const r = await mudarPedido(req.params.id, 'pago', async (client, ped) => {
-    await client.query("UPDATE pedidos SET status = 'reembolsado' WHERE id = $1", [ped.id]);
-    return {};
-  });
-  responder(res, r);
-}));
-
 // ----- Produtos e configuração -----
 app.get('/api/produtos', wrap(async (req, res) => {
   const produtos = await lerConfig('produtos', PRODUTOS_INICIAIS);
@@ -1199,7 +1156,6 @@ app.get('/api/config', wrap(async (req, res) => {
     ...(await lerTaxas()),
     valorMinimoSaque: Number(await lerConfig('valorMinimoSaque', VALOR_MINIMO_SAQUE_PADRAO)),
     calendarioSaque,
-    pixChave: String(await lerConfig('pixChave', '')),
     whatsappSuporte: String(await lerConfig('whatsappSuporte', ''))
   });
 }));
@@ -1226,12 +1182,6 @@ app.put('/api/config', auth, soAdmin, wrap(async (req, res) => {
 
   if (req.body.taxaComissao !== undefined) await gravarConfig('taxaComissao', taxaComissao);
   if (req.body.taxaPatrocinador !== undefined) await gravarConfig('taxaPatrocinador', taxaPatrocinador);
-
-  if (req.body.pixChave !== undefined) {
-    const chave = txt(req.body.pixChave, 100);
-    if (!RE_PIX.test(chave)) return res.status(400).json({ erro: 'Chave Pix com caracteres inválidos.' });
-    await gravarConfig('pixChave', chave);
-  }
 
   if (req.body.whatsappSuporte !== undefined) {
     const d = soDigitos(req.body.whatsappSuporte);
@@ -1488,6 +1438,7 @@ app.delete('/api/afiliados/:id', auth, soAdmin, wrap(async (req, res) => {
       'UPDATE afiliados SET patrocinador_id = $2 WHERE id <> $1 AND lower(patrocinador_id) IN (lower($1), lower($3))',
       [alvo.id, alvo.patrocinador_id, alvo.usuario]);
     await client.query('DELETE FROM afiliados WHERE id = $1', [alvo.id]);
+    await client.query('DELETE FROM contas WHERE usuario = $1', [alvo.usuario]);
     await client.query('COMMIT');
     res.json({ ok: true });
   } catch (e) {

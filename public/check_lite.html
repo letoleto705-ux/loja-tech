@@ -660,7 +660,7 @@
             document.getElementById('linkDownloadProduto').classList.add('hidden');
             document.getElementById('modalPixQr').src = r.qrCodeBase64 ? `data:image/png;base64,${r.qrCodeBase64}` : '';
             document.getElementById('modalPixQr').classList.toggle('hidden', !r.qrCodeBase64);
-            pixChaveAtual = r.qrCode || r.pixChave || '';
+            pixChaveAtual = r.qrCode || '';
             document.getElementById('modalPixChave').value = pixChaveAtual;
             document.getElementById('btnCopiarPix').classList.toggle('hidden', !pixChaveAtual);
             if (r.forma === 'pix') document.getElementById('modalBoxPix').classList.remove('hidden');

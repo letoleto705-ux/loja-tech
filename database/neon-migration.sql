@@ -15,6 +15,11 @@ CREATE TABLE IF NOT EXISTS afiliado_cupons (
 ALTER TABLE afiliado_cupons
   ADD COLUMN IF NOT EXISTS data_validade DATE;
 
+DELETE FROM afiliado_cupons c
+WHERE NOT EXISTS (
+  SELECT 1 FROM afiliados a WHERE a.usuario = c.afiliado_usuario
+);
+
 DO $$
 DECLARE chave_fk RECORD;
         campo_afiliado SMALLINT;
@@ -79,6 +84,8 @@ VALUES
   ('cupom_global_ativo', 'false'::jsonb),
   ('cupom_porcentagem_maxima', '0'::jsonb)
 ON CONFLICT (chave) DO NOTHING;
+
+DELETE FROM config WHERE chave = 'pixChave';
 
 UPDATE config
 SET valor = (

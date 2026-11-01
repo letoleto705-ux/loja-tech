@@ -58,7 +58,7 @@ As porcentagens de comissão direta e de patrocinador são ajustáveis na loja: 
 - Só o patrocinador **direto** recebe a taxa de patrocinador. O avô recebe somente os 5% fixos; gerações acima dele não recebem comissão. O filho não ganha nada sobre o pai.
 - Não existe uma porcentagem para a Central: ela fica com o que sobra. O total distribuído aos afiliados (direta, patrocinador e avô, quando aplicável) nunca pode ultrapassar 100%; portanto, a soma das taxas direta e de patrocinador é limitada a 95%.
 - Mudar uma taxa vale só para as vendas confirmadas dali em diante.
-- As comissões são gravadas **quando o Mercado Pago confirma a aprovação** (ou quando um pedido antigo/manual é confirmado pelo administrador), e os totais de cada afiliado são somados dos pedidos pagos.
+- As comissões são gravadas quando o webhook ou a consulta de status confirma a aprovação do Mercado Pago; os totais de cada afiliado são somados dos pedidos pagos.
 - O administrador configura o **valor mínimo de saque** em "Regra Geral de Comissões e Pagamentos" (padrão R$ 50,00). Os saldos abaixo do mínimo permanecem pendentes e acumulam.
 - A liberação de pagamentos ocorre somente no **5º dia útil de cada mês**, para comissões aprovadas em meses anteriores. A verificação é aplicada também no servidor; pedidos do mês corrente ficam acumulados para o próximo ciclo. O calendário exclui fins de semana e feriados nacionais, Sexta-feira Santa, Carnaval e Corpus Christi.
 - No Portal de Comissões, o administrador pode processar o fechamento em lote: somente afiliados que atingem o mínimo são liquidados. As baixas ficam registradas nos lançamentos com status e data de pagamento; quem não atinge o limite mantém o saldo pendente para o ciclo seguinte.
@@ -97,9 +97,9 @@ A primeira tela da loja tem o **login à esquerda** (usuário e senha, ou "Crie 
 3. **Pix:** o Mercado Pago gera o QR Code e o código Copia e Cola na própria página. **Cartão e débito:** o formulário seguro do Mercado Pago tokeniza os dados no navegador; somente o token é enviado ao servidor, que cria a cobrança.
 4. A página consulta o status a cada cinco segundos. O webhook e a consulta de status confirmam a cobrança com o Mercado Pago; só uma cobrança aprovada marca o pedido como pago, gera comissões e libera o download automaticamente.
 
-O **Tech Payments** (`pagamento.html`) continua permitindo cancelar pedidos sem pagamento e estornar pedidos pagos. Não use a confirmação manual para pedidos pagos pelo Mercado Pago.
+O status financeiro dos pedidos é atualizado pelo webhook e pela consulta ao Mercado Pago. A confirmação, o cancelamento e o estorno não são feitos manualmente pelo painel.
 
-Proteções: o afiliado só ganha se existir; se o CPF ou e-mail do comprador for igual ao do afiliado (auto-indicação), a venda vira venda direta; confirmar o mesmo pedido duas vezes não duplica nada.
+Proteções: o afiliado só ganha se existir; se o CPF ou e-mail do comprador for igual ao do afiliado (auto-indicação), a venda vira venda direta; a sincronização repetida do mesmo pagamento não duplica as comissões.
 
 ## 9. Primeiro uso e teste
 1. Configure as chaves de acesso e pública do Mercado Pago no Render e o webhook na aplicação Mercado Pago.
@@ -119,6 +119,9 @@ Proteções: o afiliado só ganha se existir; se o CPF ou e-mail do comprador fo
 - Produtos seguem armazenados na lista JSONB `config.produtos`; a opção administrativa `repasseJurosComprador` é salva nesse produto e copiada para o pedido. A opção é enviada como metadado no pagamento, sem permitir alteração pelo checkout.
 - O checkout seguro de cartão usa o Brick do Mercado Pago. O modo sem juros também depende de planos/campanhas sem juros habilitados na conta Mercado Pago da loja; essa regra comercial da conta não pode ser criada por um campo da API de pagamento. Valide os planos disponíveis na conta de produção antes de anunciar parcelamento sem juros.
 - As telas da loja, checkout, afiliado e administração compartilham as regras mobile de `public/responsive.css`.
+- A tela inicial/login pode ser alternada sem recarregar entre português (padrão), inglês, espanhol, mandarim, italiano e francês; a preferência fica salva no navegador.
+- A aprovação, cancelamento e estorno de pedidos são sincronizados pelo Mercado Pago (webhook e consulta do checkout). O painel não oferece confirmação manual de pedido; a liquidação de comissões continua sendo uma operação administrativa separada.
+- Ao excluir um afiliado, a conta de acesso é removida na mesma transação e o cupom relacionado é removido pela FK `ON DELETE CASCADE`. Pedidos e snapshots de comissão permanecem para preservar o histórico financeiro.
 
 ## Observações
 - Senhas são guardadas com hash (bcrypt); a senha do administrador fica só nas variáveis do Render. O cadastro exige senha de pelo menos 6 caracteres.
