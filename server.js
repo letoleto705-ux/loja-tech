@@ -23,9 +23,9 @@ const TAXA_AVO_PADRAO = 5;
 const VALOR_MINIMO_SAQUE_PADRAO = 50;
 
 const PRODUTOS_INICIAIS = [
-  { id: 'lite', nome: 'CMV Food Lite', desc: 'Início prático e direto para controle de fichas técnicas básicas.', custo: 10.00, precoDe: 69.99, precoPor: 49.99, imagem: 'https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=500&auto=format&fit=crop&q=60', video: '', pdf: '' },
-  { id: 'pro', nome: 'CMV Food Pro', desc: 'Inclui módulo de Metas de Lucro Bruto e painel visual.', custo: 15.00, precoDe: 99.99, precoPor: 79.99, imagem: 'https://images.unsplash.com/photo-1460925895917-afdab827c52f?w=500&auto=format&fit=crop&q=60', video: '', pdf: '' },
-  { id: 'plus', nome: 'CMV Food Plus', desc: 'Versão definitiva com base de clientes e suporte VIP.', custo: 20.00, precoDe: 119.00, precoPor: 99.99, imagem: 'https://images.unsplash.com/photo-1507238691740-187a5b1d37b8?w=500&auto=format&fit=crop&q=60', video: '', pdf: '' }
+  { id: 'lite', nome: 'CMV Food Lite', desc: 'Início prático e direto para controle de fichas técnicas básicas.', custo: 10.00, precoDe: 69.99, precoPor: 49.99, imagem: 'https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=500&auto=format&fit=crop&q=60', video: '', pdf: '', repasseJurosComprador: true },
+  { id: 'pro', nome: 'CMV Food Pro', desc: 'Inclui módulo de Metas de Lucro Bruto e painel visual.', custo: 15.00, precoDe: 99.99, precoPor: 79.99, imagem: 'https://images.unsplash.com/photo-1460925895917-afdab827c52f?w=500&auto=format&fit=crop&q=60', video: '', pdf: '', repasseJurosComprador: true },
+  { id: 'plus', nome: 'CMV Food Plus', desc: 'Versão definitiva com base de clientes e suporte VIP.', custo: 20.00, precoDe: 119.00, precoPor: 99.99, imagem: 'https://images.unsplash.com/photo-1507238691740-187a5b1d37b8?w=500&auto=format&fit=crop&q=60', video: '', pdf: '', repasseJurosComprador: true }
 ];
 
 const pool = new Pool({ connectionString: DATABASE_URL, ssl: { rejectUnauthorized: false }, max: 5 });
@@ -301,6 +301,32 @@ async function iniciarBanco() {
   await q("ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS payment_qr_code text NOT NULL DEFAULT ''");
   await q("ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS payment_qr_code_base64 text NOT NULL DEFAULT ''");
   await q(`CREATE TABLE IF NOT EXISTS config (chave text PRIMARY KEY, valor jsonb NOT NULL)`);
+  const produtosSalvos = await lerConfig('produtos', PRODUTOS_INICIAIS);
+  await gravarConfig('produtos', produtosSalvos.map(produto => ({
+    ...produto,
+    repasseJurosComprador: produto.repasseJurosComprador !== false
+  })));
+  await q(`CREATE TABLE IF NOT EXISTS afiliado_cupons (
+    id serial PRIMARY KEY,
+    afiliado_usuario text NOT NULL UNIQUE REFERENCES afiliados(usuario) ON DELETE CASCADE,
+    codigo_cupom varchar(50) NOT NULL UNIQUE,
+    ativo boolean NOT NULL DEFAULT false,
+    criado_em timestamptz NOT NULL DEFAULT now(),
+    atualizado_em timestamptz NOT NULL DEFAULT now()
+  )`);
+  await q('CREATE UNIQUE INDEX IF NOT EXISTS afiliado_cupons_codigo_lower_uidx ON afiliado_cupons (lower(codigo_cupom))');
+  await q(`CREATE TABLE IF NOT EXISTS notificacoes_afiliados (
+    id serial PRIMARY KEY,
+    titulo varchar(255) NOT NULL,
+    mensagem text NOT NULL,
+    data_criacao timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    ativa boolean NOT NULL DEFAULT true
+  )`);
+  await q('ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS valor_original numeric(12,2) NOT NULL DEFAULT 0');
+  await q("ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS cupom_codigo text NOT NULL DEFAULT ''");
+  await q('ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS cupom_desconto numeric(12,2) NOT NULL DEFAULT 0');
+  await q('ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS repasse_juros_comprador boolean NOT NULL DEFAULT true');
+  await q("UPDATE pedidos SET valor_original = valor WHERE valor_original = 0");
   await q(`CREATE TABLE IF NOT EXISTS vendas_aprovadas (
     payment_id text PRIMARY KEY,
     cpf text NOT NULL DEFAULT '',
@@ -571,6 +597,123 @@ app.get('/api/rede', auth, wrap(async (req, res) => {
   });
 }));
 
+// ----- Cupons de afiliados e comunicados internos -----
+async function configuracaoCupons() {
+  const [ativo, percentualMaximo] = await Promise.all([
+    lerConfig('cupom_global_ativo', false),
+    lerConfig('cupom_porcentagem_maxima', 0)
+  ]);
+  return { ativo: ativo === true, percentualMaximo: Number(percentualMaximo) || 0 };
+}
+
+app.get('/api/admin/cupons', auth, soAdmin, wrap(async (req, res) => {
+  const configuracao = await configuracaoCupons();
+  const afiliados = await q(`SELECT a.id, a.usuario, a.nome, c.id AS cupom_id,
+      c.codigo_cupom, c.ativo AS cupom_ativo, c.atualizado_em
+    FROM afiliados a LEFT JOIN afiliado_cupons c ON c.afiliado_usuario = a.usuario
+    ORDER BY a.nome, a.usuario`);
+  res.json({ ...configuracao, afiliados: afiliados.rows.map(a => ({
+    id: a.id, usuario: a.usuario, nome: a.nome, cupomId: a.cupom_id,
+    codigo: a.codigo_cupom, ativo: a.cupom_ativo === true, atualizadoEm: a.atualizado_em
+  })) });
+}));
+
+app.put('/api/admin/cupons/config', auth, soAdmin, wrap(async (req, res) => {
+  const { ativo, percentualMaximo } = req.body;
+  if (typeof ativo !== 'boolean'
+    || typeof percentualMaximo !== 'number' || !Number.isFinite(percentualMaximo)
+    || percentualMaximo < 0 || percentualMaximo > 100) {
+    return res.status(400).json({ erro: 'Informe o status global e um limite percentual entre 0 e 100.' });
+  }
+  await gravarConfig('cupom_global_ativo', ativo);
+  await gravarConfig('cupom_porcentagem_maxima', percentualMaximo);
+  res.json({ ok: true, ativo, percentualMaximo });
+}));
+
+app.patch('/api/admin/cupons/:id', auth, soAdmin, wrap(async (req, res) => {
+  if (typeof req.body.ativo !== 'boolean') return res.status(400).json({ erro: 'Informe um status válido para o cupom.' });
+  const result = await q('UPDATE afiliado_cupons SET ativo = $2, atualizado_em = now() WHERE id = $1 RETURNING id, ativo',
+    [req.params.id, req.body.ativo]);
+  if (!result.rows.length) return res.status(404).json({ erro: 'Cupom não encontrado.' });
+  res.json({ ok: true, ...result.rows[0] });
+}));
+
+app.get('/api/afiliado/cupom', auth, wrap(async (req, res) => {
+  if (req.user.perfil !== 'afiliado') return res.status(403).json({ erro: 'Acesso exclusivo para afiliados.' });
+  const [configuracao, result] = await Promise.all([
+    configuracaoCupons(),
+    q('SELECT id, codigo_cupom, ativo FROM afiliado_cupons WHERE afiliado_usuario = $1', [req.user.usuario])
+  ]);
+  const cupom = result.rows[0];
+  res.json({ ...configuracao, cupom: cupom ? { id: cupom.id, codigo: cupom.codigo_cupom, ativo: cupom.ativo } : null });
+}));
+
+app.put('/api/afiliado/cupom', auth, wrap(async (req, res) => {
+  if (req.user.perfil !== 'afiliado') return res.status(403).json({ erro: 'Acesso exclusivo para afiliados.' });
+  const { ativo, percentualMaximo } = await configuracaoCupons();
+  if (!ativo || percentualMaximo <= 0) return res.status(403).json({ erro: 'A campanha de cupons está desativada pelo administrador.' });
+  const codigo = txt(req.body.codigo, 50).toUpperCase().replace(/\s+/g, '-');
+  if (!/^[A-Z0-9][A-Z0-9_-]{2,49}$/.test(codigo)) {
+    return res.status(400).json({ erro: 'Use de 3 a 50 caracteres: letras, números, hífen ou sublinhado.' });
+  }
+  try {
+    const result = await q(`INSERT INTO afiliado_cupons (afiliado_usuario, codigo_cupom)
+      VALUES ($1, $2)
+      ON CONFLICT (afiliado_usuario) DO UPDATE SET codigo_cupom = EXCLUDED.codigo_cupom,
+        ativo = CASE WHEN afiliado_cupons.codigo_cupom <> EXCLUDED.codigo_cupom
+          THEN false ELSE afiliado_cupons.ativo END,
+        atualizado_em = now()
+      RETURNING id, codigo_cupom, ativo`,
+    [req.user.usuario, codigo]);
+    const c = result.rows[0];
+    res.json({ ok: true, cupom: { id: c.id, codigo: c.codigo_cupom, ativo: c.ativo } });
+  } catch (error) {
+    if (error.code === '23505') return res.status(409).json({ erro: 'Este código já está sendo usado por outro afiliado.' });
+    throw error;
+  }
+}));
+
+app.get('/api/afiliado/notificacoes', auth, wrap(async (req, res) => {
+  if (req.user.perfil !== 'afiliado') return res.status(403).json({ erro: 'Acesso exclusivo para afiliados.' });
+  const afiliado = (await q('SELECT nome FROM afiliados WHERE usuario = $1', [req.user.usuario])).rows[0];
+  if (!afiliado) return res.status(404).json({ erro: 'Afiliado não encontrado.' });
+  const notificacoes = await q('SELECT id, titulo, mensagem, data_criacao FROM notificacoes_afiliados WHERE ativa = true ORDER BY data_criacao DESC');
+  const nome = txt(afiliado.nome, 100);
+  const primeiroNome = nome.split(/\s+/)[0] || nome;
+  res.json(notificacoes.rows.map(n => ({
+    id: n.id, titulo: n.titulo,
+    mensagem: n.mensagem.replace(/\{nome\}/gi, () => nome).replace(/\{primeiro_nome\}/gi, () => primeiroNome),
+    dataCriacao: n.data_criacao
+  })));
+}));
+
+app.get('/api/admin/notificacoes', auth, soAdmin, wrap(async (req, res) => {
+  const result = await q('SELECT id, titulo, mensagem, data_criacao, ativa FROM notificacoes_afiliados ORDER BY data_criacao DESC');
+  res.json(result.rows);
+}));
+
+app.post('/api/admin/notificacoes', auth, soAdmin, wrap(async (req, res) => {
+  const titulo = txt(req.body.titulo, 255), mensagem = txt(req.body.mensagem, 10000);
+  if (!titulo || !mensagem) return res.status(400).json({ erro: 'Informe o título e a mensagem do comunicado.' });
+  const result = await q('INSERT INTO notificacoes_afiliados (titulo, mensagem) VALUES ($1, $2) RETURNING id, titulo, mensagem, data_criacao, ativa',
+    [titulo, mensagem]);
+  res.status(201).json(result.rows[0]);
+}));
+
+app.patch('/api/admin/notificacoes/:id', auth, soAdmin, wrap(async (req, res) => {
+  if (typeof req.body.ativa !== 'boolean') return res.status(400).json({ erro: 'Informe um status válido para o comunicado.' });
+  const result = await q('UPDATE notificacoes_afiliados SET ativa = $2 WHERE id = $1 RETURNING id, ativa',
+    [req.params.id, req.body.ativa]);
+  if (!result.rows.length) return res.status(404).json({ erro: 'Comunicado não encontrado.' });
+  res.json({ ok: true, ...result.rows[0] });
+}));
+
+app.delete('/api/admin/notificacoes/:id', auth, soAdmin, wrap(async (req, res) => {
+  const result = await q('DELETE FROM notificacoes_afiliados WHERE id = $1 RETURNING id', [req.params.id]);
+  if (!result.rows.length) return res.status(404).json({ erro: 'Comunicado não encontrado.' });
+  res.json({ ok: true });
+}));
+
 // ----- Checkout, pedidos e confirmação de pagamento -----
 const FORMAS = ['pix', 'cartao', 'debito'];
 
@@ -582,6 +725,7 @@ app.post('/api/checkout', limitarTentativas, wrap(async (req, res) => {
   const cpf = soDigitos(req.body.cpf);
   const forma = norm(req.body.forma);
   let afiliado = norm(req.body.afiliado).replace(/[^a-z0-9_.-]/g, '');
+  const codigoCupom = txt(req.body.codigoCupom, 50).toUpperCase();
 
   if (!nome || !semTags(nome)) return res.status(400).json({ erro: 'Informe seu nome completo.' });
   if (!RE_EMAIL.test(email)) return res.status(400).json({ erro: 'Informe um e-mail válido.' });
@@ -591,6 +735,23 @@ app.post('/api/checkout', limitarTentativas, wrap(async (req, res) => {
   const produtos = await lerConfig('produtos', PRODUTOS_INICIAIS);
   const prod = produtos.find(p => norm(p.id) === produtoId);
   if (!prod) return res.status(400).json({ erro: 'Produto não encontrado.' });
+
+  let desconto = 0, afiliadoCupom = null;
+  if (codigoCupom) {
+    const cfgCupom = await configuracaoCupons();
+    const cupom = (await q(`SELECT c.codigo_cupom, c.afiliado_usuario, a.cpf, a.email
+      FROM afiliado_cupons c JOIN afiliados a ON a.usuario = c.afiliado_usuario
+      WHERE lower(c.codigo_cupom) = lower($1) AND c.ativo = true`, [codigoCupom])).rows[0];
+    if (!cfgCupom.ativo || cfgCupom.percentualMaximo <= 0 || !cupom) {
+      return res.status(400).json({ erro: 'Cupom inválido ou inativo.' });
+    }
+    if (soDigitos(cupom.cpf) === cpf || norm(cupom.email) === norm(email)) {
+      return res.status(400).json({ erro: 'Você não pode usar o próprio cupom.' });
+    }
+    afiliadoCupom = cupom.afiliado_usuario;
+    afiliado = afiliadoCupom;
+    desconto = dinheiro(Number(prod.precoPor) * cfgCupom.percentualMaximo / 100);
+  }
 
   let afiliadoValido = false;
   if (afiliado) {
@@ -602,14 +763,37 @@ app.post('/api/checkout', limitarTentativas, wrap(async (req, res) => {
 
   const pedidoId = crypto.randomBytes(8).toString('hex');
   const downloadToken = crypto.randomBytes(32).toString('hex');
-  await q(`INSERT INTO pedidos (id, afiliado_usuario, produto_id, produto_nome, valor, forma, cliente_nome, cliente_email, cliente_cpf, download_token)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
-    [pedidoId, afiliadoValido ? afiliado : null, prod.id, prod.nome, Number(prod.precoPor), forma, nome, email, cpf, downloadToken]);
+  const valorOriginal = Number(prod.precoPor);
+  const valorFinal = dinheiro(valorOriginal - desconto);
+  const repasseJurosComprador = prod.repasseJurosComprador !== false;
+  await q(`INSERT INTO pedidos (id, afiliado_usuario, produto_id, produto_nome, valor, valor_original,
+      cupom_codigo, cupom_desconto, repasse_juros_comprador, forma, cliente_nome, cliente_email, cliente_cpf, download_token)
+    VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`,
+  [pedidoId, afiliadoValido ? afiliado : null, prod.id, prod.nome, valorFinal, valorOriginal,
+    codigoCupom, desconto, repasseJurosComprador, forma, nome, email, cpf, downloadToken]);
 
   res.json({
-    pedidoId, produtoNome: prod.nome, valor: Number(prod.precoPor), forma,
-    pixChave: String(await lerConfig('pixChave', '')), afiliadoValido, downloadToken
+    pedidoId, produtoNome: prod.nome, valor: valorFinal, valorOriginal, desconto, codigoCupom,
+    repasseJurosComprador, forma, pixChave: String(await lerConfig('pixChave', '')),
+    afiliadoValido, downloadToken
   });
+}));
+
+app.post('/api/checkout/cupom', limitarTentativas, wrap(async (req, res) => {
+  const codigo = txt(req.body.codigoCupom, 50).toUpperCase();
+  const produtoId = norm(req.body.produtoId);
+  if (!codigo) return res.status(400).json({ erro: 'Informe um código de cupom.' });
+  const produtos = await lerConfig('produtos', PRODUTOS_INICIAIS);
+  const produto = produtos.find(p => norm(p.id) === produtoId);
+  if (!produto) return res.status(404).json({ erro: 'Produto não encontrado.' });
+  const configuracao = await configuracaoCupons();
+  const cupom = (await q('SELECT codigo_cupom FROM afiliado_cupons WHERE lower(codigo_cupom) = lower($1) AND ativo = true', [codigo])).rows[0];
+  if (!configuracao.ativo || configuracao.percentualMaximo <= 0 || !cupom) {
+    return res.status(404).json({ erro: 'Cupom inválido ou inativo.' });
+  }
+  const valorOriginal = Number(produto.precoPor);
+  const desconto = dinheiro(valorOriginal * configuracao.percentualMaximo / 100);
+  res.json({ codigo: cupom.codigo_cupom, percentual: configuracao.percentualMaximo, desconto, valor: dinheiro(valorOriginal - desconto) });
 }));
 
 async function consultarPagamentoMercadoPago(id) {
@@ -649,6 +833,7 @@ app.post('/api/checkout/:id/pagar', limitarTentativas, wrap(async (req, res) => 
     description: pedido.produto_nome,
     statement_descriptor: 'TECH SOFTWARE',
     external_reference: pedido.id,
+    metadata: { repasse_juros_comprador: pedido.repasse_juros_comprador ? 'true' : 'false' },
     notification_url: process.env.MERCADO_PAGO_WEBHOOK_URL || undefined,
     payer: {
       email: pedido.cliente_email,
@@ -669,6 +854,10 @@ app.post('/api/checkout/:id/pagar', limitarTentativas, wrap(async (req, res) => 
       || !/^[a-zA-Z0-9_-]+$/.test(paymentMethodId)
       || !Number.isInteger(installments) || installments < 1 || installments > 12) {
       return res.status(400).json({ erro: 'Os dados tokenizados do cartão são inválidos. Revise os dados e tente novamente.' });
+    }
+    if (formData.transaction_amount !== undefined
+      && dinheiro(formData.transaction_amount) !== dinheiro(pedido.valor)) {
+      return res.status(409).json({ erro: 'O total do checkout foi atualizado. Recarregue a página e tente novamente.' });
     }
     pagamento.token = cardToken;
     pagamento.payment_method_id = paymentMethodId;
@@ -783,6 +972,8 @@ app.get('/api/pedidos', auth, soAdmin, wrap(async (req, res) => {
   res.json(r.rows.map(p => ({
     id: p.id, afiliado: p.afiliado_usuario, produtoId: p.produto_id, produtoNome: p.produto_nome,
     valor: Number(p.valor), comissao: Number(p.comissao), status: p.status, forma: p.forma,
+    valorOriginal: Number(p.valor_original), cupomCodigo: p.cupom_codigo,
+    cupomDesconto: Number(p.cupom_desconto), repasseJurosComprador: p.repasse_juros_comprador,
     clienteNome: p.cliente_nome, clienteEmail: p.cliente_email, clienteCpf: p.cliente_cpf,
     criadoEm: p.criado_em, pagoEm: p.pago_em
   })));
@@ -899,11 +1090,15 @@ app.post('/api/pedidos/:id/estornar', auth, soAdmin, wrap(async (req, res) => {
 // ----- Produtos e configuração -----
 app.get('/api/produtos', wrap(async (req, res) => {
   const produtos = await lerConfig('produtos', PRODUTOS_INICIAIS);
-  res.json(produtos.map(({ pdf, ...produto }) => produto));
+  res.json(produtos.map(({ pdf, ...produto }) => ({
+    ...produto,
+    repasseJurosComprador: produto.repasseJurosComprador !== false
+  })));
 }));
 
 app.get('/api/admin/produtos', auth, soAdmin, wrap(async (req, res) => {
-  res.json(await lerConfig('produtos', PRODUTOS_INICIAIS));
+  const produtos = await lerConfig('produtos', PRODUTOS_INICIAIS);
+  res.json(produtos.map(p => ({ ...p, repasseJurosComprador: p.repasseJurosComprador !== false })));
 }));
 
 app.put('/api/produtos', auth, soAdmin, wrap(async (req, res) => {
@@ -913,7 +1108,8 @@ app.put('/api/produtos', auth, soAdmin, wrap(async (req, res) => {
     id: txt(p.id, 40), nome: txt(p.nome, 120), desc: txt(p.desc, 500),
     custo: Number(p.custo) || 0, precoDe: Number(p.precoDe) || 0, precoPor: Number(p.precoPor) || 0,
     imagem: /^https?:\/\//.test(txt(p.imagem, 500)) ? txt(p.imagem, 500) : '',
-    video: txt(p.video, 500), pdf: txt(p.pdf, 8192)
+    video: txt(p.video, 500), pdf: txt(p.pdf, 8192),
+    repasseJurosComprador: p.repasseJurosComprador !== false
   }));
   if (limpa.some(p => !p.id || !p.nome)) return res.status(400).json({ erro: 'Todo produto precisa de id e nome.' });
   if (limpa.some(p => p.pdf && /^[a-z][a-z0-9+.-]*:/i.test(p.pdf) && !ehUrlWeb(p.pdf))) {

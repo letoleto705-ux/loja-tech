@@ -7,6 +7,7 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="responsive.css">
     <script>
         tailwind.config = {
             theme: {
@@ -45,6 +46,39 @@
     </header>
 
     <main class="max-w-6xl mx-auto px-4 pt-28 pb-16 w-full flex-1 space-y-6">
+
+        <section class="bg-white rounded-3xl p-6 sm:p-8 border border-orange-200 shadow-sm space-y-5">
+            <div>
+                <h2 class="text-xl font-black text-slate-900"><i class="fa-solid fa-ticket text-orange-600 mr-2"></i>Gerenciamento de Cupons de Afiliados</h2>
+                <p class="mt-1 text-xs text-slate-500">Defina a campanha global e aprove os códigos cadastrados pelos afiliados.</p>
+            </div>
+            <div class="grid grid-cols-1 sm:grid-cols-[1fr_auto_auto] gap-3 items-end">
+                <label class="flex items-center gap-3 rounded-xl border border-slate-200 p-3 text-xs font-bold">
+                    <input type="checkbox" id="adminCuponsAtivo" class="h-4 w-4 accent-orange-600">
+                    Campanha de cupons ativa para afiliados
+                </label>
+                <label class="text-xs font-bold text-slate-600">Desconto máximo (%)
+                    <input type="number" id="adminCuponsPercentual" min="0" max="100" step="0.01" value="10" class="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5">
+                </label>
+                <button type="button" onclick="salvarConfiguracaoCupons()" class="rounded-xl bg-orange-600 px-4 py-3 text-xs font-bold text-white">Salvar regra</button>
+            </div>
+            <p id="statusGestaoCupons" class="text-xs" role="status"></p>
+            <div id="listaCuponsAfiliados" class="space-y-2"></div>
+        </section>
+
+        <section class="bg-white rounded-3xl p-6 sm:p-8 border border-blue-200 shadow-sm space-y-4">
+            <div>
+                <h2 class="text-xl font-black text-slate-900"><i class="fa-solid fa-bullhorn text-blue-600 mr-2"></i>Comunicação e Campanhas</h2>
+                <p class="mt-1 text-xs text-slate-500">O comunicado será exibido nos painéis dos afiliados. Use {nome} ou {primeiro_nome} para personalizar.</p>
+            </div>
+            <form onsubmit="publicarNotificacao(event)" class="space-y-3">
+                <input id="tituloNotificacao" maxlength="255" required placeholder="Título do comunicado" class="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm">
+                <textarea id="mensagemNotificacao" rows="4" maxlength="10000" required placeholder="Mensagem para os afiliados..." class="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm"></textarea>
+                <button type="submit" class="rounded-xl bg-blue-700 px-5 py-3 text-xs font-bold text-white">Publicar Comunicado para Todos os Afiliados</button>
+            </form>
+            <p id="statusNotificacaoAdmin" class="text-xs" role="status"></p>
+            <div id="listaNotificacoesAdmin" class="space-y-2"></div>
+        </section>
         
         <div class="bg-white rounded-3xl p-6 sm:p-8 border border-slate-200 shadow-sm flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
             <div>
@@ -160,6 +194,8 @@
             carregarConfigPix();
             carregarConfigSuporte();
             buscarContas();
+            carregarGestaoCupons();
+            carregarNotificacoesAdmin();
         });
 
         function normalizarTexto(txt) {
@@ -547,6 +583,7 @@
                                 <div class="text-slate-500">${esc(p.clienteEmail)} · CPF ${esc(p.clienteCpf)}</div>
                                 <div class="text-slate-600 mt-1">${esc(p.produtoNome)} · ${esc(ROTULO_FORMA[p.forma] || p.forma)}</div>
                                 <div class="text-emerald-700 font-semibold">${afiliadoTxt}</div>
+                                ${p.cupomCodigo ? `<div class="text-orange-700">Cupom ${esc(p.cupomCodigo)} · R$ ${Number(p.cupomDesconto).toFixed(2)} de desconto (original R$ ${Number(p.valorOriginal).toFixed(2)})</div>` : ''}
                             </div>
                             <div class="text-right"><span class="text-base font-black text-slate-900">R$ ${p.valor.toFixed(2)}</span></div>
                         </div>
@@ -585,6 +622,110 @@
                 alert(err.message);
             }
             carregarRelatorioPagamentos();
+        }
+
+        async function carregarGestaoCupons() {
+            const lista = document.getElementById('listaCuponsAfiliados');
+            try {
+                const dados = await api('GET', '/api/admin/cupons');
+                document.getElementById('adminCuponsAtivo').checked = dados.ativo;
+                document.getElementById('adminCuponsPercentual').value = dados.percentualMaximo;
+                lista.innerHTML = dados.afiliados.length ? dados.afiliados.map(af => `
+                    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs">
+                        <div>
+                            <strong class="text-slate-900">${esc(af.nome)} (@${esc(af.usuario)})</strong>
+                            <span class="ml-2 text-slate-600">${af.codigo ? esc(af.codigo) : 'Ainda não cadastrou cupom'}</span>
+                            ${af.codigo ? `<span class="ml-2 font-bold ${af.ativo ? 'text-emerald-700' : 'text-amber-700'}">${af.ativo ? 'Ativo' : 'Inativo'}</span>` : ''}
+                        </div>
+                        ${af.codigo ? `<button type="button" onclick="alterarStatusCupom(${Number(af.cupomId)}, ${!af.ativo})" class="rounded-lg px-3 py-2 font-bold ${af.ativo ? 'bg-red-100 text-red-700' : 'bg-emerald-100 text-emerald-700'}">${af.ativo ? 'Desativar' : 'Ativar'}</button>` : ''}
+                    </div>`).join('') : '<p class="text-xs text-slate-500">Nenhum afiliado cadastrado.</p>';
+            } catch (err) {
+                lista.innerHTML = `<p class="text-xs text-red-600">${esc(err.message)}</p>`;
+            }
+        }
+
+        async function salvarConfiguracaoCupons() {
+            const status = document.getElementById('statusGestaoCupons');
+            try {
+                const resultado = await api('PUT', '/api/admin/cupons/config', {
+                    ativo: document.getElementById('adminCuponsAtivo').checked,
+                    percentualMaximo: Number(document.getElementById('adminCuponsPercentual').value)
+                });
+                status.className = 'text-xs text-emerald-700';
+                status.innerText = `Regra salva. Campanha ${resultado.ativo ? 'ativa' : 'desativada'}, limite de ${resultado.percentualMaximo}%.`;
+                await carregarGestaoCupons();
+            } catch (err) {
+                status.className = 'text-xs text-red-600';
+                status.innerText = err.message;
+            }
+        }
+
+        async function alterarStatusCupom(id, ativo) {
+            try {
+                await api('PATCH', `/api/admin/cupons/${encodeURIComponent(id)}`, { ativo });
+                await carregarGestaoCupons();
+            } catch (err) {
+                alert(err.message);
+            }
+        }
+
+        async function carregarNotificacoesAdmin() {
+            const lista = document.getElementById('listaNotificacoesAdmin');
+            try {
+                const avisos = await api('GET', '/api/admin/notificacoes');
+                lista.innerHTML = avisos.length ? avisos.map(aviso => `
+                    <article class="flex flex-col sm:flex-row sm:items-start justify-between gap-3 rounded-xl border border-slate-200 p-3 text-xs">
+                        <div class="min-w-0">
+                            <strong class="block text-slate-900">${esc(aviso.titulo)}</strong>
+                            <p class="mt-1 whitespace-pre-line text-slate-600">${esc(aviso.mensagem)}</p>
+                            <span class="mt-2 block text-[10px] text-slate-400">${esc(new Date(aviso.data_criacao).toLocaleString('pt-BR'))} · ${aviso.ativa ? 'Ativo' : 'Inativo'}</span>
+                        </div>
+                        <div class="flex flex-wrap gap-2">
+                            <button type="button" onclick="alterarStatusNotificacao(${Number(aviso.id)}, ${!aviso.ativa})" class="rounded-lg px-3 py-2 font-bold ${aviso.ativa ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-800'}">${aviso.ativa ? 'Desativar' : 'Reativar'}</button>
+                            <button type="button" onclick="excluirNotificacao(${Number(aviso.id)})" class="rounded-lg bg-red-100 px-3 py-2 font-bold text-red-700">Excluir</button>
+                        </div>
+                    </article>`).join('') : '<p class="text-xs text-slate-500">Nenhum comunicado publicado.</p>';
+            } catch (err) {
+                lista.innerHTML = `<p class="text-xs text-red-600">${esc(err.message)}</p>`;
+            }
+        }
+
+        async function publicarNotificacao(event) {
+            event.preventDefault();
+            const status = document.getElementById('statusNotificacaoAdmin');
+            try {
+                await api('POST', '/api/admin/notificacoes', {
+                    titulo: document.getElementById('tituloNotificacao').value,
+                    mensagem: document.getElementById('mensagemNotificacao').value
+                });
+                document.getElementById('tituloNotificacao').value = '';
+                document.getElementById('mensagemNotificacao').value = '';
+                status.className = 'text-xs text-emerald-700';
+                status.innerText = 'Comunicado publicado para todos os afiliados.';
+                await carregarNotificacoesAdmin();
+            } catch (err) {
+                status.className = 'text-xs text-red-600';
+                status.innerText = err.message;
+            }
+        }
+
+        async function alterarStatusNotificacao(id, ativa) {
+            try {
+                await api('PATCH', `/api/admin/notificacoes/${encodeURIComponent(id)}`, { ativa });
+                await carregarNotificacoesAdmin();
+            } catch (err) {
+                alert(err.message);
+            }
+        }
+
+        async function excluirNotificacao(id) {
+            if (!confirm('Excluir este comunicado permanentemente?')) return;
+            try {
+                await api('DELETE', `/api/admin/notificacoes/${encodeURIComponent(id)}`);
+                await carregarNotificacoesAdmin();
+            } catch (err) {
+                alert(err.message);
+            }
         }
 
         function copiarChavePix(chave) {

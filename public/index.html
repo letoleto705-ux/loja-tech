@@ -10,6 +10,7 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <!-- Google Fonts Inter -->
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="responsive.css">
     
     <script>
         tailwind.config = {
@@ -186,7 +187,7 @@
     <!-- CONTEÚDO PRINCIPAL -->
     <div id="conteudoSistemaLoja" class="hidden flex-1 flex flex-col">
         <header class="fixed top-0 left-0 w-full z-40 glass-header border-b border-slate-200 transition-all">
-            <div class="max-w-7xl mx-auto px-4 h-20 flex items-center justify-between">
+            <div class="relative max-w-7xl mx-auto px-4 h-20 flex items-center justify-between">
                 <div class="flex items-center gap-3">
                     <div class="w-11 h-11 rounded-2xl gradient-orange flex items-center justify-center text-white shadow-orange-glow">
                         <i class="fa-solid fa-utensils text-lg"></i>
@@ -196,6 +197,11 @@
                         <p class="text-[10px] text-slate-500 font-semibold tracking-wider uppercase -mt-1">Software de Gestão para o Seu Negócio</p>
                     </div>
                 </div>
+
+                <button type="button" id="btnMenuMobile" aria-controls="menuMobile" aria-expanded="false" onclick="alternarMenuMobile()"
+                    class="md:hidden p-3 rounded-xl bg-slate-100 text-slate-700" aria-label="Abrir menu de navegação">
+                    <i class="fa-solid fa-bars"></i>
+                </button>
 
                 <div class="hidden md:flex items-center gap-3">
                     <a href="#produtos" class="px-4 py-2 text-xs font-bold uppercase tracking-wider text-slate-700 bg-slate-100 rounded-xl hover:bg-slate-200 transition">
@@ -228,6 +234,18 @@
                         </button>
                     </div>
                 </div>
+
+                <nav id="menuMobile" class="hidden md:hidden absolute top-full right-4 left-4 z-50 rounded-2xl border border-slate-200 bg-white p-3 shadow-xl" aria-label="Navegação mobile">
+                    <a href="#produtos" onclick="fecharMenuMobile()" class="block rounded-xl px-4 py-3 text-sm font-bold text-slate-700 hover:bg-slate-50">Softwares</a>
+                    <a id="mobileLinkAfiliase" href="#afiliase" onclick="fecharMenuMobile()" class="block rounded-xl px-4 py-3 text-sm font-bold text-slate-700 hover:bg-slate-50">Solicitar Afiliação</a>
+                    <a id="mobileLinkAreaAfiliado" href="afiliado.html" onclick="fecharMenuMobile()" class="hidden rounded-xl px-4 py-3 text-sm font-bold text-orange-700 hover:bg-orange-50">Área do Afiliado</a>
+                    <button id="mobileBtnGerenciaAfiliados" type="button" onclick="fecharMenuMobile(); solicitarSenhaGerenciaAfiliados()" class="hidden w-full rounded-xl px-4 py-3 text-left text-sm font-bold text-emerald-700 hover:bg-emerald-50">Gerência de Afiliados</button>
+                    <button id="mobileBtnAreaGerencial" type="button" onclick="fecharMenuMobile(); solicitarSenhaGerencial()" class="hidden w-full rounded-xl px-4 py-3 text-left text-sm font-bold text-slate-900 hover:bg-slate-50">Painel Admin</button>
+                    <div id="mobileSessaoUsuario" class="hidden mt-2 border-t border-slate-100 pt-2">
+                        <p id="mobileNomeUsuario" class="px-4 py-2 text-xs font-bold text-slate-700"></p>
+                        <button type="button" onclick="fecharMenuMobile(); efetuarLogoutGeral()" class="w-full rounded-xl px-4 py-3 text-left text-sm font-bold text-red-600 hover:bg-red-50">Sair da conta</button>
+                    </div>
+                </nav>
             </div>
         </header>
 
@@ -387,6 +405,11 @@
                     </div>
                 </div>
 
+                <label class="flex items-start gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs leading-relaxed">
+                    <input type="checkbox" id="p_repasse_juros" checked class="mt-0.5 h-4 w-4 accent-orange-600">
+                    <span>Repassar juros do parcelamento para o cliente (Comprador)</span>
+                </label>
+
                 <div>
                     <label class="block mb-1 uppercase tracking-wider">Imagem do Produto</label>
                     <input type="file" id="p_imagem_file" accept="image/*" class="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl bg-slate-50">
@@ -408,9 +431,9 @@
     <!-- SCRIPT DA LOJA CENTRALIZADA E UNIFICADA -->
     <script>
         const produtosIniciais = [
-            { id: 'lite', nome: "CMV Food Lite", desc: "Início prático e direto para controle de fichas técnicas básicas.", custo: 10.00, precoDe: 69.99, precoPor: 49.99, imagem: "https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=500&auto=format&fit=crop&q=60", video: "", pdf: "" },
-            { id: 'pro', nome: "CMV Food Pro", desc: "Inclui módulo de Metas de Lucro Bruto e painel visual.", custo: 15.00, precoDe: 99.99, precoPor: 79.99, imagem: "https://images.unsplash.com/photo-1460925895917-afdab827c52f?w=500&auto=format&fit=crop&q=60", video: "", pdf: "" },
-            { id: 'plus', nome: "CMV Food Plus", desc: "Versão definitiva com base de clientes e suporte VIP.", custo: 20.00, precoDe: 119.00, precoPor: 99.99, imagem: "https://images.unsplash.com/photo-1507238691740-187a5b1d37b8?w=500&auto=format&fit=crop&q=60", video: "", pdf: "" }
+            { id: 'lite', nome: "CMV Food Lite", desc: "Início prático e direto para controle de fichas técnicas básicas.", custo: 10.00, precoDe: 69.99, precoPor: 49.99, imagem: "https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=500&auto=format&fit=crop&q=60", video: "", pdf: "", repasseJurosComprador: true },
+            { id: 'pro', nome: "CMV Food Pro", desc: "Inclui módulo de Metas de Lucro Bruto e painel visual.", custo: 15.00, precoDe: 99.99, precoPor: 79.99, imagem: "https://images.unsplash.com/photo-1460925895917-afdab827c52f?w=500&auto=format&fit=crop&q=60", video: "", pdf: "", repasseJurosComprador: true },
+            { id: 'plus', nome: "CMV Food Plus", desc: "Versão definitiva com base de clientes e suporte VIP.", custo: 20.00, precoDe: 119.00, precoPor: 99.99, imagem: "https://images.unsplash.com/photo-1507238691740-187a5b1d37b8?w=500&auto=format&fit=crop&q=60", video: "", pdf: "", repasseJurosComprador: true }
         ];
 
         let modoCadastroPortao = false;
@@ -618,12 +641,21 @@
             const btnGerenciaAfiliados = document.getElementById('menuBtnGerenciaAfiliados');
             const btnAreaGerencial = document.getElementById('menuBtnAreaGerencial');
             const btnAfiliase = document.getElementById('menuBtnAfiliase');
+            const mobileAfiliado = document.getElementById('mobileLinkAreaAfiliado');
+            const mobileGerencia = document.getElementById('mobileBtnGerenciaAfiliados');
+            const mobileAdmin = document.getElementById('mobileBtnAreaGerencial');
+            const mobileAfiliase = document.getElementById('mobileLinkAfiliase');
+            const mobileSessao = document.getElementById('mobileSessaoUsuario');
 
             if (user.perfil === 'admin') {
                 btnAreaAfiliado.classList.remove('hidden');
                 btnGerenciaAfiliados.classList.remove('hidden');
                 btnAreaGerencial.classList.remove('hidden');
                 btnAfiliase.classList.add('hidden');
+                mobileAfiliado.classList.remove('hidden');
+                mobileGerencia.classList.remove('hidden');
+                mobileAdmin.classList.remove('hidden');
+                mobileAfiliase.classList.add('hidden');
 
                 const newUrl = `${window.location.pathname}?ref=admin`;
                 window.history.replaceState({}, '', newUrl);
@@ -632,6 +664,10 @@
                 btnGerenciaAfiliados.classList.add('hidden');
                 btnAreaGerencial.classList.add('hidden');
                 btnAfiliase.classList.add('hidden');
+                mobileAfiliado.classList.remove('hidden');
+                mobileGerencia.classList.add('hidden');
+                mobileAdmin.classList.add('hidden');
+                mobileAfiliase.classList.add('hidden');
 
                 localStorage.setItem('tech_afiliado_indicador', user.usuario);
                 const newUrl = `${window.location.pathname}?ref=admin&afiliado=${encodeURIComponent(user.usuario)}`;
@@ -641,9 +677,31 @@
                 btnGerenciaAfiliados.classList.add('hidden');
                 btnAreaGerencial.classList.add('hidden');
                 btnAfiliase.classList.remove('hidden');
+                mobileAfiliado.classList.add('hidden');
+                mobileGerencia.classList.add('hidden');
+                mobileAdmin.classList.add('hidden');
+                mobileAfiliase.classList.remove('hidden');
             }
 
+            document.getElementById('mobileNomeUsuario').innerText = `${user.nome} · ${user.perfil.toUpperCase()}`;
+            mobileSessao.classList.remove('hidden');
             renderizarProdutos();
+        }
+
+        function alternarMenuMobile() {
+            const menu = document.getElementById('menuMobile');
+            const botao = document.getElementById('btnMenuMobile');
+            const aberto = menu.classList.toggle('hidden') === false;
+            botao.setAttribute('aria-expanded', String(aberto));
+            botao.setAttribute('aria-label', aberto ? 'Fechar menu de navegação' : 'Abrir menu de navegação');
+            botao.innerHTML = aberto ? '<i class="fa-solid fa-xmark"></i>' : '<i class="fa-solid fa-bars"></i>';
+        }
+
+        function fecharMenuMobile() {
+            document.getElementById('menuMobile').classList.add('hidden');
+            document.getElementById('btnMenuMobile').setAttribute('aria-expanded', 'false');
+            document.getElementById('btnMenuMobile').setAttribute('aria-label', 'Abrir menu de navegação');
+            document.getElementById('btnMenuMobile').innerHTML = '<i class="fa-solid fa-bars"></i>';
         }
 
         function verificarSessaoInicial() {
@@ -917,6 +975,7 @@
             document.getElementById('p_preco_de').value = p.precoDe;
             document.getElementById('p_preco_por').value = p.precoPor;
             document.getElementById('p_pdf').value = p.pdf || '';
+            document.getElementById('p_repasse_juros').checked = p.repasseJurosComprador !== false;
         }
 
         async function salvarProdutosNoServidor() {
@@ -939,13 +998,14 @@
             const precoDe = parseFloat(document.getElementById('p_preco_de').value);
             const precoPor = parseFloat(document.getElementById('p_preco_por').value);
             const pdf = document.getElementById('p_pdf').value.trim();
+            const repasseJurosComprador = document.getElementById('p_repasse_juros').checked;
             let imgFinal = "https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=500&auto=format&fit=crop&q=60";
 
             if (editIdx >= 0) {
-                produtos[editIdx] = { ...produtos[editIdx], id, nome, desc, custo, precoDe, precoPor, pdf };
+                produtos[editIdx] = { ...produtos[editIdx], id, nome, desc, custo, precoDe, precoPor, pdf, repasseJurosComprador };
                 alert("Produto atualizado!");
             } else {
-                produtos.push({ id, nome, desc, custo, precoDe, precoPor, imagem: imgFinal, pdf });
+                produtos.push({ id, nome, desc, custo, precoDe, precoPor, imagem: imgFinal, pdf, repasseJurosComprador });
                 alert("Produto criado!");
             }
 

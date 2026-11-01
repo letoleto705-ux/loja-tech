@@ -16,7 +16,7 @@ loja-tech/
 O Render serve todas as páginas e a API no mesmo endereço, então não há CORS nem URL para configurar. Tudo usa o **mesmo login** e o **mesmo banco (Neon)**.
 
 ## 1. Neon (banco)
-Copie a **connection string** do seu projeto (`postgresql://...`). Não precisa criar tabelas: o servidor cria sozinho na primeira inicialização.
+Copie a **connection string** do seu projeto (`postgresql://...`). O servidor cria/atualiza o schema na primeira inicialização. O script [database/neon-migration.sql](./database/neon-migration.sql) documenta as tabelas/campos novos para aplicar manualmente depois da inicialização do schema original.
 
 ## 2. GitHub
 Crie um repositório e envie **o conteúdo da pasta `loja-tech`** (com `package.json` e `server.js` na raiz do repositório).
@@ -109,6 +109,14 @@ Proteções: o afiliado só ganha se existir; se o CPF ou e-mail do comprador fo
    2. **Neyza:** abra o Link 2 do Roll (`afiliado.html?cad=roll`) e crie a conta `neyza` (2ª geração).
    3. **Cliente:** abra o Link 1 da Neyza, compre um produto e finalize o checkout pelo Pix ou cartão.
    4. Faça um pagamento de teste e aguarde a aprovação no Mercado Pago; a página deve atualizar o status e liberar o produto automaticamente.
+
+## 10. Cupons, campanhas e parcelamento
+- No Tech Payments, o administrador define o liga/desliga global e a porcentagem máxima dos cupons, aprova os códigos submetidos pelos afiliados e publica/desativa comunicados internos.
+- O afiliado cria o próprio código na Área do Afiliado. Cupons novos aguardam ativação do administrador. No checkout, o servidor valida o status e calcula o desconto sobre o preço cadastrado; comissões são calculadas sobre o valor final pago e a venda fica atribuída ao dono do cupom.
+- As regras de porcentagem são salvas em `config` (JSONB); cupons e comunicados ficam em `afiliado_cupons` e `notificacoes_afiliados`.
+- Produtos seguem armazenados na lista JSONB `config.produtos`; a opção administrativa `repasseJurosComprador` é salva nesse produto e copiada para o pedido. A opção é enviada como metadado no pagamento, sem permitir alteração pelo checkout.
+- O checkout seguro de cartão usa o Brick do Mercado Pago. O modo sem juros também depende de planos/campanhas sem juros habilitados na conta Mercado Pago da loja; essa regra comercial da conta não pode ser criada por um campo da API de pagamento. Valide os planos disponíveis na conta de produção antes de anunciar parcelamento sem juros.
+- As telas da loja, checkout, afiliado e administração compartilham as regras mobile de `public/responsive.css`.
 
 ## Observações
 - Senhas são guardadas com hash (bcrypt); a senha do administrador fica só nas variáveis do Render. O cadastro exige senha de pelo menos 6 caracteres.

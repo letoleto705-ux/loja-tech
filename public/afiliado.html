@@ -10,6 +10,7 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <!-- Google Fonts Inter -->
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="responsive.css">
 
     <script>
         tailwind.config = {
@@ -165,7 +166,23 @@
                 </div>
             </div>
 
+            <section id="bannerComunicadosAfiliado" class="hidden space-y-3" aria-live="polite"></section>
             <div id="avisoSaqueAfiliado" class="hidden bg-blue-50 border border-blue-200 rounded-2xl p-4 text-xs text-blue-900 leading-relaxed"></div>
+            <section id="painelCuponsAfiliado" class="hidden bg-white rounded-3xl p-6 sm:p-8 border border-orange-200 shadow-sm space-y-4">
+                <div id="avisoCampanhaCupom" class="hidden rounded-2xl bg-orange-50 border border-orange-200 p-4 text-sm font-bold text-orange-900">
+                    <i class="fa-solid fa-bullhorn mr-2"></i>Campanha de cupons ativa!
+                </div>
+                <div class="space-y-2">
+                    <h3 class="text-lg font-black text-slate-900"><i class="fa-solid fa-ticket text-orange-600 mr-2"></i>Seu cupom de desconto</h3>
+                    <p id="regraCupomAfiliado" class="text-xs text-slate-600"></p>
+                    <p id="statusCupomAfiliado" class="hidden rounded-xl p-3 text-xs" role="status"></p>
+                    <div class="flex flex-col sm:flex-row gap-2">
+                        <input type="text" id="codigoCupomAfiliado" maxlength="50" placeholder="Ex.: SUPERDESCONTO" class="min-w-0 flex-1 px-4 py-3 rounded-xl border border-slate-200 uppercase">
+                        <button id="btnSalvarCupomAfiliado" type="button" onclick="salvarCupomAfiliado()" class="px-5 py-3 rounded-xl bg-orange-600 hover:bg-orange-700 text-white text-xs font-bold">Salvar / Atualizar cupom</button>
+                    </div>
+                    <p id="estadoCupomAfiliado" class="text-xs text-slate-500"></p>
+                </div>
+            </section>
 
             <!-- CARDS DE DESEMPENHO -->
             <div class="grid grid-cols-1 sm:grid-cols-3 gap-6">
@@ -494,17 +511,77 @@
             const baseUrl = window.location.href.substring(0, window.location.href.lastIndexOf('/') + 1);
 
             if (rede.visao === 'admin') {
+                document.getElementById('painelCuponsAfiliado').classList.add('hidden');
                 montarVisaoAdmin(rede, baseUrl);
                 document.getElementById('nomeAfiliadoHeader').innerText = sessao.nome || 'Administrador';
             } else {
+                document.getElementById('painelCuponsAfiliado').classList.remove('hidden');
                 montarVisaoAfiliado(rede, baseUrl);
                 document.getElementById('nomeAfiliadoHeader').innerText = rede.eu.nome;
+                await carregarCuponsENotificacoes();
             }
 
             document.getElementById('statusUsuarioHeader').classList.remove('hidden');
             document.getElementById('secaoCarregando').classList.add('hidden');
             document.getElementById('secaoAutenticacao').classList.add('hidden');
             document.getElementById('secaoDashboardAfiliado').classList.remove('hidden');
+        }
+
+        async function carregarCuponsENotificacoes() {
+            const painel = document.getElementById('painelCuponsAfiliado');
+            try {
+                const config = await api('GET', '/api/afiliado/cupom');
+                const campo = document.getElementById('codigoCupomAfiliado');
+                const botao = document.getElementById('btnSalvarCupomAfiliado');
+                document.getElementById('avisoCampanhaCupom').classList.toggle('hidden', !config.ativo);
+                document.getElementById('regraCupomAfiliado').innerText = config.ativo
+                    ? `Você pode criar seu cupom de desconto de até ${config.percentualMaximo}% . O cupom será ativado após aprovação do administrador.`
+                    : 'A campanha está desativada pelo administrador.';
+                campo.value = config.cupom ? config.cupom.codigo : '';
+                campo.disabled = !config.ativo;
+                botao.disabled = !config.ativo;
+                botao.classList.toggle('opacity-50', !config.ativo);
+                document.getElementById('estadoCupomAfiliado').innerText = config.cupom
+                    ? `Status: ${!config.ativo ? 'campanha desativada pelo administrador' : config.cupom.ativo ? 'ativo' : 'aguardando ativação pelo administrador'}.`
+                    : '';
+            } catch (err) {
+                painel.insertAdjacentHTML('beforeend', `<p class="text-xs text-red-600">${esc(err.message)}</p>`);
+            }
+
+            try {
+                const avisos = await api('GET', '/api/afiliado/notificacoes');
+                const banner = document.getElementById('bannerComunicadosAfiliado');
+                banner.innerHTML = avisos.map(aviso => `
+                    <article class="rounded-2xl border border-blue-200 bg-blue-50 p-4">
+                        <h3 class="font-black text-blue-950">${esc(aviso.titulo)}</h3>
+                        <p class="mt-1 whitespace-pre-line text-sm text-blue-900">${esc(aviso.mensagem)}</p>
+                    </article>`).join('');
+                banner.classList.toggle('hidden', avisos.length === 0);
+            } catch (err) {
+                document.getElementById('bannerComunicadosAfiliado').innerHTML =
+                    `<p class="rounded-xl bg-red-50 p-3 text-xs text-red-700">${esc(err.message)}</p>`;
+                document.getElementById('bannerComunicadosAfiliado').classList.remove('hidden');
+            }
+        }
+
+        async function salvarCupomAfiliado() {
+            const status = document.getElementById('statusCupomAfiliado');
+            status.classList.remove('hidden', 'bg-emerald-50', 'text-emerald-800');
+            status.classList.add('bg-red-50', 'text-red-700');
+            try {
+                const resultado = await api('PUT', '/api/afiliado/cupom', {
+                    codigo: document.getElementById('codigoCupomAfiliado').value
+                });
+                document.getElementById('codigoCupomAfiliado').value = resultado.cupom.codigo;
+                status.classList.remove('bg-red-50', 'text-red-700');
+                status.classList.add('bg-emerald-50', 'text-emerald-800');
+                status.innerText = resultado.cupom.ativo
+                    ? 'Cupom atualizado e ativo.'
+                    : 'Cupom salvo. Aguarde a ativação do administrador para divulgar.';
+                await carregarCuponsENotificacoes();
+            } catch (err) {
+                status.innerText = err.message;
+            }
         }
 
         // ====== AFILIADO: vê só os indicados diretos (filhos) ======

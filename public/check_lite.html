@@ -11,6 +11,7 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <!-- Google Fonts Inter -->
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="responsive.css">
 
     <script>
         tailwind.config = {
@@ -171,6 +172,10 @@
                             <span>Subtotal:</span>
                             <span id="chk_subtotal">R$ 49,99</span>
                         </div>
+                        <div id="linhaDescontoCupom" class="hidden flex justify-between text-emerald-700">
+                            <span>Desconto do cupom:</span>
+                            <span id="chk_descontoCupom">- R$ 0,00</span>
+                        </div>
                         <div id="infoTaxaCartao" class="hidden flex justify-between text-orange-600">
                             <span>Encargos / Juros de Parcelamento:</span>
                             <span id="chk_juros">R$ 0,00</span>
@@ -187,6 +192,14 @@
                         <div id="infoAfiliadoBox" class="hidden pt-3 border-t border-slate-100 text-xs text-emerald-700 bg-emerald-50/60 p-2.5 rounded-xl font-bold flex items-center gap-1.5">
                             <i class="fa-solid fa-user-check"></i>
                             <span>Indicação do parceiro: <strong id="lblCodigoAfiliado"></strong></span>
+                        </div>
+                        <div class="mt-3 border-t border-slate-100 pt-3">
+                            <label for="codigoCupomCheckout" class="mb-1 block text-xs font-bold text-slate-700">Cupom de afiliado</label>
+                            <div class="flex flex-col sm:flex-row gap-2">
+                                <input id="codigoCupomCheckout" type="text" maxlength="50" oninput="invalidarCupomAlterado()" placeholder="Digite seu cupom" class="min-w-0 flex-1 rounded-xl border border-slate-200 px-3 py-2.5 uppercase">
+                                <button type="button" onclick="aplicarCupomCheckout()" class="rounded-xl bg-slate-900 px-4 py-2.5 text-xs font-bold text-white">Aplicar</button>
+                            </div>
+                            <p id="statusCupomCheckout" class="mt-2 text-xs" role="status"></p>
                         </div>
                     </div>
                 </div>
@@ -260,7 +273,11 @@
         const AFILIADO_KEY = 'tech_afiliado_ativo';
         const VALIDADE_AFILIADO_MS = 15 * 24 * 60 * 60 * 1000; // 15 dias
 
-        let precoBase = 49.99; // valor de reserva; o preço oficial vem do catálogo do servidor
+        let precoBase = 49.99; // total efetivo enviado ao Mercado Pago
+        let precoCatalogo = 49.99;
+        let descontoCupom = 0;
+        let codigoCupomAplicado = '';
+        let repasseJurosComprador = true;
         let formaPagtoAtual = 'pix';
         let afiliadoAtivoCodigo = "";
         let enviando = false;
@@ -282,10 +299,12 @@
                 const lista = await resp.json();
                 const prod = (lista || []).find(p => String(p.id || '').toLowerCase() === PRODUTO_ID);
                 if (!prod || !(Number(prod.precoPor) > 0)) return;
-                precoBase = Number(prod.precoPor);
-                const txt = 'R$ ' + precoBase.toFixed(2).replace('.', ',');
-                document.getElementById('chk_precoItem').innerText = txt;
-                document.getElementById('chk_subtotal').innerText = txt;
+                precoCatalogo = Number(prod.precoPor);
+                precoBase = precoCatalogo;
+                repasseJurosComprador = prod.repasseJurosComprador !== false;
+                document.getElementById('mensagemBrick').innerText = repasseJurosComprador
+                    ? 'O parcelamento e os encargos serão apresentados pelo Mercado Pago ao comprador.'
+                    : 'A loja absorve os encargos conforme os planos sem juros habilitados na conta Mercado Pago.';
                 atualizarResumoTela();
             } catch (e) {
                 console.warn('Usando preço de reserva:', e.message);
@@ -357,10 +376,61 @@
             const resumoParcelaEl = document.getElementById('infoParcelamentoResumo');
 
             infoTaxaEl.classList.add('hidden');
+            document.getElementById('chk_precoItem').innerText = `R$ ${precoCatalogo.toFixed(2)}`;
+            document.getElementById('chk_subtotal').innerText = `R$ ${precoCatalogo.toFixed(2)}`;
+            document.getElementById('chk_descontoCupom').innerText = `- R$ ${descontoCupom.toFixed(2)}`;
+            document.getElementById('linhaDescontoCupom').classList.toggle('hidden', descontoCupom <= 0);
             totalEl.innerText = `R$ ${precoBase.toFixed(2)}`;
             resumoParcelaEl.innerText = formaPagtoAtual === 'pix'
                 ? 'À vista via Pix'
                 : formaPagtoAtual === 'debito' ? 'Débito via Mercado Pago' : 'Cartão via Mercado Pago';
+        }
+
+        async function aplicarCupomCheckout() {
+            const input = document.getElementById('codigoCupomCheckout');
+            const status = document.getElementById('statusCupomCheckout');
+            const codigo = input.value.trim().toUpperCase();
+            if (!codigo) {
+                codigoCupomAplicado = '';
+                descontoCupom = 0;
+                precoBase = precoCatalogo;
+                status.innerText = 'Cupom removido.';
+                status.className = 'mt-2 text-xs text-slate-500';
+                atualizarResumoTela();
+                if (formaPagtoAtual !== 'pix') inicializarBrickCartao(formaPagtoAtual);
+                return;
+            }
+            try {
+                const response = await fetch(API_URL + '/api/checkout/cupom', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ produtoId: PRODUTO_ID, codigoCupom: codigo })
+                });
+                const dados = await response.json().catch(() => ({}));
+                if (!response.ok) throw new Error(dados.erro || 'Não foi possível validar o cupom.');
+                codigoCupomAplicado = dados.codigo;
+                descontoCupom = Number(dados.desconto) || 0;
+                precoBase = Number(dados.valor);
+                status.innerText = `Cupom aplicado: ${dados.percentual}% de desconto.`;
+                status.className = 'mt-2 text-xs font-bold text-emerald-700';
+                atualizarResumoTela();
+                if (formaPagtoAtual !== 'pix') inicializarBrickCartao(formaPagtoAtual);
+            } catch (err) {
+                status.innerText = err.message;
+                status.className = 'mt-2 text-xs text-red-600';
+            }
+        }
+
+        function invalidarCupomAlterado() {
+            const codigo = document.getElementById('codigoCupomCheckout').value.trim().toUpperCase();
+            if (!codigoCupomAplicado || codigo === codigoCupomAplicado) return;
+            codigoCupomAplicado = '';
+            descontoCupom = 0;
+            precoBase = precoCatalogo;
+            document.getElementById('statusCupomCheckout').innerText = 'Aplique novamente o código alterado.';
+            document.getElementById('statusCupomCheckout').className = 'mt-2 text-xs text-slate-500';
+            atualizarResumoTela();
+            if (formaPagtoAtual !== 'pix') inicializarBrickCartao(formaPagtoAtual);
         }
 
         let publicKeyPagamento = '';
@@ -442,7 +512,7 @@
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     produtoId: PRODUTO_ID, nome: cliente.nome, email: cliente.email,
-                    cpf: cliente.cpf, forma, afiliado: afiliadoAtivoCodigo
+                    cpf: cliente.cpf, forma, afiliado: afiliadoAtivoCodigo, codigoCupom: codigoCupomAplicado
                 })
             });
             const dados = await resp.json().catch(() => ({}));
