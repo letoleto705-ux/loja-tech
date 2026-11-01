@@ -110,13 +110,23 @@ async function gravarConfig(chave, valor) {
 }
 
 async function lerTaxas() {
+  await q(`INSERT INTO config (chave, valor) VALUES
+    ('taxaComissao', $1::jsonb),
+    ('taxaPatrocinador', $2::jsonb),
+    ('taxaAvo', $3::jsonb)
+    ON CONFLICT (chave) DO NOTHING`,
+  [
+    JSON.stringify(TAXA_COMISSAO_PADRAO),
+    JSON.stringify(TAXA_PATROCINADOR_PADRAO),
+    JSON.stringify(TAXA_AVO_PADRAO)
+  ]);
   const resultado = await q(
-    "SELECT chave, valor FROM config WHERE chave IN ('taxaComissao', 'taxaPatrocinador', 'taxaAvo', 'taxa_avo')"
+    "SELECT chave, valor FROM config WHERE chave IN ('taxaComissao', 'taxaPatrocinador', 'taxaAvo')"
   );
   const configuracoes = Object.fromEntries(resultado.rows.map(({ chave, valor }) => [chave, valor]));
   const direta = Number(configuracoes.taxaComissao ?? TAXA_COMISSAO_PADRAO);
   const patrocinador = Number(configuracoes.taxaPatrocinador ?? TAXA_PATROCINADOR_PADRAO);
-  const avo = Number(configuracoes.taxaAvo ?? configuracoes.taxa_avo ?? TAXA_AVO_PADRAO);
+  const avo = Number(configuracoes.taxaAvo ?? TAXA_AVO_PADRAO);
   return {
     taxaComissao: direta,
     taxaPatrocinador: patrocinador,
@@ -1249,9 +1259,7 @@ app.put('/api/config', auth, soAdmin, wrap(async (req, res) => {
   const taxasAtuais = await lerTaxas();
   const taxaComissao = req.body.taxaComissao === undefined ? taxasAtuais.taxaComissao : req.body.taxaComissao;
   const taxaPatrocinador = req.body.taxaPatrocinador === undefined ? taxasAtuais.taxaPatrocinador : req.body.taxaPatrocinador;
-  const taxaAvo = req.body.taxaAvo === undefined
-    ? (req.body.taxa_avo === undefined ? taxasAtuais.taxaAvo : req.body.taxa_avo)
-    : req.body.taxaAvo;
+  const taxaAvo = req.body.taxaAvo === undefined ? taxasAtuais.taxaAvo : req.body.taxaAvo;
   if (typeof taxaComissao !== 'number' || !Number.isFinite(taxaComissao) || taxaComissao < 0 || taxaComissao > 100
     || typeof taxaPatrocinador !== 'number' || !Number.isFinite(taxaPatrocinador) || taxaPatrocinador < 0 || taxaPatrocinador > 100
     || typeof taxaAvo !== 'number' || !Number.isFinite(taxaAvo) || taxaAvo < 0 || taxaAvo > 100) {
@@ -1269,12 +1277,24 @@ app.put('/api/config', auth, soAdmin, wrap(async (req, res) => {
     await gravarConfig('valorMinimoSaque', dinheiro(valorMinimoSaque));
   }
 
-  if (req.body.taxaComissao !== undefined || req.body.taxaPatrocinador !== undefined
-    || req.body.taxaAvo !== undefined || req.body.taxa_avo !== undefined) {
-    await q(`INSERT INTO config (chave, valor) VALUES
-      ('taxaComissao', $1::jsonb), ('taxaPatrocinador', $2::jsonb), ('taxaAvo', $3::jsonb)
-      ON CONFLICT (chave) DO UPDATE SET valor = EXCLUDED.valor`,
+  if (req.body.taxaComissao !== undefined || req.body.taxaPatrocinador !== undefined || req.body.taxaAvo !== undefined) {
+    const resultado = await q(`INSERT INTO config (chave, valor) VALUES
+      ('taxaComissao', $1::jsonb),
+      ('taxaPatrocinador', $2::jsonb),
+      ('taxaAvo', $3::jsonb)
+      ON CONFLICT (chave) DO UPDATE SET valor = EXCLUDED.valor
+      RETURNING chave, valor`,
     [JSON.stringify(taxaComissao), JSON.stringify(taxaPatrocinador), JSON.stringify(taxaAvo)]);
+    if (resultado.rows.length !== 3) {
+      throw new Error('O Neon não confirmou a persistência das três taxas de comissão.');
+    }
+
+    const persistidas = Object.fromEntries(resultado.rows.map(({ chave, valor }) => [chave, Number(valor)]));
+    if (persistidas.taxaComissao !== taxaComissao
+      || persistidas.taxaPatrocinador !== taxaPatrocinador
+      || persistidas.taxaAvo !== taxaAvo) {
+      throw new Error('Os valores persistidos no Neon diferem das taxas enviadas pelo painel.');
+    }
   }
 
   if (req.body.whatsappSuporte !== undefined) {
