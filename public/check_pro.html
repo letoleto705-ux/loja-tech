@@ -442,7 +442,7 @@
         }
 
         function textoLimiteParcelasSemJuros() {
-            return maxParcelasSemJuros === 0
+            return maxParcelasSemJuros < 2
                 ? 'nenhuma parcela sem juros'
                 : `até ${maxParcelasSemJuros}x sem juros`;
         }
@@ -453,9 +453,10 @@
             select.innerHTML = '';
             for (let quantidade = 1; quantidade <= 12; quantidade++) {
                 const valorPrincipal = precoBase / quantidade;
-                const descricao = quantidade <= maxParcelasSemJuros
-                    ? 'sem juros (estimativa)'
-                    : 'juros a confirmar pelo Mercado Pago';
+                const semJurosConfigurado = maxParcelasSemJuros >= 2 && quantidade <= maxParcelasSemJuros;
+                const descricao = semJurosConfigurado
+                    ? 'sem juros (estimativa; confirme no Mercado Pago)'
+                    : 'com juros (estimativa; valor final no Mercado Pago)';
                 select.add(new Option(
                     `${quantidade}x de ${formatarMoeda(valorPrincipal)} — ${descricao}`,
                     String(quantidade)
@@ -511,15 +512,16 @@
                 select.innerHTML = '<option value="">Selecione a quantidade de parcelas</option>';
                 parcelasDisponiveis.forEach(parcela => {
                     const quantidade = Number(parcela.installments);
-                    const semJuros = Number(parcela.total_amount) <= precoBase + 0.01;
-                    const classificacao = semJuros ? 'sem juros' : 'com juros';
-                    const observacao = quantidade <= maxParcelasSemJuros && semJuros
-                        ? classificacao
-                        : !semJuros
-                            ? classificacao
-                            : 'sem juros conforme Mercado Pago';
+                    const total = Number(parcela.total_amount);
+                    const semJurosMercadoPago = total <= precoBase + 0.01;
+                    const semJurosConfigurado = maxParcelasSemJuros >= 2 && quantidade <= maxParcelasSemJuros;
+                    const classificacao = !semJurosMercadoPago
+                        ? 'com juros'
+                        : semJurosConfigurado
+                            ? 'sem juros'
+                            : 'sem acréscimo neste cartão';
                     select.add(new Option(
-                        `${quantidade}x de ${formatarMoeda(parcela.installment_amount)} ${observacao}`,
+                        `${quantidade}x de ${formatarMoeda(parcela.installment_amount)} — ${classificacao} (total ${formatarMoeda(total)})`,
                         String(quantidade)
                     ));
                 });
