@@ -36,6 +36,7 @@ const PRODUTOS_INICIAIS = [
 
 const pool = new Pool({ connectionString: DATABASE_URL, ssl: { rejectUnauthorized: false }, max: 5 });
 const q = (sql, params) => pool.query(sql, params);
+pool.on('error', err => console.error('ERRO NO NEON:', err));
 
 // ===== Utilitários =====
 const norm = t => (t == null ? '' : String(t).trim().toLowerCase());
@@ -103,10 +104,11 @@ async function lerConfig(chave, padrao) {
   return r.rows.length ? r.rows[0].valor : padrao;
 }
 async function gravarConfig(chave, valor, client = pool) {
-  await client.query(
-    'INSERT INTO config (chave, valor) VALUES ($1, $2::jsonb) ON CONFLICT (chave) DO UPDATE SET valor = EXCLUDED.valor',
+  const resultado = await client.query(
+    'INSERT INTO config (chave, valor) VALUES ($1, $2::jsonb) ON CONFLICT (chave) DO UPDATE SET valor = EXCLUDED.valor RETURNING chave',
     [chave, JSON.stringify(valor)]
   );
+  exigirUmaLinhaPersistida(resultado, 'config');
 }
 
 async function lerTaxas(client = pool) {
@@ -888,21 +890,17 @@ app.put('/api/afiliado/cupom', auth, wrap(async (req, res) => {
   if (!/^[A-Z0-9][A-Z0-9_-]{2,49}$/.test(codigo)) {
     return res.status(400).json({ erro: 'Use de 3 a 50 caracteres: letras, números, hífen ou sublinhado.' });
   }
-  try {
-    const result = await q(`INSERT INTO afiliado_cupons (afiliado_usuario, codigo_cupom)
-      VALUES ($1, $2)
-      ON CONFLICT (afiliado_usuario) DO UPDATE SET codigo_cupom = EXCLUDED.codigo_cupom,
-        ativo = CASE WHEN afiliado_cupons.codigo_cupom <> EXCLUDED.codigo_cupom
-          THEN false ELSE afiliado_cupons.ativo END,
-        atualizado_em = now()
-      RETURNING id, codigo_cupom, ativo`,
-    [req.user.usuario, codigo]);
-    const c = result.rows[0];
-    res.json({ ok: true, cupom: { id: c.id, codigo: c.codigo_cupom, ativo: c.ativo } });
-  } catch (error) {
-    if (error.code === '23505') return res.status(409).json({ erro: 'Este código já está sendo usado por outro afiliado.' });
-    throw error;
-  }
+  const result = await q(`INSERT INTO afiliado_cupons (afiliado_usuario, codigo_cupom)
+    VALUES ($1, $2)
+    ON CONFLICT (afiliado_usuario) DO UPDATE SET codigo_cupom = EXCLUDED.codigo_cupom,
+      ativo = CASE WHEN afiliado_cupons.codigo_cupom <> EXCLUDED.codigo_cupom
+        THEN false ELSE afiliado_cupons.ativo END,
+      atualizado_em = now()
+    RETURNING id, codigo_cupom, ativo`,
+  [req.user.usuario, codigo]);
+  const c = result.rows[0];
+  if (!c) throw new Error('O Neon não confirmou a persistência do cupom do afiliado.');
+  res.json({ ok: true, cupom: { id: c.id, codigo: c.codigo_cupom, ativo: c.ativo } });
 }));
 
 app.get('/api/afiliado/notificacoes', auth, wrap(async (req, res) => {
@@ -929,6 +927,7 @@ app.post('/api/admin/notificacoes', auth, soAdmin, wrap(async (req, res) => {
   if (!titulo || !mensagem) return res.status(400).json({ erro: 'Informe o título e a mensagem do comunicado.' });
   const result = await q('INSERT INTO notificacoes_afiliados (titulo, mensagem) VALUES ($1, $2) RETURNING id, titulo, mensagem, data_criacao, ativa',
     [titulo, mensagem]);
+  if (!result.rows.length) throw new Error('O Neon não confirmou a persistência da notificação.');
   res.status(201).json(result.rows[0]);
 }));
 
@@ -1001,13 +1000,15 @@ app.post('/api/checkout', limitarTentativas, wrap(async (req, res) => {
   const repasseJurosComprador = prod.repasseJurosComprador !== false;
   const maxParcelasSemJuros = normalizarMaxParcelasSemJuros(prod.maxParcelasSemJuros);
   const paymentIdempotencyKey = crypto.randomUUID();
-  await q(`INSERT INTO pedidos (id, afiliado_usuario, produto_id, produto_nome, valor, valor_original,
+  const pedidoInserido = await q(`INSERT INTO pedidos (id, afiliado_usuario, produto_id, produto_nome, valor, valor_original,
       cupom_codigo, cupom_desconto, repasse_juros_comprador, max_parcelas_sem_juros,
       forma, cliente_nome, cliente_email, cliente_cpf, download_token, payment_idempotency_key)
-    VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)`,
+    VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
+    RETURNING id`,
   [pedidoId, afiliadoValido ? afiliado : null, prod.id, prod.nome, valorFinal, valorOriginal,
     codigoCupom, desconto, repasseJurosComprador, maxParcelasSemJuros, forma, nome, email, cpf,
     downloadToken, paymentIdempotencyKey]);
+  exigirUmaLinhaPersistida(pedidoInserido, 'pedidos');
 
   res.json({
     pedidoId, produtoNome: prod.nome, valor: valorFinal, valorOriginal, desconto, codigoCupom,
@@ -1329,7 +1330,7 @@ async function confirmarPedido(id) {
     }
     const central = dinheiro(valor - vendedor - patrocinador - avo);
 
-    await client.query(
+    const pedidoAtualizado = await client.query(
       `UPDATE pedidos SET status = 'pago', comissao = $2, patrocinador_usuario = $3,
          comissao_patrocinador = $4, avo_usuario = $5, comissao_avo = $6,
          pix_comissao_direta = $7, pix_comissao_patrocinador = $8, pix_comissao_avo = $9,
@@ -1337,9 +1338,11 @@ async function confirmarPedido(id) {
          status_comissao_direta = 'PENDENTE', data_pagamento_comissao_direta = NULL,
          status_comissao_patrocinador = 'PENDENTE', data_pagamento_comissao_patrocinador = NULL,
          status_comissao_avo = 'PENDENTE', data_pagamento_comissao_avo = NULL
-       WHERE id = $1`,
+       WHERE id = $1
+       RETURNING id`,
       [ped.id, vendedor, patrocinadorUsuario, patrocinador, avoUsuario, avo,
         pixVendedor || '', pixPatrocinador || '', pixAvo || '', central]);
+    exigirUmaLinhaPersistida(pedidoAtualizado, 'pedidos');
     return {
       comissao: vendedor, comissaoPatrocinador: patrocinador,
       comissaoAvo: avo, comissaoCentral: central
@@ -1798,7 +1801,8 @@ app.delete('/api/admin/contas/:usuario', auth, soAdmin, wrap(async (req, res) =>
 
 
 // Recebe notificações do Mercado Pago e sincroniza o estado da licença no Neon.
-app.post('/api/webhook/mercadopago', async (req, res) => {
+app.post('/api/webhook/mercadopago', async (req, res, next) => {
+  // Only malformed/unrelated notifications are acknowledged without database writes.
   const responderOk = () => res.status(200).send('OK');
   const responderFalha = () => res.status(503).send('Pagamento ainda não sincronizado.');
   try {
@@ -1854,15 +1858,17 @@ app.post('/api/webhook/mercadopago', async (req, res) => {
     if (status === 'approved') {
       if (!Number.isFinite(valor) || valor <= 0) {
         console.error(`Pagamento ${id} aprovado, mas o valor retornado é inválido.`);
-        return responderOk();
+        return responderFalha();
       }
 
-      await q(`
+      const vendaPersistida = await q(`
         INSERT INTO vendas_aprovadas (payment_id, cpf, email, produto, valor, hwid, status, ativa)
         VALUES ($1, $2, $3, $4, $5, NULL, 'APROVADO', TRUE)
         ON CONFLICT (payment_id)
-        DO UPDATE SET status = 'APROVADO', ativa = TRUE`,
+        DO UPDATE SET status = 'APROVADO', ativa = TRUE
+        RETURNING payment_id`,
       [id, cpf, email, produto, valor]);
+      exigirUmaLinhaPersistida(vendaPersistida, 'vendas_aprovadas');
 
       const valorFormatado = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(valor);
       console.log(`Pagamento aprovado e licença ativada. ID: ${id} | Comprador: ${email || 'não informado'} | Valor: ${valorFormatado}`);
@@ -1876,22 +1882,35 @@ app.post('/api/webhook/mercadopago', async (req, res) => {
       console.log(`Pagamento ${id} recebido com status "${status || 'não informado'}"; nenhuma alteração de licença.`);
     }
   } catch (erro) {
-    console.error('Erro no processamento do Webhook do Mercado Pago:', erro);
-    return res.status(500).send('Falha ao sincronizar pagamento.');
+    return next(erro);
   }
   return responderOk();
 });
 
 app.use('/api', (req, res) => res.status(404).json({ erro: 'Rota não encontrada.' }));
 app.use((err, req, res, next) => {
-  if (req.path === '/api/webhook/mercadopago') return res.status(500).send('Falha ao sincronizar pagamento.');
   if (err.type === 'entity.parse.failed') return res.status(400).json({ erro: 'Requisição inválida.' });
-  if (err.code === '23505') return res.status(409).json({ erro: 'Registro já existe.' });
+  const codigoErro = String(err.code || '');
+  const erroNeon = /^[0-9A-Z]{5}$/.test(codigoErro)
+    || /^(ECONN|ETIMEDOUT|EHOST|ENOTFOUND|ERR_TLS)/.test(codigoErro);
+  if (erroNeon) {
+    console.error('ERRO NO NEON:', err);
+    if (req.path === '/api/webhook/mercadopago') {
+      return res.status(500).send('Falha ao sincronizar pagamento.');
+    }
+    return res.status(500).json({ erro: 'Falha ao gravar ou consultar os dados no Neon.' });
+  }
+  if (req.path === '/api/webhook/mercadopago') {
+    console.error('Erro no processamento do Webhook do Mercado Pago:', err);
+    return res.status(500).send('Falha ao sincronizar pagamento.');
+  }
   console.error(err);
   res.status(500).json({ erro: 'Erro interno do servidor.' });
 });
 
 const PORT = process.env.PORT || 3000;
 iniciarBanco()
-  .then(() => app.listen(PORT, () => console.log('Loja Tech rodando na porta ' + PORT)))
-  .catch(e => { console.error('Falha ao iniciar o banco:', e.message); process.exit(1); });
+  .then(() => app.listen(PORT, () => console.log(
+    `Loja Tech rodando na porta ${PORT}; Neon endpoint=${new URL(DATABASE_URL).hostname}`
+  )))
+  .catch(e => { console.error('ERRO NO NEON:', e); process.exit(1); });
