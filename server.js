@@ -506,12 +506,61 @@ app.get('/api/saude', wrap(async (req, res) => {
   await q('SELECT 1');
   res.json({ ok: true, banco: 'conectado' });
 }));
+
+app.get('/api/admin/diagnostico-banco', auth, soAdmin, wrap(async (req, res) => {
+  const nomesTabelas = [
+    'contas', 'afiliados', 'pedidos', 'afiliado_cupons',
+    'vendas_aprovadas', 'config', 'notificacoes_afiliados'
+  ];
+  const [identidade, relacoes] = await Promise.all([
+    q(`SELECT current_database() AS banco, current_schema() AS esquema,
+        current_setting('search_path') AS search_path`),
+    q(`SELECT nome, to_regclass(nome)::text AS relacao
+      FROM unnest($1::text[]) AS tabelas(nome)`, [nomesTabelas])
+  ]);
+  const relacoesPorNome = new Map(relacoes.rows.map(({ nome, relacao }) => [nome, relacao]));
+  const tabelas = {};
+  for (const nome of nomesTabelas) {
+    if (!relacoesPorNome.get(nome)) {
+      tabelas[nome] = { existe: false, linhas: null };
+      continue;
+    }
+    const resultado = await q(`SELECT count(*)::int AS linhas FROM ${nome}`);
+    tabelas[nome] = { existe: true, linhas: resultado.rows[0].linhas };
+  }
+
+  res.set('Cache-Control', 'no-store');
+  res.json({
+    endpoint: new URL(DATABASE_URL).hostname,
+    ...identidade.rows[0],
+    tabelas
+  });
+}));
+
 app.get('/api/pagamento/config', (req, res) => {
   res.set('Cache-Control', 'no-store');
   res.json({ publicKey: String(MERCADO_PAGO_PUBLIC_KEY || '').trim() });
 });
 
 // ----- Cadastro / login -----
+function exigirUmaLinhaPersistida(resultado, tabela) {
+  if (resultado.rowCount !== 1) {
+    throw new Error(`O Neon não confirmou a gravação esperada na tabela ${tabela}.`);
+  }
+}
+
+async function verificarCadastroConfirmado(client, usuario, exigirAfiliado) {
+  const resultado = await client.query(`
+    SELECT EXISTS (SELECT 1 FROM contas WHERE usuario = $1) AS conta,
+           EXISTS (SELECT 1 FROM afiliados WHERE usuario = $1) AS afiliado`,
+  [usuario]);
+  const confirmado = resultado.rows[0];
+  if (!confirmado.conta || (exigirAfiliado && !confirmado.afiliado)) {
+    throw new Error(`O cadastro de ${usuario} não foi encontrado no Neon após o COMMIT.`);
+  }
+  console.info(`Persistência confirmada no Neon. endpoint=${new URL(DATABASE_URL).hostname} afiliado=${exigirAfiliado}`);
+}
+
 app.post('/api/registrar', limitarTentativas, wrap(async (req, res) => {
   const usuario = norm(req.body.usuario);
   const nome = txt(req.body.nome, 100), email = txt(req.body.email, 120);
@@ -542,8 +591,9 @@ app.post('/api/registrar', limitarTentativas, wrap(async (req, res) => {
 
     const senhaHash = await bcrypt.hash(senha, 10);
     const pixConta = perfil === 'afiliado' ? pix : '';
-    await client.query('INSERT INTO contas (usuario, nome, email, cpf, pix, telefone, senha_hash) VALUES ($1,$2,$3,$4,$5,$6,$7)',
+    const contaInserida = await client.query('INSERT INTO contas (usuario, nome, email, cpf, pix, telefone, senha_hash) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING usuario',
       [usuario, nome, email, cpf, pixConta, telefone, senhaHash]);
+    exigirUmaLinhaPersistida(contaInserida, 'contas');
 
     if (perfil === 'afiliado') {
       let patrocinadorId = 'admin', patrocinadorUsuario = null;
@@ -556,10 +606,12 @@ app.post('/api/registrar', limitarTentativas, wrap(async (req, res) => {
         }
       }
       const id = 'AF-' + usuario.toUpperCase();
-      await client.query(`INSERT INTO afiliados (id, usuario, nome, email, cpf, pix, telefone, senha_hash, patrocinador_id)
-                          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+      const afiliadoInserido = await client.query(`INSERT INTO afiliados (id, usuario, nome, email, cpf, pix, telefone, senha_hash, patrocinador_id)
+                          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING usuario`,
         [id, usuario, nome, email, cpf, pix, telefone, senhaHash, patrocinadorId]);
+      exigirUmaLinhaPersistida(afiliadoInserido, 'afiliados');
       await client.query('COMMIT');
+      await verificarCadastroConfirmado(client, usuario, true);
       return res.json({
         token: gerarToken(usuario, 'afiliado'),
         user: dadosUsuario({ usuario, nome, email, cpf, pix, telefone }, 'afiliado'),
@@ -568,6 +620,7 @@ app.post('/api/registrar', limitarTentativas, wrap(async (req, res) => {
     }
 
     await client.query('COMMIT');
+    await verificarCadastroConfirmado(client, usuario, false);
     res.json({
       token: gerarToken(usuario, 'cliente'),
       user: dadosUsuario({ usuario, nome, email, cpf, pix: '', telefone }, 'cliente')
@@ -634,17 +687,23 @@ app.post('/api/afiliar', auth, wrap(async (req, res) => {
       return res.status(404).json({ erro: 'Conta não encontrada.' });
     }
 
-    await client.query('UPDATE contas SET telefone = $2 WHERE usuario = $1', [usuario, telefone]);
+    const contaAtualizada = await client.query(
+      'UPDATE contas SET telefone = $2 WHERE usuario = $1 RETURNING usuario',
+      [usuario, telefone]
+    );
+    exigirUmaLinhaPersistida(contaAtualizada, 'contas');
 
     // Já é afiliado: atualiza só os dados; patrocinador e valores são preservados
     const existente = (await client.query('SELECT * FROM afiliados WHERE usuario = $1 FOR UPDATE', [usuario])).rows[0];
     if (existente) {
-      await client.query(
-        'UPDATE afiliados SET nome=$2, email=$3, cpf=$4, pix=$5, telefone=$6 WHERE usuario=$1',
+      const afiliadoAtualizado = await client.query(
+        'UPDATE afiliados SET nome=$2, email=$3, cpf=$4, pix=$5, telefone=$6 WHERE usuario=$1 RETURNING usuario',
         [usuario, nome, email, cpf, pix, telefone]
       );
+      exigirUmaLinhaPersistida(afiliadoAtualizado, 'afiliados');
       const patrocinadorUsuario = await usuarioDoPatrocinador(existente.patrocinador_id, client);
       await client.query('COMMIT');
+      await verificarCadastroConfirmado(client, usuario, true);
       return res.json({
         ok: true, id: existente.id, patrocinadorId: existente.patrocinador_id, patrocinadorUsuario
       });
@@ -659,10 +718,12 @@ app.post('/api/afiliar', auth, wrap(async (req, res) => {
     }
 
     const id = 'AF-' + usuario.toUpperCase();
-    await client.query(`INSERT INTO afiliados (id, usuario, nome, email, cpf, pix, telefone, senha_hash, patrocinador_id)
-                        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+    const afiliadoInserido = await client.query(`INSERT INTO afiliados (id, usuario, nome, email, cpf, pix, telefone, senha_hash, patrocinador_id)
+                        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING usuario`,
       [id, usuario, nome, email, cpf, pix, telefone, conta.senha_hash, patrocinadorId]);
+    exigirUmaLinhaPersistida(afiliadoInserido, 'afiliados');
     await client.query('COMMIT');
+    await verificarCadastroConfirmado(client, usuario, true);
     res.json({ ok: true, id, patrocinadorId, patrocinadorUsuario });
   } catch (error) {
     await client.query('ROLLBACK');
