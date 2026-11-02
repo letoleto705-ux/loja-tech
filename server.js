@@ -1731,7 +1731,7 @@ app.post('/api/admin/afiliados/liquidar-lote', auth, soAdmin, wrap(async (req, r
   }
 }));
 
-/* Isolamento temporário para diagnóstico: rotas de exclusão permanente desativadas.
+// Isolamento temporário para diagnóstico: rotas de exclusão permanente ativadas.
 async function excluirAfiliadoNoClient(client, id) {
   const alvo = (await client.query('SELECT * FROM afiliados WHERE id = $1 FOR UPDATE', [id])).rows[0];
   if (!alvo) return null;
@@ -1795,7 +1795,7 @@ app.delete('/api/admin/contas/:usuario', auth, soAdmin, wrap(async (req, res) =>
     client.release();
   }
 }));
-*/
+
 
 // Recebe notificações do Mercado Pago e sincroniza o estado da licença no Neon.
 app.post('/api/webhook/mercadopago', async (req, res) => {
