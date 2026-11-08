@@ -75,43 +75,7 @@ ALTER TABLE pedidos
   ADD COLUMN IF NOT EXISTS valor_original NUMERIC(12,2) NOT NULL DEFAULT 0,
   ADD COLUMN IF NOT EXISTS cupom_codigo TEXT NOT NULL DEFAULT '',
   ADD COLUMN IF NOT EXISTS cupom_desconto NUMERIC(12,2) NOT NULL DEFAULT 0,
-  ADD COLUMN IF NOT EXISTS repasse_juros_comprador BOOLEAN NOT NULL DEFAULT TRUE,
-  ADD COLUMN IF NOT EXISTS tipo_pedido TEXT NOT NULL DEFAULT 'software',
-  ADD COLUMN IF NOT EXISTS custo_total NUMERIC(12,2) NOT NULL DEFAULT 0,
-  ADD COLUMN IF NOT EXISTS entrega_cep TEXT NOT NULL DEFAULT '',
-  ADD COLUMN IF NOT EXISTS entrega_rua TEXT NOT NULL DEFAULT '',
-  ADD COLUMN IF NOT EXISTS entrega_numero TEXT NOT NULL DEFAULT '',
-  ADD COLUMN IF NOT EXISTS entrega_bairro TEXT NOT NULL DEFAULT '',
-  ADD COLUMN IF NOT EXISTS entrega_cidade TEXT NOT NULL DEFAULT '',
-  ADD COLUMN IF NOT EXISTS entrega_estado CHAR(2) NOT NULL DEFAULT '',
-  ADD COLUMN IF NOT EXISTS entrega_email TEXT NOT NULL DEFAULT '',
-  ADD COLUMN IF NOT EXISTS entrega_telefone TEXT NOT NULL DEFAULT '';
-
-CREATE TABLE IF NOT EXISTS produtos_cj (
-  pid TEXT PRIMARY KEY,
-  nome TEXT NOT NULL,
-  descricao TEXT NOT NULL DEFAULT '',
-  preco NUMERIC(12,2) NOT NULL CHECK (preco >= 0),
-  custo NUMERIC(12,2) NOT NULL DEFAULT 0 CHECK (custo >= 0),
-  categoria TEXT NOT NULL DEFAULT '',
-  imagem TEXT NOT NULL DEFAULT '',
-  ativo BOOLEAN NOT NULL DEFAULT TRUE,
-  atualizado_em TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-
-CREATE TABLE IF NOT EXISTS itens_pedido (
-  id BIGSERIAL PRIMARY KEY,
-  pedido_id TEXT NOT NULL REFERENCES pedidos(id) ON DELETE CASCADE,
-  produto_pid TEXT NOT NULL,
-  produto_nome TEXT NOT NULL,
-  quantidade INTEGER NOT NULL CHECK (quantidade > 0),
-  preco_unitario NUMERIC(12,2) NOT NULL CHECK (preco_unitario >= 0),
-  custo_unitario NUMERIC(12,2) NOT NULL CHECK (custo_unitario >= 0),
-  imagem TEXT NOT NULL DEFAULT ''
-);
-
-CREATE INDEX IF NOT EXISTS itens_pedido_pedido_id_idx
-  ON itens_pedido (pedido_id);
+  ADD COLUMN IF NOT EXISTS repasse_juros_comprador BOOLEAN NOT NULL DEFAULT TRUE;
 
 UPDATE pedidos SET valor_original = valor WHERE valor_original = 0;
 
@@ -149,5 +113,6 @@ SET valor = (
 )
 WHERE chave = 'produtos' AND jsonb_typeof(valor) = 'array';
 
--- Softwares permanecem em config.valor (JSONB), na chave "produtos".
--- Produtos físicos ficam em produtos_cj e os pedidos guardam snapshots em itens_pedido.
+-- A estrutura atual não possui tabela "produtos": a configuração do produto fica em
+-- config.valor (JSONB), na chave "produtos". A propriedade repasseJurosComprador
+-- é adicionada e validada pelo backend e editada exclusivamente pelo Admin.

@@ -3,9 +3,6 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="theme-color" content="#0f172a">
-    <meta name="apple-mobile-web-app-capable" content="yes">
-    <link rel="manifest" href="/manifest.webmanifest">
     <title>Tech - Sistema de Gestão para o Seu Negócio</title>
     <!-- Tailwind CSS CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -13,8 +10,8 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <!-- Google Fonts Inter -->
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="responsive.css">
     
-    <script src="https://sdk.mercadopago.com/js/v2"></script>
     <script>
         tailwind.config = {
             darkMode: 'class',
@@ -22,9 +19,9 @@
                 extend: {
                     colors: {
                         tech: {
-                            orange: '#0284C7',
-                            darkOrange: '#075985',
-                            lightOrange: '#38BDF8',
+                            orange: '#FF5722',
+                            darkOrange: '#E65100',
+                            lightOrange: '#FF9800',
                             bg: '#F8FAFC',
                             card: '#FFFFFF',
                             border: '#E2E8F0'
@@ -36,34 +33,18 @@
         }
     </script>
     <style>
-        .gradient-orange { background: linear-gradient(135deg, #0F172A 0%, #0284C7 100%); }
-        .shadow-orange-glow { box-shadow: 0 10px 25px -5px rgba(2, 132, 199, 0.28); }
+        .gradient-orange { background: linear-gradient(135deg, #FF5722 0%, #FF9800 100%); }
+        .shadow-orange-glow { box-shadow: 0 10px 25px -5px rgba(255, 87, 34, 0.3); }
         .glass-header { background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(10px); }
-        .tech-gradient-bg { background: linear-gradient(140deg, #EFF6FF 0%, #F8FAFC 58%, #ECFEFF 100%); }
-        [class~="text-orange-300"], [class~="text-orange-400"], [class~="text-orange-500"], [class~="text-orange-600"], [class~="text-orange-700"] { color: #0284C7 !important; }
-        [class~="bg-orange-50"] { background-color: #EFF6FF !important; }
-        [class~="bg-orange-50/50"] { background-color: rgba(239, 246, 255, .5) !important; }
-        [class~="bg-orange-50/30"] { background-color: rgba(239, 246, 255, .3) !important; }
-        [class~="bg-orange-100"] { background-color: #DBEAFE !important; }
-        [class~="bg-orange-200"] { background-color: #BFDBFE !important; }
-        [class~="bg-orange-500/15"] { background-color: rgba(2, 132, 199, .15) !important; }
-        [class~="border-orange-200"], [class~="border-orange-300"], [class~="border-orange-400/30"] { border-color: #BFDBFE !important; }
-        [class~="focus:border-orange-500"]:focus { border-color: #0284C7 !important; }
-        [class~="hover:bg-orange-50"]:hover { background-color: #EFF6FF !important; }
-        [class~="hover:bg-orange-100"]:hover { background-color: #DBEAFE !important; }
-        [class~="accent-orange-600"] { accent-color: #0284C7 !important; }
     </style>
 </head>
 <body class="bg-slate-100 text-slate-800 font-sans antialiased min-h-screen flex flex-col justify-between">
 
     <!-- PORTÃO DE ENTRADA: login à esquerda, boas-vindas à direita -->
-    <div id="telaPortaoEntrada" class="hidden fixed inset-0 z-50 overflow-y-auto bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900">
+    <div id="telaPortaoEntrada" class="fixed inset-0 z-50 overflow-y-auto bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900">
         <!-- brilhos decorativos -->
-        <div class="pointer-events-none absolute -top-32 -right-32 w-96 h-96 rounded-full bg-sky-500/20 blur-3xl"></div>
-        <div class="pointer-events-none absolute -bottom-40 -left-32 w-96 h-96 rounded-full bg-cyan-400/10 blur-3xl"></div>
-        <button type="button" onclick="fecharPortaoLogin()" class="absolute right-4 top-4 z-10 rounded-xl border border-white/20 bg-white/10 px-4 py-2 text-xs font-bold text-white hover:bg-white/20">
-            Voltar à vitrine
-        </button>
+        <div class="pointer-events-none absolute -top-32 -right-32 w-96 h-96 rounded-full bg-orange-500/20 blur-3xl"></div>
+        <div class="pointer-events-none absolute -bottom-40 -left-32 w-96 h-96 rounded-full bg-amber-400/10 blur-3xl"></div>
 
         <div class="relative max-w-6xl mx-auto min-h-full grid grid-cols-1 lg:grid-cols-2 gap-8 lg:gap-14 items-center px-4 py-8 sm:px-8 sm:py-12">
 
@@ -217,7 +198,7 @@
     </div>
 
     <!-- CONTEÚDO PRINCIPAL -->
-    <div id="conteudoSistemaLoja" class="flex-1 flex flex-col">
+    <div id="conteudoSistemaLoja" class="hidden flex-1 flex flex-col">
         <header class="fixed top-0 left-0 w-full z-40 glass-header border-b border-slate-200 transition-all">
             <div class="relative max-w-7xl mx-auto px-4 h-20 flex items-center justify-between">
                 <div class="flex items-center gap-3">
@@ -230,13 +211,6 @@
                     </div>
                 </div>
 
-                <button type="button" id="btnAbrirCarrinho" onclick="abrirCarrinho()" aria-label="Abrir carrinho" aria-haspopup="dialog" class="relative p-3 rounded-xl bg-sky-50 text-sky-800 border border-sky-100 hover:bg-sky-100 transition">
-                    <i class="fa-solid fa-cart-shopping"></i>
-                    <span id="badgeCarrinho" class="absolute -top-1.5 -right-1.5 min-w-5 h-5 px-1 rounded-full bg-sky-600 text-white text-[10px] font-black flex items-center justify-center">0</span>
-                </button>
-                <button type="button" id="btnEntrarConta" onclick="mostrarPortaoLogin()" class="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50">
-                    Entrar
-                </button>
                 <button type="button" id="btnMenuMobile" aria-controls="menuMobile" aria-expanded="false" onclick="alternarMenuMobile()"
                     class="md:hidden p-3 rounded-xl bg-slate-100 text-slate-700" aria-label="Abrir menu de navegação">
                     <i class="fa-solid fa-bars"></i>
@@ -288,7 +262,7 @@
             </div>
         </header>
 
-        <section class="pt-32 pb-12 px-4 tech-gradient-bg border-b border-slate-200">
+        <section class="pt-32 pb-12 px-4 bg-gradient-to-b from-orange-50/60 to-slate-100 border-b border-slate-200">
             <div class="max-w-4xl mx-auto text-center space-y-4">
                 <span class="inline-block px-4 py-1.5 rounded-full bg-orange-100 text-orange-700 text-xs font-extrabold uppercase tracking-widest border border-orange-200 shadow-sm">
                     Tecnologia Profissional para Food Service
@@ -297,7 +271,7 @@
                     Sistemas de Gestão, Ficha Técnica e CMV <span class="text-orange-600">Sob Medida</span>
                 </h2>
                 <p class="text-slate-600 text-base sm:text-lg max-w-2xl mx-auto font-normal">
-                    Explore nossos softwares de gestão e produtos físicos de tecnologia em um catálogo público e sempre atualizado.
+                    Confira o catálogo oficial dos softwares da Tech e escolha a versão ideal para multiplicar o lucro do seu restaurante ou delivery.
                 </p>
             </div>
         </section>
@@ -307,17 +281,7 @@
                 <h3 class="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">Softwares e Produtos em Destaque</h3>
                 <span id="qtdProdutosLabel" class="text-xs font-semibold text-slate-500 bg-white px-3 py-1.5 rounded-lg border border-slate-200">0 Produtos Ativos</span>
             </div>
-            <div class="grid grid-cols-1 gap-6 lg:grid-cols-[200px_minmax(0,1fr)]">
-                <nav id="filtrosCategorias" class="mb-2 flex flex-wrap gap-2 lg:sticky lg:top-24 lg:mb-0 lg:flex-col lg:self-start" aria-label="Filtrar produtos por categoria">
-                    <button type="button" data-categoria="todos" aria-pressed="true" class="filtro-categoria rounded-full bg-slate-900 px-4 py-2 text-left text-xs font-bold text-white">Todos</button>
-                    <button type="button" data-categoria="software" aria-pressed="false" class="filtro-categoria rounded-full border border-slate-200 bg-white px-4 py-2 text-left text-xs font-bold text-slate-600">Softwares</button>
-                    <button type="button" data-categoria="smartphones" aria-pressed="false" class="filtro-categoria rounded-full border border-slate-200 bg-white px-4 py-2 text-left text-xs font-bold text-slate-600">Smartphones</button>
-                    <button type="button" data-categoria="audio" aria-pressed="false" class="filtro-categoria rounded-full border border-slate-200 bg-white px-4 py-2 text-left text-xs font-bold text-slate-600">Áudio</button>
-                    <button type="button" data-categoria="drones" aria-pressed="false" class="filtro-categoria rounded-full border border-slate-200 bg-white px-4 py-2 text-left text-xs font-bold text-slate-600">Drones</button>
-                    <button type="button" data-categoria="acessorios" aria-pressed="false" class="filtro-categoria rounded-full border border-slate-200 bg-white px-4 py-2 text-left text-xs font-bold text-slate-600">Acessórios</button>
-                </nav>
-                <div id="gridProdutos" class="grid grid-cols-1 gap-8 md:grid-cols-2 xl:grid-cols-3"></div>
-            </div>
+            <div id="gridProdutos" class="grid grid-cols-1 md:grid-cols-3 gap-8"></div>
         </section>
 
         <section id="afiliase" class="py-16 bg-white border-t border-b border-slate-200 my-8">
@@ -341,112 +305,6 @@
             <p>&copy; 2026 Tech - Software de Gestão. Todos os direitos reservados.</p>
         </footer>
     </div>
-
-    <div id="overlayCarrinho" class="fixed inset-0 z-[70] hidden bg-slate-950/50 backdrop-blur-sm" onclick="fecharCarrinho()"></div>
-    <aside id="gavetaCarrinho" class="fixed right-0 top-0 z-[80] h-full w-full max-w-md translate-x-full overflow-y-auto bg-white shadow-2xl transition-transform duration-300" role="dialog" aria-modal="true" aria-hidden="true" inert aria-labelledby="tituloCarrinho">
-        <div class="sticky top-0 z-10 flex items-center justify-between border-b border-slate-200 bg-white/95 px-5 py-4 backdrop-blur">
-            <div>
-                <h2 id="tituloCarrinho" class="text-lg font-black text-slate-900">Seu carrinho</h2>
-                <p class="text-xs text-slate-500">Produtos físicos da Loja Tech</p>
-            </div>
-            <button type="button" id="btnFecharCarrinho" onclick="fecharCarrinho()" aria-label="Fechar carrinho" class="rounded-xl p-2 text-slate-500 hover:bg-slate-100">
-                <i class="fa-solid fa-xmark text-xl"></i>
-            </button>
-        </div>
-        <div class="space-y-5 p-5">
-            <div id="itensCarrinho" class="space-y-3"></div>
-            <div id="carrinhoVazio" class="hidden rounded-2xl border border-dashed border-slate-300 py-10 text-center text-sm text-slate-500">
-                Seu carrinho ainda está vazio.
-            </div>
-            <div class="rounded-2xl bg-slate-50 p-4">
-                <div class="flex justify-between text-sm font-bold text-slate-700">
-                    <span>Total dos produtos</span>
-                    <span id="subtotalCarrinho">R$ 0,00</span>
-                </div>
-                <p class="mt-2 text-[11px] leading-relaxed text-slate-500">O total é validado no servidor com os preços atuais. Frete não incluído nesta versão.</p>
-            </div>
-            <form id="formCheckoutUnificado" novalidate onsubmit="finalizarCheckoutUnificado(event)" class="space-y-3 border-t border-slate-200 pt-5">
-                <h3 class="text-sm font-black text-slate-900">Finalizar pedido</h3>
-                <label class="block text-[11px] font-bold uppercase tracking-wide text-slate-500">Nome
-                    <input id="checkoutNome" required readonly class="mt-1 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-700">
-                </label>
-                <label class="block text-[11px] font-bold uppercase tracking-wide text-slate-500">E-mail
-                    <input id="checkoutEmail" type="email" required autocomplete="email" maxlength="120" class="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-700">
-                </label>
-                <label class="block text-[11px] font-bold uppercase tracking-wide text-slate-500">CPF
-                    <input id="checkoutCpf" required readonly class="mt-1 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-700">
-                </label>
-                <fieldset class="space-y-3 rounded-2xl border border-slate-200 p-3">
-                    <legend class="px-1 text-[11px] font-black uppercase tracking-wide text-slate-700">Endereço de entrega</legend>
-                    <label class="block text-[11px] font-bold uppercase tracking-wide text-slate-500">CEP
-                        <input id="checkoutCep" required inputmode="numeric" autocomplete="postal-code" maxlength="9" pattern="[0-9]{5}-?[0-9]{3}" placeholder="00000-000" class="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm">
-                    </label>
-                    <label class="block text-[11px] font-bold uppercase tracking-wide text-slate-500">Rua
-                        <input id="checkoutRua" required autocomplete="address-line1" maxlength="200" class="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm">
-                    </label>
-                    <div class="grid grid-cols-2 gap-2">
-                        <label class="block text-[11px] font-bold uppercase tracking-wide text-slate-500">Número
-                            <input id="checkoutNumero" required maxlength="30" autocomplete="address-line2" class="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm">
-                        </label>
-                        <label class="block text-[11px] font-bold uppercase tracking-wide text-slate-500">Bairro
-                            <input id="checkoutBairro" required maxlength="120" autocomplete="address-level3" class="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm">
-                        </label>
-                    </div>
-                    <div class="grid grid-cols-3 gap-2">
-                        <label class="col-span-2 block text-[11px] font-bold uppercase tracking-wide text-slate-500">Cidade
-                            <input id="checkoutCidade" required maxlength="120" autocomplete="address-level2" class="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm">
-                        </label>
-                        <label class="block text-[11px] font-bold uppercase tracking-wide text-slate-500">Estado
-                            <input id="checkoutEstado" required minlength="2" maxlength="2" autocomplete="address-level1" class="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm uppercase">
-                        </label>
-                    </div>
-                    <label class="block text-[11px] font-bold uppercase tracking-wide text-slate-500">Telefone
-                        <input id="checkoutTelefone" type="tel" required inputmode="tel" autocomplete="tel" maxlength="20" placeholder="(11) 91234-5678" class="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm">
-                    </label>
-                </fieldset>
-                <label class="block text-[11px] font-bold uppercase tracking-wide text-slate-500">Pagamento
-                    <select id="checkoutForma" onchange="alternarCamposCartao()" class="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-700">
-                        <option value="pix">PIX</option>
-                        <option value="cartao">Cartão de crédito</option>
-                    </select>
-                </label>
-                <div id="camposCartao" class="hidden space-y-3 rounded-2xl border border-slate-200 p-3">
-                    <label class="block text-[11px] font-bold uppercase tracking-wide text-slate-500">Número do cartão
-                        <input id="cartaoNumero" inputmode="numeric" autocomplete="cc-number" class="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm" placeholder="0000 0000 0000 0000">
-                    </label>
-                    <label class="block text-[11px] font-bold uppercase tracking-wide text-slate-500">Nome impresso
-                        <input id="cartaoTitular" autocomplete="cc-name" class="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm">
-                    </label>
-                    <div class="grid grid-cols-3 gap-2">
-                        <label class="block text-[10px] font-bold uppercase text-slate-500">Mês
-                            <input id="cartaoMes" inputmode="numeric" autocomplete="cc-exp-month" maxlength="2" placeholder="MM" class="mt-1 w-full rounded-xl border border-slate-200 px-2 py-2.5 text-sm">
-                        </label>
-                        <label class="block text-[10px] font-bold uppercase text-slate-500">Ano
-                            <input id="cartaoAno" inputmode="numeric" autocomplete="cc-exp-year" maxlength="4" placeholder="AAAA" class="mt-1 w-full rounded-xl border border-slate-200 px-2 py-2.5 text-sm">
-                        </label>
-                        <label class="block text-[10px] font-bold uppercase text-slate-500">CVV
-                            <input id="cartaoCvv" inputmode="numeric" autocomplete="cc-csc" maxlength="4" class="mt-1 w-full rounded-xl border border-slate-200 px-2 py-2.5 text-sm">
-                        </label>
-                    </div>
-                    <label class="block text-[11px] font-bold uppercase tracking-wide text-slate-500">Parcelas
-                        <select id="cartaoParcelas" class="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm">
-                            <option value="1">1x</option>
-                        </select>
-                    </label>
-                </div>
-                <p id="statusCheckoutCarrinho" class="hidden text-xs font-semibold text-slate-600" role="status"></p>
-                <button id="btnFinalizarCarrinho" type="submit" class="w-full rounded-xl bg-slate-900 px-4 py-3.5 text-xs font-extrabold uppercase tracking-wide text-white transition hover:bg-sky-700 disabled:opacity-60">
-                    <i class="fa-solid fa-lock mr-2"></i>Finalizar pedido
-                </button>
-            </form>
-            <div id="resultadoPagamentoCarrinho" class="hidden space-y-3 rounded-2xl border border-sky-200 bg-sky-50 p-4">
-                <h3 id="tituloResultadoPagamento" class="text-sm font-black text-slate-900"></h3>
-                <img id="qrCodePagamentoCarrinho" alt="QR Code PIX" class="mx-auto hidden h-48 w-48 rounded-lg bg-white p-2">
-                <textarea id="codigoPixCarrinho" readonly class="hidden w-full rounded-xl border border-sky-200 bg-white p-3 text-xs" rows="3"></textarea>
-                <button id="btnCopiarPixCarrinho" type="button" onclick="copiarCodigoPixCarrinho()" class="hidden w-full rounded-xl bg-sky-700 px-3 py-2.5 text-xs font-bold text-white">Copiar código PIX</button>
-            </div>
-        </div>
-    </aside>
 
     <!-- MODAL: GERÊNCIA DE AFILIADOS (CENTRAL) -->
     <div id="modalAfiliados" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm hidden flex items-center justify-center p-4 z-50">
@@ -644,24 +502,6 @@
                     <button type="button" id="btnDeletarProduto" onclick="deletarProdutoAtual()" class="hidden px-4 py-3.5 text-red-600 bg-red-50 hover:bg-red-100 rounded-xl font-bold transition"><i class="fa-solid fa-trash-can"></i></button>
                 </div>
             </form>
-
-            <section class="mt-7 border-t border-slate-200 pt-5">
-                <div class="flex flex-wrap items-center justify-between gap-2">
-                    <div>
-                        <h4 class="text-sm font-black text-slate-900">Catálogo físico CJ</h4>
-                        <p class="text-[11px] text-slate-500">Custos visíveis somente nesta área administrativa.</p>
-                    </div>
-                    <button type="button" onclick="sincronizarProdutosCJ()" class="rounded-xl bg-sky-700 px-3 py-2 text-[10px] font-bold uppercase text-white hover:bg-sky-800">
-                        <i class="fa-solid fa-rotate mr-1"></i> Sincronizar CJ
-                    </button>
-                </div>
-                <button type="button" onclick="carregarDashboardFinanceiro()" class="mt-3 rounded-xl border border-slate-200 px-3 py-2 text-[10px] font-bold uppercase text-slate-700 hover:bg-slate-50">
-                    Ver resumo financeiro
-                </button>
-                <p id="statusCatalogoCJ" class="mt-2 text-xs text-slate-500" role="status"></p>
-                <div id="resumoFinanceiroAdmin" class="hidden mt-3 rounded-xl bg-slate-50 p-3 text-xs text-slate-700"></div>
-                <div id="listaProdutosCJAdmin" class="mt-3 max-h-64 space-y-2 overflow-y-auto"></div>
-            </section>
         </div>
     </div>
 
@@ -867,16 +707,6 @@
         }
 
         let produtos = produtosIniciais;
-        let produtosFisicos = [];
-        let categoriaSelecionada = 'todos';
-        let carrinho = [];
-        try {
-            const carrinhoSalvo = JSON.parse(localStorage.getItem('tech_cart') || '[]');
-            if (Array.isArray(carrinhoSalvo)) carrinho = carrinhoSalvo;
-        } catch (error) {
-            console.warn('Carrinho salvo inválido; iniciando um carrinho vazio.');
-            localStorage.removeItem('tech_cart');
-        }
         let afiliadosBase = [];
         let taxasComissao = { taxaComissao: 0, taxaPatrocinador: 0, taxaAvo: 0 };
 
@@ -933,8 +763,8 @@
             return String(t == null ? '' : t).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
         }
 
-        async function api(metodo, caminho, corpo, headersExtras = {}) {
-            const headers = { 'Content-Type': 'application/json', ...headersExtras };
+        async function api(metodo, caminho, corpo) {
+            const headers = { 'Content-Type': 'application/json' };
             const token = localStorage.getItem('tech_token');
             if (token) headers['Authorization'] = 'Bearer ' + token;
             let resp;
@@ -959,62 +789,21 @@
         window.addEventListener('DOMContentLoaded', async () => {
             alterarIdioma(localStorage.getItem('tech_language') || IDIOMA_PADRAO);
             sincronizarParametrosURL();
-            document.getElementById('filtrosCategorias').addEventListener('click', event => {
-                const botao = event.target.closest('[data-categoria]');
-                if (!botao) return;
-                categoriaSelecionada = botao.dataset.categoria;
-                document.querySelectorAll('.filtro-categoria').forEach(filtro => {
-                    const ativo = filtro === botao;
-                    filtro.setAttribute('aria-pressed', String(ativo));
-                    filtro.classList.toggle('bg-slate-900', ativo);
-                    filtro.classList.toggle('text-white', ativo);
-                    filtro.classList.toggle('border', !ativo);
-                    filtro.classList.toggle('border-slate-200', !ativo);
-                    filtro.classList.toggle('bg-white', !ativo);
-                    filtro.classList.toggle('text-slate-600', !ativo);
-                });
-                renderizarProdutos();
-            });
-            renderizarProdutos();
-            document.addEventListener('keydown', event => {
-                if (event.key === 'Escape' && !document.getElementById('overlayCarrinho').classList.contains('hidden')) fecharCarrinho();
-            });
-            if ('serviceWorker' in navigator) {
-                navigator.serviceWorker.register('/sw.js').catch(error => console.error('Falha ao registrar o modo PWA:', error));
-            }
             await carregarDadosPublicos();
             verificarSessaoInicial();
-            document.getElementById('btnEntrarConta').classList.toggle('hidden', Boolean(usuarioSessaoAtual));
         });
 
         async function carregarDadosPublicos() {
-            renderizarProdutos();
-            const resultados = await Promise.allSettled([
-                api('GET', '/api/produtos'),
-                api('GET', '/api/produtos-salvos'),
-                api('GET', '/api/config')
-            ]);
-            if (resultados[0].status === 'fulfilled' && Array.isArray(resultados[0].value) && resultados[0].value.length) {
-                produtos = resultados[0].value;
-            } else if (resultados[0].status === 'rejected') {
-                console.warn('Usando catálogo padrão de softwares:', resultados[0].reason.message);
-            }
-            if (resultados[1].status === 'fulfilled' && Array.isArray(resultados[1].value)) {
-                produtosFisicos = resultados[1].value.filter(produto => produto.tipo === 'cj');
-                const remotos = resultados[1].value.filter(produto => produto.tipo === 'software');
-                if (remotos.length) produtos = remotos;
-            } else if (resultados[1].status === 'rejected') {
-                console.warn('Catálogo de produtos físicos indisponível:', resultados[1].reason.message);
-            }
-            if (resultados[2].status === 'fulfilled') {
-                whatsappSuporte = resultados[2].value.whatsappSuporte || '';
+            try {
+                const lista = await api('GET', '/api/produtos');
+                if (Array.isArray(lista) && lista.length) produtos = lista;
+                const cfg = await api('GET', '/api/config');
+                taxasComissao = { taxaComissao: cfg.taxaComissao, taxaPatrocinador: cfg.taxaPatrocinador, taxaAvo: cfg.taxaAvo };
+                whatsappSuporte = cfg.whatsappSuporte || '';
                 configurarSuporte();
-            } else {
-                console.warn('Configurações públicas indisponíveis:', resultados[2].reason.message);
+            } catch (e) {
+                console.warn('Usando catálogo padrão:', e.message);
             }
-            sincronizarCarrinhoComCatalogo(produtosFisicos);
-            atualizarCarrinho();
-            renderizarProdutos();
         }
 
         function normalizarTexto(txt) {
@@ -1115,7 +904,6 @@
 
             document.getElementById('telaPortaoEntrada').classList.add('hidden');
             document.getElementById('conteudoSistemaLoja').classList.remove('hidden');
-            document.getElementById('btnEntrarConta').classList.add('hidden');
 
             document.getElementById('labelNomeUsuarioLogado').innerText = user.nome;
             document.getElementById('labelPerfilUsuarioLogado').innerText = user.perfil.toUpperCase();
@@ -1168,7 +956,6 @@
 
             document.getElementById('mobileNomeUsuario').innerText = `${user.nome} · ${user.perfil.toUpperCase()}`;
             mobileSessao.classList.remove('hidden');
-            preencherDadosCheckout();
             renderizarProdutos();
         }
 
@@ -1186,16 +973,6 @@
             document.getElementById('btnMenuMobile').setAttribute('aria-expanded', 'false');
             document.getElementById('btnMenuMobile').setAttribute('aria-label', 'Abrir menu de navegação');
             document.getElementById('btnMenuMobile').innerHTML = '<i class="fa-solid fa-bars"></i>';
-        }
-
-        function mostrarPortaoLogin() {
-            document.getElementById('telaPortaoEntrada').classList.remove('hidden');
-            document.getElementById('portao_usuario').focus();
-        }
-
-        function fecharPortaoLogin() {
-            document.getElementById('telaPortaoEntrada').classList.add('hidden');
-            document.getElementById('btnEntrarConta').focus();
         }
 
         function verificarSessaoInicial() {
@@ -1289,43 +1066,15 @@
         function renderizarProdutos() {
             const grid = document.getElementById('gridProdutos');
             const labelCount = document.getElementById('qtdProdutosLabel');
-            const catalogoCompleto = [...produtos, ...produtosFisicos];
-            const catalogo = catalogoCompleto.filter(p => categoriaSelecionada === 'todos'
-                || categoriaDoProduto(p) === categoriaSelecionada);
+            
             grid.innerHTML = '';
-            labelCount.innerText = `${catalogo.length} de ${catalogoCompleto.length} Produto(s) Ativo(s)`;
+            labelCount.innerText = `${produtos.length} Produto(s) Ativo(s)`;
 
             const urlParams = new URLSearchParams(window.location.search);
             const refParam = urlParams.get('ref') || 'admin';
             const afiliadoParam = (urlParams.get('afiliado') || localStorage.getItem(CHAVE_INDICADOR) || '').replace(/[^a-zA-Z0-9_.-]/g, '');
 
-            catalogo.forEach(p => {
-                const nome = esc(p.nome);
-                const descricao = esc(p.desc || p.descricao || '');
-                const imagem = esc(p.imagem || '');
-                const preco = Number(p.precoPor ?? p.preco ?? 0);
-                const ehFisico = p.tipo === 'cj';
-                if (!Number.isFinite(preco) || preco < 0) return;
-
-                if (ehFisico) {
-                    grid.innerHTML += `
-                        <article class="bg-white rounded-3xl border border-slate-200 p-6 shadow-sm hover:shadow-xl transition-all flex flex-col justify-between group">
-                            <div>
-                                <div class="h-48 rounded-2xl overflow-hidden mb-6 bg-slate-100 flex items-center justify-center">
-                                    <img src="${imagem}" alt="${nome}" loading="lazy" class="w-full h-full object-cover group-hover:scale-105 transition-transform">
-                                </div>
-                                <span class="text-[10px] font-black uppercase tracking-widest text-sky-700 bg-sky-50 px-2.5 py-1 rounded-md">${esc(p.categoria || 'Produto físico')}</span>
-                                <h4 class="text-xl font-extrabold text-slate-900 mt-2">${nome}</h4>
-                                <p class="text-xs text-slate-500 mt-2 leading-relaxed">${descricao}</p>
-                                <div class="mt-6 text-2xl font-black text-sky-700">${formatarMoeda(preco)}</div>
-                            </div>
-                            <button type="button" data-cart-pid="${esc(p.pid)}" class="mt-6 w-full py-3.5 text-xs font-bold uppercase tracking-wider text-white gradient-orange rounded-xl shadow-orange-glow hover:opacity-95 transition flex items-center justify-center gap-2">
-                                <i class="fa-solid fa-cart-plus"></i> Adicionar ao carrinho
-                            </button>
-                        </article>`;
-                    return;
-                }
-
+            produtos.forEach((p, idx) => {
                 let arquivoCheckout = 'check_lite.html';
                 let prodIdNormalizado = (p.id || '').toLowerCase().trim();
 
@@ -1336,313 +1085,34 @@
                 if (afiliadoParam) linkCheckoutFinal += `&afiliado=${encodeURIComponent(afiliadoParam)}`;
 
                 grid.innerHTML += `
-                    <article class="bg-white rounded-3xl border border-slate-200 p-6 shadow-sm hover:shadow-xl transition-all flex flex-col justify-between group">
+                    <div class="bg-white rounded-3xl border border-slate-200 p-6 shadow-sm hover:shadow-xl transition-all flex flex-col justify-between group">
                         <div>
                             <div class="h-48 rounded-2xl overflow-hidden mb-6 bg-slate-100 flex items-center justify-center">
-                                <img src="${imagem}" alt="${nome}" loading="lazy" class="w-full h-full object-cover group-hover:scale-105 transition-transform">
+                                <img src="${esc(p.imagem || '')}" alt="${esc(p.nome)}" class="w-full h-full object-cover group-hover:scale-105 transition-transform">
                             </div>
-                            <span class="text-[10px] font-black uppercase tracking-widest text-sky-700 bg-sky-50 px-2.5 py-1 rounded-md">Software Tech</span>
-                            <h4 class="text-xl font-extrabold text-slate-900 mt-2">${nome}</h4>
-                            <p class="text-xs text-slate-500 mt-2 leading-relaxed">${descricao}</p>
+                            <span class="text-[10px] font-black uppercase tracking-widest text-orange-600 bg-orange-50 px-2.5 py-1 rounded-md">Software Tech</span>
+                            <h4 class="text-xl font-extrabold text-slate-900 mt-2">${p.nome}</h4>
+                            <p class="text-xs text-slate-500 mt-2 leading-relaxed">${p.desc}</p>
                             <div class="mt-6">
-                                ${Number.isFinite(Number(p.precoDe)) ? `<span class="text-xs text-slate-400 line-through">De: ${formatarMoeda(Number(p.precoDe))}</span>` : ''}
-                                <div class="text-2xl font-black text-sky-700">${formatarMoeda(preco)}</div>
+                                <span class="text-xs text-slate-400 line-through">De: R$ ${parseFloat(p.precoDe).toFixed(2)}</span>
+                                <div class="text-2xl font-black text-orange-600">R$ ${parseFloat(p.precoPor).toFixed(2)}</div>
                             </div>
                         </div>
                         <div class="mt-6">
-                            <a href="${esc(linkCheckoutFinal)}" class="w-full py-3.5 text-xs font-bold uppercase tracking-wider text-white gradient-orange rounded-xl shadow-orange-glow hover:opacity-95 transition flex items-center justify-center gap-2">
-                                <i class="fa-solid fa-bolt"></i> Comprar software (individual)
-                            </a>
-                        </div>
-                    </article>
-                `;
-            });
-            grid.onclick = event => {
-                const button = event.target.closest('[data-cart-pid]');
-                if (button) adicionarAoCarrinho(button.dataset.cartPid);
-            };
-            if (!catalogo.length) {
-                grid.innerHTML = '<p class="col-span-full rounded-2xl border border-dashed border-slate-300 bg-white p-8 text-center text-sm text-slate-500">Nenhum produto encontrado nesta categoria.</p>';
-            }
-        }
-
-        function categoriaDoProduto(produto) {
-            if (produto.tipo !== 'cj') return 'software';
-            const texto = normalizarTexto(`${produto.categoria || ''} ${produto.nome || ''} ${produto.descricao || ''}`)
-                .normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-            if (/smartphone|mobile phone|cell phone|phone|celular|iphone|android/.test(texto)) return 'smartphones';
-            if (/audio|headphone|earphone|speaker|fone|alto-falante/.test(texto)) return 'audio';
-            if (/drone|quadcop/.test(texto)) return 'drones';
-            return 'acessorios';
-        }
-
-        function formatarMoeda(valor) {
-            return Number(valor || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-        }
-
-        function adicionarAoCarrinho(pid) {
-            const produto = produtosFisicos.find(item => item.pid === pid);
-            if (!produto) return;
-            const item = carrinho.find(registro => registro.pid === pid);
-            if (item) item.quantidade = Math.min(20, item.quantidade + 1);
-            else carrinho.push({ pid: produto.pid, nome: produto.nome, preco: Number(produto.preco), imagem: produto.imagem, quantidade: 1 });
-            salvarCarrinho();
-            abrirCarrinho();
-        }
-
-        function salvarCarrinho() {
-            localStorage.setItem('tech_cart', JSON.stringify(carrinho));
-            atualizarCarrinho();
-        }
-
-        function atualizarCarrinho() {
-            const container = document.getElementById('itensCarrinho');
-            if (!container) return;
-            carrinho = carrinho.filter(item => item && typeof item.pid === 'string' && Number.isInteger(item.quantidade) && item.quantidade > 0);
-            const quantidade = carrinho.reduce((total, item) => total + item.quantidade, 0);
-            const subtotal = calcularSubtotalCarrinho();
-            document.getElementById('badgeCarrinho').innerText = quantidade;
-            document.getElementById('subtotalCarrinho').innerText = formatarMoeda(subtotal);
-            document.getElementById('carrinhoVazio').classList.toggle('hidden', carrinho.length > 0);
-            document.getElementById('formCheckoutUnificado').classList.toggle('hidden', carrinho.length === 0);
-            container.innerHTML = carrinho.map(item => `
-                <article class="flex gap-3 rounded-2xl border border-slate-200 p-3">
-                    <img src="${esc(item.imagem || '')}" alt="" class="h-16 w-16 rounded-xl bg-slate-100 object-cover">
-                    <div class="min-w-0 flex-1">
-                        <h4 class="truncate text-xs font-bold text-slate-800">${esc(item.nome)}</h4>
-                        <p class="mt-1 text-xs font-black text-sky-700">${formatarMoeda(item.preco)}</p>
-                        <div class="mt-2 flex items-center gap-2">
-                            <button type="button" data-cart-action="decrease" data-cart-pid="${esc(item.pid)}" aria-label="Diminuir quantidade" class="h-7 w-7 rounded-lg border border-slate-200 text-slate-600">−</button>
-                            <span class="text-xs font-bold">${item.quantidade}</span>
-                            <button type="button" data-cart-action="increase" data-cart-pid="${esc(item.pid)}" aria-label="Aumentar quantidade" class="h-7 w-7 rounded-lg border border-slate-200 text-slate-600">+</button>
-                            <button type="button" data-cart-action="remove" data-cart-pid="${esc(item.pid)}" class="ml-auto text-[11px] font-bold text-red-600">Remover</button>
+                            <button onclick="executarCompraEProcessarComissao(${idx}, '${afiliadoParam}', '${linkCheckoutFinal}')" class="w-full py-3.5 text-xs font-bold uppercase tracking-wider text-white gradient-orange rounded-xl shadow-orange-glow hover:opacity-95 transition flex items-center justify-center gap-2">
+                                <i class="fa-solid fa-bolt"></i> Comprar Agora
+                            </button>
                         </div>
                     </div>
-                </article>`).join('');
-            container.onclick = event => {
-                const button = event.target.closest('[data-cart-action]');
-                if (!button) return;
-                const current = carrinho.find(item => item.pid === button.dataset.cartPid);
-                if (!current) return;
-                if (button.dataset.cartAction === 'remove' || (button.dataset.cartAction === 'decrease' && current.quantidade === 1)) {
-                    carrinho = carrinho.filter(item => item.pid !== current.pid);
-                } else if (button.dataset.cartAction === 'decrease') current.quantidade--;
-                else current.quantidade = Math.min(20, current.quantidade + 1);
-                salvarCarrinho();
-            };
-            localStorage.setItem('tech_cart', JSON.stringify(carrinho));
-        }
-
-        function calcularSubtotalCarrinho() {
-            return carrinho.reduce((total, item) => total + Number(item.preco || 0) * item.quantidade, 0);
-        }
-
-        function sincronizarCarrinhoComCatalogo(catalogo) {
-            const porId = new Map(catalogo.map(produto => [produto.pid, produto]));
-            carrinho = carrinho.flatMap(item => {
-                const produto = porId.get(item.pid);
-                if (!produto) return [];
-                return [{
-                    ...item,
-                    nome: produto.nome,
-                    imagem: produto.imagem || '',
-                    preco: Number(produto.preco)
-                }];
-            });
-            localStorage.setItem('tech_cart', JSON.stringify(carrinho));
-        }
-
-        function abrirCarrinho() {
-            if (usuarioSessaoAtual) preencherDadosCheckout();
-            document.getElementById('overlayCarrinho').classList.remove('hidden');
-            const gaveta = document.getElementById('gavetaCarrinho');
-            gaveta.classList.remove('translate-x-full');
-            gaveta.inert = false;
-            gaveta.setAttribute('aria-hidden', 'false');
-            document.getElementById('btnFecharCarrinho').focus();
-            document.body.classList.add('overflow-hidden');
-        }
-
-        function fecharCarrinho() {
-            document.getElementById('overlayCarrinho').classList.add('hidden');
-            const gaveta = document.getElementById('gavetaCarrinho');
-            gaveta.classList.add('translate-x-full');
-            gaveta.inert = true;
-            gaveta.setAttribute('aria-hidden', 'true');
-            document.body.classList.remove('overflow-hidden');
-            document.getElementById('btnAbrirCarrinho').focus();
-        }
-
-        function preencherDadosCheckout() {
-            document.getElementById('checkoutNome').value = usuarioSessaoAtual?.nome || '';
-            const email = document.getElementById('checkoutEmail');
-            if (!email.value) email.value = usuarioSessaoAtual?.email || '';
-            document.getElementById('checkoutCpf').value = usuarioSessaoAtual?.cpf || '';
-            const telefone = document.getElementById('checkoutTelefone');
-            if (!telefone.value) telefone.value = usuarioSessaoAtual?.telefone || '';
-        }
-
-        function alternarCamposCartao() {
-            const habilitar = document.getElementById('checkoutForma').value === 'cartao';
-            document.getElementById('camposCartao').classList.toggle('hidden', !habilitar);
-            ['cartaoNumero', 'cartaoTitular', 'cartaoMes', 'cartaoAno', 'cartaoCvv'].forEach(id => {
-                document.getElementById(id).required = habilitar;
+                `;
             });
         }
 
-        async function finalizarCheckoutUnificado(event) {
-            event.preventDefault();
-            const status = document.getElementById('statusCheckoutCarrinho');
-            const botao = document.getElementById('btnFinalizarCarrinho');
-            const forma = document.getElementById('checkoutForma').value;
-            if (!usuarioSessaoAtual) {
-                status.innerText = 'Entre na sua conta para finalizar o pedido.';
-                status.classList.remove('hidden');
-                return;
-            }
-            if (!carrinho.length) return;
-            const formulario = document.getElementById('formCheckoutUnificado');
-            if (!formulario.reportValidity()) return;
-            const entrega = {
-                cep: document.getElementById('checkoutCep').value.trim(),
-                rua: document.getElementById('checkoutRua').value.trim(),
-                numero: document.getElementById('checkoutNumero').value.trim(),
-                bairro: document.getElementById('checkoutBairro').value.trim(),
-                cidade: document.getElementById('checkoutCidade').value.trim(),
-                estado: document.getElementById('checkoutEstado').value.trim().toUpperCase(),
-                email: document.getElementById('checkoutEmail').value.trim(),
-                telefone: document.getElementById('checkoutTelefone').value.trim()
-            };
-            botao.disabled = true;
-            status.innerText = 'Validando o carrinho e iniciando o pagamento...';
-            status.classList.remove('hidden');
-            try {
-                const subtotalAntesAtualizacao = calcularSubtotalCarrinho();
-                const catalogo = await api('GET', '/api/produtos-salvos');
-                produtosFisicos = catalogo.filter(produto => produto.tipo === 'cj');
-                sincronizarCarrinhoComCatalogo(produtosFisicos);
-                atualizarCarrinho();
-                const subtotalAtual = calcularSubtotalCarrinho();
-                if (!carrinho.length) throw new Error('Os produtos do carrinho não estão mais disponíveis.');
-                if (Math.abs(subtotalAtual - subtotalAntesAtualizacao) >= 0.01) {
-                    status.innerText = 'O catálogo mudou. Confira o total atualizado e finalize novamente.';
-                    return;
-                }
-                let paymentData;
-                if (forma === 'cartao') paymentData = await criarTokenCartao();
-                const order = await api('POST', '/api/checkout/unificado', {
-                    items: carrinho.map(item => ({ pid: item.pid, quantidade: item.quantidade })),
-                    afiliado: localStorage.getItem(CHAVE_INDICADOR) || '',
-                    forma,
-                    entrega
-                });
-                if (Math.abs(Number(order.valor) - subtotalAtual) >= 0.01) {
-                    status.innerText = 'O preço mudou durante a finalização. O pedido não foi cobrado; confira o carrinho e tente novamente.';
-                    return;
-                }
-                const pagamento = await api('POST', `/api/checkout/${encodeURIComponent(order.pedidoId)}/pagar`,
-                    paymentData ? { paymentData } : {}, { 'x-download-token': order.downloadToken });
-                if (!['rejected', 'cancelled'].includes(String(pagamento.status || '').toLowerCase())) {
-                    carrinho = [];
-                    salvarCarrinho();
-                }
-                mostrarResultadoPagamento(pagamento, order);
-            } catch (error) {
-                status.innerText = error.message;
-                status.classList.remove('hidden');
-            } finally {
-                botao.disabled = false;
-            }
-        }
-
-        async function criarTokenCartao() {
-            if (!window.MercadoPago) throw new Error('O formulário seguro do Mercado Pago não foi carregado.');
-            const { publicKey } = await api('GET', '/api/pagamento/config');
-            if (!publicKey) throw new Error('O pagamento com cartão não está configurado neste servidor.');
-            const mercadoPago = new window.MercadoPago(publicKey, { locale: 'pt-BR' });
-            const token = await mercadoPago.createCardToken({
-                cardNumber: document.getElementById('cartaoNumero').value.replace(/\D/g, ''),
-                cardholderName: document.getElementById('cartaoTitular').value.trim(),
-                cardExpirationMonth: document.getElementById('cartaoMes').value.trim(),
-                cardExpirationYear: document.getElementById('cartaoAno').value.trim(),
-                securityCode: document.getElementById('cartaoCvv').value.trim(),
-                cardholderEmail: document.getElementById('checkoutEmail').value.trim(),
-                identificationType: 'CPF',
-                identificationNumber: document.getElementById('checkoutCpf').value.replace(/\D/g, '')
-            });
-            ['cartaoNumero', 'cartaoTitular', 'cartaoMes', 'cartaoAno', 'cartaoCvv'].forEach(id => {
-                document.getElementById(id).value = '';
-            });
-            return {
-                token: token.id,
-                payment_method_id: token.payment_method_id,
-                issuer_id: token.issuer_id,
-                installments: Number(document.getElementById('cartaoParcelas').value) || 1
-            };
-        }
-
-        function mostrarResultadoPagamento(pagamento, order) {
-            const resultado = document.getElementById('resultadoPagamentoCarrinho');
-            const qr = document.getElementById('qrCodePagamentoCarrinho');
-            const codigo = document.getElementById('codigoPixCarrinho');
-            const copiar = document.getElementById('btnCopiarPixCarrinho');
-            const status = document.getElementById('statusCheckoutCarrinho');
-            resultado.classList.remove('hidden');
-            if (pagamento.qrCode) {
-                document.getElementById('tituloResultadoPagamento').innerText = 'PIX gerado. Escaneie o QR Code ou copie o código.';
-                qr.src = pagamento.qrCodeBase64 ? `data:image/png;base64,${pagamento.qrCodeBase64}` : '';
-                qr.classList.toggle('hidden', !pagamento.qrCodeBase64);
-                codigo.value = pagamento.qrCode;
-                codigo.classList.remove('hidden');
-                copiar.classList.remove('hidden');
-                status.innerText = 'Aguardando confirmação do pagamento pelo Mercado Pago.';
-            } else {
-                const aprovado = pagamento.status === 'approved';
-                document.getElementById('tituloResultadoPagamento').innerText = aprovado
-                    ? 'Pagamento aprovado. Obrigado pela sua compra!'
-                    : `Pagamento ${pagamento.status || 'em processamento'}.`;
-                qr.classList.add('hidden');
-                codigo.classList.add('hidden');
-                copiar.classList.add('hidden');
-                status.innerText = aprovado ? 'Seu pedido foi confirmado.' : 'Acompanhe o status no Mercado Pago.';
-            }
-            status.classList.remove('hidden');
-            monitorarConfirmacaoPedido(order);
-        }
-
-        async function monitorarConfirmacaoPedido(order) {
-            const status = document.getElementById('statusCheckoutCarrinho');
-            for (let tentativa = 0; tentativa < 12; tentativa++) {
-                await new Promise(resolve => setTimeout(resolve, 5000));
-                try {
-                    const pedido = await api('GET', `/api/checkout/${encodeURIComponent(order.pedidoId)}/status`,
-                        undefined, { 'x-download-token': order.downloadToken });
-                    if (pedido.status === 'pago') {
-                        document.getElementById('tituloResultadoPagamento').innerText = 'Pagamento confirmado. Obrigado pela sua compra!';
-                        status.innerText = 'Seu pedido foi confirmado no servidor.';
-                        return;
-                    }
-                    if (['rejected', 'cancelled', 'refunded', 'charged_back'].includes(String(pedido.paymentStatus || '').toLowerCase())) {
-                        status.innerText = `O pagamento terminou com status ${pedido.paymentStatus}.`;
-                        return;
-                    }
-                } catch (error) {
-                    status.innerText = `Não foi possível consultar a confirmação agora: ${error.message}`;
-                    return;
-                }
-            }
-            status.innerText = 'A confirmação ainda está pendente. O webhook atualizará o pedido assim que o Mercado Pago confirmar o pagamento.';
-        }
-
-        async function copiarCodigoPixCarrinho() {
-            const codigo = document.getElementById('codigoPixCarrinho').value;
-            try {
-                await navigator.clipboard.writeText(codigo);
-                document.getElementById('btnCopiarPixCarrinho').innerText = 'Código PIX copiado';
-            } catch (error) {
-                document.getElementById('codigoPixCarrinho').select();
-                document.execCommand('copy');
-            }
+        function executarCompraEProcessarComissao(idxProduto, usuarioAfiliado, urlCheckout) {
+            // Aqui NÃO há venda nem comissão. O pedido é registrado no checkout e a comissão
+            // só nasce quando a Central confirma o recebimento do pagamento.
+            if (!produtos[idxProduto]) return;
+            window.location.href = urlCheckout;
         }
 
         function fecharModalLojista() { document.getElementById('modalLojista').classList.add('hidden'); }
@@ -1652,93 +1122,14 @@
             if (usuarioSessaoAtual && usuarioSessaoAtual.perfil === 'admin') {
                 try {
                     produtos = await api('GET', '/api/admin/produtos');
-                    await carregarProdutosCJAdmin();
                 } catch (err) {
-                    alert('Não foi possível carregar a área de catálogo: ' + err.message);
+                    alert('Não foi possível carregar os produtos para edição: ' + err.message);
                     return;
                 }
                 document.getElementById('modalLojista').classList.remove('hidden');
                 setModoLojista('criar');
             } else {
                 alert("Acesso exclusivo para o Administrador Geral.");
-            }
-        }
-
-        async function carregarProdutosCJAdmin() {
-            const lista = await api('GET', '/api/admin/produtos-cj');
-            const container = document.getElementById('listaProdutosCJAdmin');
-            const status = document.getElementById('statusCatalogoCJ');
-            container.innerHTML = lista.map(produto => `
-                <article data-cj-card="${esc(produto.pid)}" class="rounded-xl border border-slate-200 p-3">
-                    <div class="flex items-start justify-between gap-2">
-                        <div class="min-w-0">
-                            <h5 class="truncate text-xs font-bold text-slate-800">${esc(produto.nome)}</h5>
-                            <p class="text-[10px] text-slate-500">CJ: ${esc(produto.pid)} · Custo: ${formatarMoeda(produto.custo)}</p>
-                        </div>
-                        <label class="shrink-0 text-[10px] font-semibold text-slate-600">
-                            <input type="checkbox" data-cj-active ${produto.ativo ? 'checked' : ''}> Ativo
-                        </label>
-                    </div>
-                    <div class="mt-2 flex items-center gap-2">
-                        <label class="flex-1 text-[10px] font-semibold text-slate-500">Preço de venda (R$)
-                            <input type="number" min="${Number(produto.custo).toFixed(2)}" step="0.01" value="${Number(produto.preco).toFixed(2)}" data-cj-price class="mt-1 w-full rounded-lg border border-slate-200 px-2 py-2 text-xs">
-                        </label>
-                        <button type="button" data-cj-save class="mt-4 rounded-lg bg-slate-900 px-3 py-2 text-[10px] font-bold text-white hover:bg-sky-700">Salvar</button>
-                    </div>
-                </article>`).join('');
-            status.innerText = `${lista.length} produto(s) CJ no Neon.`;
-            container.onclick = async event => {
-                const button = event.target.closest('[data-cj-save]');
-                if (!button) return;
-                const card = button.closest('[data-cj-card]');
-                const pid = card.dataset.cjCard;
-                const preco = Number(card.querySelector('[data-cj-price]').value);
-                const ativo = card.querySelector('[data-cj-active]').checked;
-                button.disabled = true;
-                try {
-                    await api('PUT', `/api/admin/produtos-cj/${encodeURIComponent(pid)}`, { preco, ativo });
-                    status.innerText = 'Produto atualizado.';
-                    await carregarProdutosCJAdmin();
-                    const catalogo = await api('GET', '/api/produtos-salvos');
-                    produtosFisicos = catalogo.filter(item => item.tipo === 'cj');
-                    renderizarProdutos();
-                } catch (error) {
-                    status.innerText = error.message;
-                } finally {
-                    button.disabled = false;
-                }
-            };
-        }
-
-        async function sincronizarProdutosCJ() {
-            const status = document.getElementById('statusCatalogoCJ');
-            status.innerText = 'Sincronizando com a CJ...';
-            try {
-                const resultado = await api('GET', '/api/sincronizar-produtos');
-                await carregarProdutosCJAdmin();
-                const catalogo = await api('GET', '/api/produtos-salvos');
-                produtosFisicos = catalogo.filter(item => item.tipo === 'cj');
-                renderizarProdutos();
-                status.innerText = `Sincronização concluída: ${resultado.sincronizados} produto(s) processados.`;
-            } catch (error) {
-                status.innerText = error.message;
-            }
-        }
-
-        async function carregarDashboardFinanceiro() {
-            const resumo = document.getElementById('resumoFinanceiroAdmin');
-            resumo.classList.remove('hidden');
-            resumo.innerText = 'Carregando...';
-            try {
-                const dados = await api('GET', '/api/admin/dashboard');
-                resumo.innerHTML = `
-                    <p><strong>Pedidos pagos:</strong> ${Number(dados.pedidosPagos)}</p>
-                    <p><strong>Faturamento:</strong> ${formatarMoeda(dados.faturamento)}</p>
-                    <p><strong>Custos de fornecedor CJ:</strong> ${formatarMoeda(dados.custoFornecedor)}</p>
-                    <p><strong>Comissões N1 / N2 / N3:</strong> ${formatarMoeda(dados.comissoes.nivel1)} / ${formatarMoeda(dados.comissoes.nivel2)} / ${formatarMoeda(dados.comissoes.nivel3)}</p>
-                    <p><strong>Central:</strong> ${formatarMoeda(dados.central)}</p>`;
-            } catch (error) {
-                resumo.innerText = error.message;
             }
         }
 
@@ -1758,7 +1149,7 @@
         }
 
         async function atualizarTaxasNaTela() {
-            const cfg = await api('GET', '/api/admin/config');
+            const cfg = await api('GET', '/api/config');
             const valores = [cfg.taxaComissao, cfg.taxaPatrocinador, cfg.taxaAvo, cfg.valorMinimoSaque].map(Number);
             if (valores.some(valor => !Number.isFinite(valor))) {
                 throw new Error('A API retornou valores de configuração inválidos.');
