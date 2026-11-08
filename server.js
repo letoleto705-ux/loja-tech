@@ -22,6 +22,8 @@ const TAXA_PATROCINADOR_PADRAO = 10;
 const TAXA_AVO_PADRAO = 5;
 const VALOR_MINIMO_SAQUE_PADRAO = 50;
 const MAX_PARCELAS_CARTAO = 12;
+const ATRASO_LIBERACAO_PAGAMENTO_MS = 15_000;
+const verificacoesPagamentoAgendadas = new Map();
 
 const normalizarMaxParcelasSemJuros = valor => {
   const parcelas = Number(valor);
@@ -384,6 +386,7 @@ async function iniciarBanco() {
   await q('ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS payment_id text');
   await q('ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS payment_idempotency_key text');
   await q("ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS payment_status text NOT NULL DEFAULT ''");
+  await q('ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS payment_approved_at timestamptz');
   await q("ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS payment_qr_code text NOT NULL DEFAULT ''");
   await q("ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS payment_qr_code_base64 text NOT NULL DEFAULT ''");
   
@@ -1047,8 +1050,97 @@ app.post('/api/checkout/:id/pagar', limitarTentativas, wrap(async (req, res) => 
   await q(`UPDATE pedidos SET payment_id = $2, payment_status = $3, payment_qr_code = $4, payment_qr_code_base64 = $5 WHERE id = $1`,
     [pedido.id, String(dados.id), txt(statusPagamento, 40), codigoPix, txt(qr.qr_code_base64, 100000)]);
 
-  res.json({ pedidoId: pedido.id, paymentId: String(dados.id), status: dados.status, qrCode: codigoPix, qrCodeBase64: qr.qr_code_base64 || '' });
+  const sincronizacao = await sincronizarPagamentoMercadoPago(String(dados.id), dados, pedido.id);
+  if (!sincronizacao?.ok) {
+    return res.status(sincronizacao?.statusCode || 502).json({ erro: 'Não foi possível validar o pagamento com segurança. Tente consultar o pedido novamente ou fale com o suporte.' });
+  }
+  res.json({
+    pedidoId: pedido.id,
+    paymentId: String(dados.id),
+    status: dados.status,
+    verificacaoPendente: Boolean(sincronizacao.verificacaoPendente),
+    segundosParaVerificacao: sincronizacao.segundosParaVerificacao || 0,
+    qrCode: codigoPix,
+    qrCodeBase64: qr.qr_code_base64 || ''
+  });
 }));
+
+function segundosParaLiberacao(paymentApprovedAt) {
+  const aprovadoEm = new Date(paymentApprovedAt).getTime();
+  if (!Number.isFinite(aprovadoEm)) return 0;
+  return Math.max(0, Math.ceil((aprovadoEm + ATRASO_LIBERACAO_PAGAMENTO_MS - Date.now()) / 1000));
+}
+
+async function reverterPedidoPorStatusPagamento(pedido, statusPagamento) {
+  const statusPedido = statusPagamento === 'cancelled' ? 'cancelado' : 'reembolsado';
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const atual = (await client.query('SELECT id, payment_id, status FROM pedidos WHERE id = $1 FOR UPDATE', [pedido.id])).rows[0];
+    if (!atual) {
+      await client.query('ROLLBACK');
+      return;
+    }
+    await client.query(`UPDATE pedidos SET status = $2, payment_status = $3, payment_approved_at = NULL,
+      status_comissao_direta = CASE WHEN status = 'pago' THEN 'CANCELADA' ELSE status_comissao_direta END,
+      status_comissao_patrocinador = CASE WHEN status = 'pago' THEN 'CANCELADA' ELSE status_comissao_patrocinador END,
+      status_comissao_avo = CASE WHEN status = 'pago' THEN 'CANCELADA' ELSE status_comissao_avo END
+      WHERE id = $1`, [pedido.id, statusPedido, statusPagamento]);
+    if (atual.payment_id) {
+      await client.query(`UPDATE vendas_aprovadas SET status = $2, ativa = false WHERE payment_id = $1`,
+        [atual.payment_id, statusPagamento === 'cancelled' ? 'CANCELADO' : 'ESTORNADO']);
+    }
+    await client.query('COMMIT');
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+function agendarVerificacaoPagamento(pedidoId, paymentId) {
+  if (verificacoesPagamentoAgendadas.has(pedidoId)) return;
+  const tarefa = (async () => {
+    let tentarNovamente = false;
+    try {
+      const resultado = await q(`SELECT id, payment_id, payment_approved_at, valor FROM pedidos
+        WHERE id = $1 AND status = 'aguardando' AND payment_status = 'approved'`, [pedidoId]);
+      const pedido = resultado.rows[0];
+      if (!pedido || !pedido.payment_approved_at) return;
+
+      const restante = segundosParaLiberacao(pedido.payment_approved_at) * 1000;
+      if (restante > 0) await new Promise(resolve => setTimeout(resolve, restante));
+
+      const consulta = await consultarPagamentoMercadoPago(paymentId);
+      if (!consulta.ok) throw new Error(`Consulta de segurança ao Mercado Pago falhou (${consulta.statusCode}).`);
+      const pagamento = consulta.dados;
+      const referencia = txt(pagamento.external_reference, 64);
+      const valorPagamento = Number(pagamento.transaction_amount);
+      if (String(pagamento.id) !== String(paymentId) || referencia !== pedidoId
+        || !Number.isFinite(valorPagamento) || dinheiro(valorPagamento) !== dinheiro(pedido.valor)) {
+        console.error('A segunda verificação do Mercado Pago não corresponde ao pedido.', { pedidoId, paymentId });
+        return;
+      }
+
+      const statusPagamento = String(pagamento.status || '').toLowerCase();
+      if (statusPagamento === 'approved') {
+        await confirmarPedido(pedidoId, String(paymentId));
+      } else {
+        await sincronizarPagamentoMercadoPago(String(paymentId), pagamento, pedidoId);
+      }
+    } catch (err) {
+      console.error(`Erro na verificação de segurança do pagamento do pedido ${pedidoId}:`, err);
+      tentarNovamente = true;
+    } finally {
+      verificacoesPagamentoAgendadas.delete(pedidoId);
+    }
+    if (tentarNovamente) {
+      setTimeout(() => agendarVerificacaoPagamento(pedidoId, paymentId), ATRASO_LIBERACAO_PAGAMENTO_MS);
+    }
+  })();
+  verificacoesPagamentoAgendadas.set(pedidoId, tarefa);
+}
 
 async function sincronizarPagamentoMercadoPago(idPagamento, pagamentoRecebido, pedidoEsperadoId) {
   if (!MERCADO_PAGO_ACCESS_TOKEN && !pagamentoRecebido) return { ok: false, statusCode: 503 };
@@ -1074,20 +1166,43 @@ async function sincronizarPagamentoMercadoPago(idPagamento, pagamentoRecebido, p
     return { ok: false, statusCode: 409 };
   }
   const statusPagamento = String(pagamento.status || '').toLowerCase();
-  await q('UPDATE pedidos SET payment_status = $2 WHERE id = $1', [pedido.id, statusPagamento]);
-  if (statusPagamento === 'approved' && pedido.status === 'aguardando') {
-    await confirmarPedido(pedido.id, pagamento.id || idPagamento);
+  if (['cancelled', 'refunded', 'charged_back'].includes(statusPagamento)) {
+    await reverterPedidoPorStatusPagamento(pedido, statusPagamento);
+    return { ok: true, pedidoId: pedido.id, statusPagamento };
   }
-  return { ok: true, pedidoId: pedido.id, statusPagamento };
+  const atualizado = await q(`UPDATE pedidos SET payment_status = $2,
+    payment_approved_at = CASE WHEN $2 = 'approved' THEN COALESCE(payment_approved_at, now()) ELSE NULL END
+    WHERE id = $1 RETURNING status, payment_approved_at`, [pedido.id, statusPagamento]);
+  const pedidoAtualizado = atualizado.rows[0];
+  if (statusPagamento === 'approved' && pedidoAtualizado?.status === 'aguardando') {
+    agendarVerificacaoPagamento(pedido.id, String(pagamento.id || idPagamento));
+  }
+  const verificacaoPendente = statusPagamento === 'approved' && pedidoAtualizado?.status === 'aguardando';
+  return {
+    ok: true,
+    pedidoId: pedido.id,
+    statusPagamento,
+    verificacaoPendente,
+    segundosParaVerificacao: verificacaoPendente ? segundosParaLiberacao(pedidoAtualizado.payment_approved_at) : 0
+  };
 }
 
 app.get('/api/checkout/:id/status', limitarConsultasStatusCheckout, wrap(async (req, res) => {
   const token = txt(req.get('x-download-token'), 64);
-  let pedido = (await q('SELECT id, status, payment_id, payment_status, download_token FROM pedidos WHERE id = $1', [req.params.id])).rows[0];
+  let pedido = (await q('SELECT id, status, payment_id, payment_status, payment_approved_at, download_token FROM pedidos WHERE id = $1', [req.params.id])).rows[0];
   if (!pedido || !igual(token, pedido.download_token)) return res.status(404).json({ erro: 'Pedido não encontrado.' });
-  if (pedido.status !== 'pago' && pedido.payment_id) {
+  if (pedido.payment_id) {
     const sincronizacao = await sincronizarPagamentoMercadoPago(pedido.payment_id, null, pedido.id);
     if (!sincronizacao?.ok) {
+      if (pedido.status === 'pago' && sincronizacao?.statusCode !== 409) {
+        return res.json({
+          pedidoId: pedido.id,
+          status: pedido.status,
+          paymentStatus: pedido.payment_status,
+          verificacaoPendente: false,
+          segundosParaVerificacao: 0
+        });
+      }
       if (sincronizacao?.statusCode === 409) {
         return res.status(409).json({ erro: 'Os dados do pagamento não correspondem a este pedido. Entre em contato com o suporte.' });
       }
@@ -1096,9 +1211,16 @@ app.get('/api/checkout/:id/status', limitarConsultasStatusCheckout, wrap(async (
       }
       return res.status(502).json({ erro: 'Não foi possível consultar o pagamento no Mercado Pago. Tente novamente.' });
     }
-    pedido = (await q('SELECT id, status, payment_status FROM pedidos WHERE id = $1', [pedido.id])).rows[0];
+    pedido = (await q('SELECT id, status, payment_status, payment_approved_at FROM pedidos WHERE id = $1', [pedido.id])).rows[0];
   }
-  res.json({ pedidoId: pedido.id, status: pedido.status, paymentStatus: pedido.payment_status });
+  const verificacaoPendente = pedido.status === 'aguardando' && pedido.payment_status === 'approved';
+  res.json({
+    pedidoId: pedido.id,
+    status: pedido.status,
+    paymentStatus: pedido.payment_status,
+    verificacaoPendente,
+    segundosParaVerificacao: verificacaoPendente ? segundosParaLiberacao(pedido.payment_approved_at) : 0
+  });
 }));
 
 app.get('/api/checkout/:id/download', wrap(async (req, res) => {
@@ -1122,7 +1244,12 @@ async function confirmarPedido(id, paymentIdRecebido) {
   try {
     await client.query('BEGIN');
     const ped = (await client.query('SELECT * FROM pedidos WHERE id = $1 FOR UPDATE', [id])).rows[0];
-    if (!ped || ped.status !== 'aguardando') { await client.query('ROLLBACK'); return; }
+    if (!ped || ped.status !== 'aguardando' || ped.payment_status !== 'approved'
+      || !ped.payment_approved_at
+      || Date.now() - new Date(ped.payment_approved_at).getTime() < ATRASO_LIBERACAO_PAGAMENTO_MS) {
+      await client.query('ROLLBACK');
+      return;
+    }
     const paymentId = txt(paymentIdRecebido || ped.payment_id, 100);
     const cpf = soDigitos(ped.cliente_cpf);
     if (!paymentId) throw new Error(`Pagamento aprovado sem payment_id para o pedido ${ped.id}.`);
@@ -1277,6 +1404,18 @@ app.use((err, req, res, next) => {
 });
 
 const PORT = process.env.PORT || 3000;
+async function restaurarVerificacoesPagamentoPendentes() {
+  const pendentes = await q(`SELECT id, payment_id FROM pedidos
+    WHERE status = 'aguardando' AND payment_status = 'approved'
+      AND payment_approved_at IS NOT NULL AND payment_id IS NOT NULL`);
+  for (const pedido of pendentes.rows) {
+    agendarVerificacaoPagamento(pedido.id, pedido.payment_id);
+  }
+}
+
 iniciarBanco()
-  .then(() => app.listen(PORT, () => console.log(`Loja Tech rodando na porta ${PORT}`)))
+  .then(async () => {
+    await restaurarVerificacoesPagamentoPendentes();
+    app.listen(PORT, () => console.log(`Loja Tech rodando na porta ${PORT}`));
+  })
   .catch(e => { console.error('ERRO NO NEON:', e); process.exit(1); });

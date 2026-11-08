@@ -125,7 +125,7 @@
                             <i class="fa-solid fa-bolt text-emerald-600"></i>
                             <span>Pagamento via Pix com Liberação após Confirmação</span>
                         </div>
-                        <p class="text-slate-600 leading-relaxed">O QR Code Pix e o código Copia e Cola serão gerados pelo Mercado Pago nesta tela. A liberação acontece após a confirmação.</p>
+                        <p class="text-slate-600 leading-relaxed">O QR Code Pix e o código Copia e Cola serão gerados pelo Mercado Pago nesta tela. Após a confirmação inicial, o pagamento será verificado novamente antes da liberação do produto e das comissões.</p>
                         <p class="text-xs font-bold text-emerald-800">ID DE PAGAMENTO: WELLINGTON J. SANTOS (CEO DA TECH)</p>
                     </div>
 
@@ -156,6 +156,7 @@
                         <i class="fa-solid fa-lock"></i>
                         <span id="btnFinalizarTexto">Finalizar Pedido</span>
                     </button>
+                    <p class="mt-2 text-center text-xs text-slate-500" role="status">Após a confirmação inicial, aguardaremos até 15 segundos e consultaremos o Mercado Pago novamente antes de liberar o produto e as comissões.</p>
                 </div>
             </div>
 
@@ -790,7 +791,7 @@
             }
         }
 
-        function atualizarStatusModal(status, paymentStatus) {
+        function atualizarStatusModal(status, paymentStatus, verificacaoPendente = false, segundosParaVerificacao = 15) {
             const titulo = document.querySelector('#modalPedido h3');
             const statusTexto = document.getElementById('statusPedido');
             const modalStatus = document.getElementById('modalStatusPagamento');
@@ -808,7 +809,12 @@
                 return false;
             }
             titulo.innerText = 'Aguardando pagamento';
-            if (paymentStatus === 'rejected') {
+            if (verificacaoPendente) {
+                const segundos = Math.max(0, Number(segundosParaVerificacao) || 0);
+                titulo.innerText = 'Validando pagamento';
+                statusTexto.innerText = `Pagamento identificado. Aguardando a verificação de segurança${segundos ? ` por até ${segundos} segundos` : ''}. O produto só será liberado após uma nova confirmação do Mercado Pago.`;
+                modalStatus.innerText = 'Pagamento em validação de segurança.';
+            } else if (paymentStatus === 'rejected') {
                 statusTexto.innerText = 'O Mercado Pago recusou esta tentativa. Confira os dados ou escolha outra forma de pagamento.';
                 modalStatus.innerText = 'Pagamento não aprovado. Tente novamente com outro meio de pagamento.';
             } else {
@@ -825,7 +831,7 @@
             });
             const dados = await resp.json().catch(() => ({}));
             if (!resp.ok) throw new Error(dados.erro || 'Não foi possível consultar o status do pagamento.');
-            const aprovado = atualizarStatusModal(dados.status, dados.paymentStatus);
+            const aprovado = atualizarStatusModal(dados.status, dados.paymentStatus, dados.verificacaoPendente, dados.segundosParaVerificacao);
             if (!aprovado && (['cancelado', 'reembolsado'].includes(dados.status)
                 || ['rejected', 'cancelled', 'refunded', 'charged_back'].includes(dados.paymentStatus))) {
                 if (monitorStatusTimer) clearInterval(monitorStatusTimer);
@@ -890,7 +896,7 @@
             if (r.forma === 'pix') document.getElementById('modalBoxPix').classList.remove('hidden');
             else document.getElementById('modalBoxOutro').classList.remove('hidden');
             document.getElementById('modalPedido').classList.remove('hidden');
-            atualizarStatusModal(r.status === 'approved' ? 'pago' : '', r.status);
+            atualizarStatusModal('', r.status, r.verificacaoPendente, r.segundosParaVerificacao);
             monitorarStatusPedido();
         }
 
