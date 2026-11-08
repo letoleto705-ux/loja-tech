@@ -57,10 +57,13 @@
 <body class="bg-slate-100 text-slate-800 font-sans antialiased min-h-screen flex flex-col justify-between">
 
     <!-- PORTÃO DE ENTRADA: login à esquerda, boas-vindas à direita -->
-    <div id="telaPortaoEntrada" class="fixed inset-0 z-50 overflow-y-auto bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900">
+    <div id="telaPortaoEntrada" class="hidden fixed inset-0 z-50 overflow-y-auto bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900">
         <!-- brilhos decorativos -->
         <div class="pointer-events-none absolute -top-32 -right-32 w-96 h-96 rounded-full bg-sky-500/20 blur-3xl"></div>
         <div class="pointer-events-none absolute -bottom-40 -left-32 w-96 h-96 rounded-full bg-cyan-400/10 blur-3xl"></div>
+        <button type="button" onclick="fecharPortaoLogin()" class="absolute right-4 top-4 z-10 rounded-xl border border-white/20 bg-white/10 px-4 py-2 text-xs font-bold text-white hover:bg-white/20">
+            Voltar à vitrine
+        </button>
 
         <div class="relative max-w-6xl mx-auto min-h-full grid grid-cols-1 lg:grid-cols-2 gap-8 lg:gap-14 items-center px-4 py-8 sm:px-8 sm:py-12">
 
@@ -214,7 +217,7 @@
     </div>
 
     <!-- CONTEÚDO PRINCIPAL -->
-    <div id="conteudoSistemaLoja" class="hidden flex-1 flex flex-col">
+    <div id="conteudoSistemaLoja" class="flex-1 flex flex-col">
         <header class="fixed top-0 left-0 w-full z-40 glass-header border-b border-slate-200 transition-all">
             <div class="relative max-w-7xl mx-auto px-4 h-20 flex items-center justify-between">
                 <div class="flex items-center gap-3">
@@ -230,6 +233,9 @@
                 <button type="button" id="btnAbrirCarrinho" onclick="abrirCarrinho()" aria-label="Abrir carrinho" aria-haspopup="dialog" class="relative p-3 rounded-xl bg-sky-50 text-sky-800 border border-sky-100 hover:bg-sky-100 transition">
                     <i class="fa-solid fa-cart-shopping"></i>
                     <span id="badgeCarrinho" class="absolute -top-1.5 -right-1.5 min-w-5 h-5 px-1 rounded-full bg-sky-600 text-white text-[10px] font-black flex items-center justify-center">0</span>
+                </button>
+                <button type="button" id="btnEntrarConta" onclick="mostrarPortaoLogin()" class="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50">
+                    Entrar
                 </button>
                 <button type="button" id="btnMenuMobile" aria-controls="menuMobile" aria-expanded="false" onclick="alternarMenuMobile()"
                     class="md:hidden p-3 rounded-xl bg-slate-100 text-slate-700" aria-label="Abrir menu de navegação">
@@ -291,7 +297,7 @@
                     Sistemas de Gestão, Ficha Técnica e CMV <span class="text-orange-600">Sob Medida</span>
                 </h2>
                 <p class="text-slate-600 text-base sm:text-lg max-w-2xl mx-auto font-normal">
-                    Confira o catálogo oficial dos softwares da Tech e escolha a versão ideal para multiplicar o lucro do seu restaurante ou delivery.
+                    Explore nossos softwares de gestão e produtos físicos de tecnologia em um catálogo público e sempre atualizado.
                 </p>
             </div>
         </section>
@@ -301,7 +307,17 @@
                 <h3 class="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">Softwares e Produtos em Destaque</h3>
                 <span id="qtdProdutosLabel" class="text-xs font-semibold text-slate-500 bg-white px-3 py-1.5 rounded-lg border border-slate-200">0 Produtos Ativos</span>
             </div>
-            <div id="gridProdutos" class="grid grid-cols-1 md:grid-cols-3 gap-8"></div>
+            <div class="grid grid-cols-1 gap-6 lg:grid-cols-[200px_minmax(0,1fr)]">
+                <nav id="filtrosCategorias" class="mb-2 flex flex-wrap gap-2 lg:sticky lg:top-24 lg:mb-0 lg:flex-col lg:self-start" aria-label="Filtrar produtos por categoria">
+                    <button type="button" data-categoria="todos" aria-pressed="true" class="filtro-categoria rounded-full bg-slate-900 px-4 py-2 text-left text-xs font-bold text-white">Todos</button>
+                    <button type="button" data-categoria="software" aria-pressed="false" class="filtro-categoria rounded-full border border-slate-200 bg-white px-4 py-2 text-left text-xs font-bold text-slate-600">Softwares</button>
+                    <button type="button" data-categoria="smartphones" aria-pressed="false" class="filtro-categoria rounded-full border border-slate-200 bg-white px-4 py-2 text-left text-xs font-bold text-slate-600">Smartphones</button>
+                    <button type="button" data-categoria="audio" aria-pressed="false" class="filtro-categoria rounded-full border border-slate-200 bg-white px-4 py-2 text-left text-xs font-bold text-slate-600">Áudio</button>
+                    <button type="button" data-categoria="drones" aria-pressed="false" class="filtro-categoria rounded-full border border-slate-200 bg-white px-4 py-2 text-left text-xs font-bold text-slate-600">Drones</button>
+                    <button type="button" data-categoria="acessorios" aria-pressed="false" class="filtro-categoria rounded-full border border-slate-200 bg-white px-4 py-2 text-left text-xs font-bold text-slate-600">Acessórios</button>
+                </nav>
+                <div id="gridProdutos" class="grid grid-cols-1 gap-8 md:grid-cols-2 xl:grid-cols-3"></div>
+            </div>
         </section>
 
         <section id="afiliase" class="py-16 bg-white border-t border-b border-slate-200 my-8">
@@ -349,17 +365,45 @@
                 </div>
                 <p class="mt-2 text-[11px] leading-relaxed text-slate-500">O total é validado no servidor com os preços atuais. Frete não incluído nesta versão.</p>
             </div>
-            <form id="formCheckoutUnificado" onsubmit="finalizarCheckoutUnificado(event)" class="space-y-3 border-t border-slate-200 pt-5">
+            <form id="formCheckoutUnificado" novalidate onsubmit="finalizarCheckoutUnificado(event)" class="space-y-3 border-t border-slate-200 pt-5">
                 <h3 class="text-sm font-black text-slate-900">Finalizar pedido</h3>
                 <label class="block text-[11px] font-bold uppercase tracking-wide text-slate-500">Nome
                     <input id="checkoutNome" required readonly class="mt-1 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-700">
                 </label>
                 <label class="block text-[11px] font-bold uppercase tracking-wide text-slate-500">E-mail
-                    <input id="checkoutEmail" type="email" required readonly class="mt-1 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-700">
+                    <input id="checkoutEmail" type="email" required autocomplete="email" maxlength="120" class="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-700">
                 </label>
                 <label class="block text-[11px] font-bold uppercase tracking-wide text-slate-500">CPF
                     <input id="checkoutCpf" required readonly class="mt-1 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-700">
                 </label>
+                <fieldset class="space-y-3 rounded-2xl border border-slate-200 p-3">
+                    <legend class="px-1 text-[11px] font-black uppercase tracking-wide text-slate-700">Endereço de entrega</legend>
+                    <label class="block text-[11px] font-bold uppercase tracking-wide text-slate-500">CEP
+                        <input id="checkoutCep" required inputmode="numeric" autocomplete="postal-code" maxlength="9" pattern="[0-9]{5}-?[0-9]{3}" placeholder="00000-000" class="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm">
+                    </label>
+                    <label class="block text-[11px] font-bold uppercase tracking-wide text-slate-500">Rua
+                        <input id="checkoutRua" required autocomplete="address-line1" maxlength="200" class="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm">
+                    </label>
+                    <div class="grid grid-cols-2 gap-2">
+                        <label class="block text-[11px] font-bold uppercase tracking-wide text-slate-500">Número
+                            <input id="checkoutNumero" required maxlength="30" autocomplete="address-line2" class="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm">
+                        </label>
+                        <label class="block text-[11px] font-bold uppercase tracking-wide text-slate-500">Bairro
+                            <input id="checkoutBairro" required maxlength="120" autocomplete="address-level3" class="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm">
+                        </label>
+                    </div>
+                    <div class="grid grid-cols-3 gap-2">
+                        <label class="col-span-2 block text-[11px] font-bold uppercase tracking-wide text-slate-500">Cidade
+                            <input id="checkoutCidade" required maxlength="120" autocomplete="address-level2" class="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm">
+                        </label>
+                        <label class="block text-[11px] font-bold uppercase tracking-wide text-slate-500">Estado
+                            <input id="checkoutEstado" required minlength="2" maxlength="2" autocomplete="address-level1" class="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm uppercase">
+                        </label>
+                    </div>
+                    <label class="block text-[11px] font-bold uppercase tracking-wide text-slate-500">Telefone
+                        <input id="checkoutTelefone" type="tel" required inputmode="tel" autocomplete="tel" maxlength="20" placeholder="(11) 91234-5678" class="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm">
+                    </label>
+                </fieldset>
                 <label class="block text-[11px] font-bold uppercase tracking-wide text-slate-500">Pagamento
                     <select id="checkoutForma" onchange="alternarCamposCartao()" class="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-700">
                         <option value="pix">PIX</option>
@@ -824,6 +868,7 @@
 
         let produtos = produtosIniciais;
         let produtosFisicos = [];
+        let categoriaSelecionada = 'todos';
         let carrinho = [];
         try {
             const carrinhoSalvo = JSON.parse(localStorage.getItem('tech_cart') || '[]');
@@ -914,6 +959,23 @@
         window.addEventListener('DOMContentLoaded', async () => {
             alterarIdioma(localStorage.getItem('tech_language') || IDIOMA_PADRAO);
             sincronizarParametrosURL();
+            document.getElementById('filtrosCategorias').addEventListener('click', event => {
+                const botao = event.target.closest('[data-categoria]');
+                if (!botao) return;
+                categoriaSelecionada = botao.dataset.categoria;
+                document.querySelectorAll('.filtro-categoria').forEach(filtro => {
+                    const ativo = filtro === botao;
+                    filtro.setAttribute('aria-pressed', String(ativo));
+                    filtro.classList.toggle('bg-slate-900', ativo);
+                    filtro.classList.toggle('text-white', ativo);
+                    filtro.classList.toggle('border', !ativo);
+                    filtro.classList.toggle('border-slate-200', !ativo);
+                    filtro.classList.toggle('bg-white', !ativo);
+                    filtro.classList.toggle('text-slate-600', !ativo);
+                });
+                renderizarProdutos();
+            });
+            renderizarProdutos();
             document.addEventListener('keydown', event => {
                 if (event.key === 'Escape' && !document.getElementById('overlayCarrinho').classList.contains('hidden')) fecharCarrinho();
             });
@@ -922,9 +984,11 @@
             }
             await carregarDadosPublicos();
             verificarSessaoInicial();
+            document.getElementById('btnEntrarConta').classList.toggle('hidden', Boolean(usuarioSessaoAtual));
         });
 
         async function carregarDadosPublicos() {
+            renderizarProdutos();
             const resultados = await Promise.allSettled([
                 api('GET', '/api/produtos'),
                 api('GET', '/api/produtos-salvos'),
@@ -950,6 +1014,7 @@
             }
             sincronizarCarrinhoComCatalogo(produtosFisicos);
             atualizarCarrinho();
+            renderizarProdutos();
         }
 
         function normalizarTexto(txt) {
@@ -1050,6 +1115,7 @@
 
             document.getElementById('telaPortaoEntrada').classList.add('hidden');
             document.getElementById('conteudoSistemaLoja').classList.remove('hidden');
+            document.getElementById('btnEntrarConta').classList.add('hidden');
 
             document.getElementById('labelNomeUsuarioLogado').innerText = user.nome;
             document.getElementById('labelPerfilUsuarioLogado').innerText = user.perfil.toUpperCase();
@@ -1120,6 +1186,16 @@
             document.getElementById('btnMenuMobile').setAttribute('aria-expanded', 'false');
             document.getElementById('btnMenuMobile').setAttribute('aria-label', 'Abrir menu de navegação');
             document.getElementById('btnMenuMobile').innerHTML = '<i class="fa-solid fa-bars"></i>';
+        }
+
+        function mostrarPortaoLogin() {
+            document.getElementById('telaPortaoEntrada').classList.remove('hidden');
+            document.getElementById('portao_usuario').focus();
+        }
+
+        function fecharPortaoLogin() {
+            document.getElementById('telaPortaoEntrada').classList.add('hidden');
+            document.getElementById('btnEntrarConta').focus();
         }
 
         function verificarSessaoInicial() {
@@ -1213,9 +1289,11 @@
         function renderizarProdutos() {
             const grid = document.getElementById('gridProdutos');
             const labelCount = document.getElementById('qtdProdutosLabel');
-            const catalogo = [...produtos, ...produtosFisicos];
+            const catalogoCompleto = [...produtos, ...produtosFisicos];
+            const catalogo = catalogoCompleto.filter(p => categoriaSelecionada === 'todos'
+                || categoriaDoProduto(p) === categoriaSelecionada);
             grid.innerHTML = '';
-            labelCount.innerText = `${catalogo.length} Produto(s) Ativo(s)`;
+            labelCount.innerText = `${catalogo.length} de ${catalogoCompleto.length} Produto(s) Ativo(s)`;
 
             const urlParams = new URLSearchParams(window.location.search);
             const refParam = urlParams.get('ref') || 'admin';
@@ -1283,6 +1361,19 @@
                 const button = event.target.closest('[data-cart-pid]');
                 if (button) adicionarAoCarrinho(button.dataset.cartPid);
             };
+            if (!catalogo.length) {
+                grid.innerHTML = '<p class="col-span-full rounded-2xl border border-dashed border-slate-300 bg-white p-8 text-center text-sm text-slate-500">Nenhum produto encontrado nesta categoria.</p>';
+            }
+        }
+
+        function categoriaDoProduto(produto) {
+            if (produto.tipo !== 'cj') return 'software';
+            const texto = normalizarTexto(`${produto.categoria || ''} ${produto.nome || ''} ${produto.descricao || ''}`)
+                .normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+            if (/smartphone|mobile phone|cell phone|phone|celular|iphone|android/.test(texto)) return 'smartphones';
+            if (/audio|headphone|earphone|speaker|fone|alto-falante/.test(texto)) return 'audio';
+            if (/drone|quadcop/.test(texto)) return 'drones';
+            return 'acessorios';
         }
 
         function formatarMoeda(valor) {
@@ -1384,8 +1475,11 @@
 
         function preencherDadosCheckout() {
             document.getElementById('checkoutNome').value = usuarioSessaoAtual?.nome || '';
-            document.getElementById('checkoutEmail').value = usuarioSessaoAtual?.email || '';
+            const email = document.getElementById('checkoutEmail');
+            if (!email.value) email.value = usuarioSessaoAtual?.email || '';
             document.getElementById('checkoutCpf').value = usuarioSessaoAtual?.cpf || '';
+            const telefone = document.getElementById('checkoutTelefone');
+            if (!telefone.value) telefone.value = usuarioSessaoAtual?.telefone || '';
         }
 
         function alternarCamposCartao() {
@@ -1407,6 +1501,18 @@
                 return;
             }
             if (!carrinho.length) return;
+            const formulario = document.getElementById('formCheckoutUnificado');
+            if (!formulario.reportValidity()) return;
+            const entrega = {
+                cep: document.getElementById('checkoutCep').value.trim(),
+                rua: document.getElementById('checkoutRua').value.trim(),
+                numero: document.getElementById('checkoutNumero').value.trim(),
+                bairro: document.getElementById('checkoutBairro').value.trim(),
+                cidade: document.getElementById('checkoutCidade').value.trim(),
+                estado: document.getElementById('checkoutEstado').value.trim().toUpperCase(),
+                email: document.getElementById('checkoutEmail').value.trim(),
+                telefone: document.getElementById('checkoutTelefone').value.trim()
+            };
             botao.disabled = true;
             status.innerText = 'Validando o carrinho e iniciando o pagamento...';
             status.classList.remove('hidden');
@@ -1427,7 +1533,8 @@
                 const order = await api('POST', '/api/checkout/unificado', {
                     items: carrinho.map(item => ({ pid: item.pid, quantidade: item.quantidade })),
                     afiliado: localStorage.getItem(CHAVE_INDICADOR) || '',
-                    forma
+                    forma,
+                    entrega
                 });
                 if (Math.abs(Number(order.valor) - subtotalAtual) >= 0.01) {
                     status.innerText = 'O preço mudou durante a finalização. O pedido não foi cobrado; confira o carrinho e tente novamente.';

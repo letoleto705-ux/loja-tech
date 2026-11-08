@@ -5,7 +5,7 @@ loja-tech/
 ├── package.json
 ├── server.js              (API + banco: toda a regra de comissão fica aqui)
 └── public/
-    ├── index.html         (Loja Tech: tela de entrada + catálogo)
+    ├── index.html         (Loja Tech: vitrine pública + login e catálogo)
     ├── afiliado.html      (Área do Afiliado: abre pelo botão "Área do Afiliado" da loja)
     ├── check_lite.html    (Checkout Lite)
     ├── check_pro.html     (Checkout Pro)
@@ -47,9 +47,11 @@ Configure no painel Mercado Pago o webhook de pagamentos para apontar para `MERC
 
 ## Catálogo CJ e carrinho unificado
 - A sincronização é restrita ao administrador (`GET /api/sincronizar-produtos`); configure `CJ_TOKEN` no serviço Node do Render, nunca no navegador.
+- A vitrine e os filtros de categoria são públicos. A sincronização percorre páginas de 100 itens até 1.000 produtos e prioriza campos de nome em inglês disponibilizados pela CJ; itens sem nome legível em inglês são ignorados.
 - O catálogo público (`GET /api/produtos-salvos`) não inclui custos. Preços e quantidades enviados pelo navegador nunca são usados para cobrar: os valores atuais do Neon são usados para criar o pedido e cada item recebe snapshots de preço e custo.
 - A área gerencial permite sincronizar, ajustar preços e ativar/desativar produtos. Pedidos físicos aceitam PIX ou cartão; comissões dos três níveis são calculadas por item sobre preço menos custo somente após confirmação do Mercado Pago.
-- O cálculo de frete não está integrado nesta versão; o total do carrinho não inclui frete. Não anuncie entrega com frete calculado até integrar cotação logística e endereço de destino.
+- Antes da cobrança do carrinho físico, o cliente informa CEP, rua, número, bairro, cidade, estado, e-mail e telefone. O servidor valida e salva esses dados no pedido Neon; o e-mail informado também é usado na cobrança Mercado Pago.
+- O cálculo de frete e a integração de despacho com transportadora/CJ não estão disponíveis nesta versão; o total do carrinho não inclui frete. Os dados de entrega persistidos ainda precisam ser consumidos por uma integração logística para automatizar a expedição.
 
 ## 4. A dinâmica de comissões (o "patriarca")
 **O administrador é o topo da rede: não tem pai, e todo mundo está abaixo dele.**
@@ -83,7 +85,7 @@ O botão **Área do Afiliado** da loja abre essa página.
 - **Link 1 (vendas):** `index.html?ref=admin&afiliado=SEU_USUARIO`. **Link 2 (cadastrar na sua rede):** `afiliado.html?cad=SEU_USUARIO`: quem se cadastra por ele já entra como afiliado, filho de quem convidou.
 
 ## 6. Tela de entrada
-A primeira tela da loja tem o **login à esquerda** (usuário e senha, ou "Crie sua conta de cliente", que pede nome, e-mail, CPF, Pix e telefone) e a **mensagem de boas-vindas à direita**, explicando em 3 passos como entrar, criar conta e se afiliar. Serve igual para administrador, afiliado e cliente.
+A vitrine é pública e pode ser explorada sem login. O botão **Entrar** abre a tela de autenticação (usuário e senha, ou "Crie sua conta de cliente", que pede nome, e-mail, CPF, Pix e telefone); o login é exigido para ações autenticadas, como finalizar um pedido.
 
 ## 7. Suporte e recuperação de senha
 **Telefone no cadastro:** todo cadastro (cliente ou afiliado) agora pede um **telefone / WhatsApp de contato com DDD**. Ele aparece no painel do administrador, junto com e-mail e CPF.
@@ -103,8 +105,8 @@ A primeira tela da loja tem o **login à esquerda** (usuário e senha, ou "Crie 
 **Dados pessoais (LGPD):** CPF, e-mail e telefone são dados protegidos. Use-os só para venda, contato e pagamento de comissões, e proteja o acesso ao seu painel do Neon e do Render.
 
 ## 8. Como funciona a venda
-1. O cliente entra pelo link do afiliado, escolhe o produto e vai para o checkout.
-2. No checkout preenche nome, e-mail e CPF e escolhe a forma de pagamento. O servidor registra um pedido **aguardando pagamento** (preço sempre vindo do catálogo do servidor). **Nenhuma comissão é gerada aqui.**
+1. O cliente entra pela vitrine pública (ou pelo link do afiliado), escolhe o produto e vai para o checkout.
+2. No checkout de software preenche nome, e-mail e CPF. Para produtos físicos, também informa endereço e contato de entrega. O servidor registra um pedido **aguardando pagamento** (preço sempre vindo do catálogo do servidor). **Nenhuma comissão é gerada aqui.**
 3. **Pix:** o Mercado Pago gera o QR Code e o código Copia e Cola na própria página. **Cartão:** o formulário do Mercado Pago tokeniza os dados no navegador; somente o token é enviado ao servidor, que cria a cobrança.
 4. A página consulta o status a cada cinco segundos. O webhook e a consulta de status confirmam a cobrança com o Mercado Pago; só uma cobrança aprovada marca o pedido como pago, gera comissões e libera o download automaticamente.
 
@@ -131,7 +133,7 @@ Proteções: o afiliado só ganha se existir; se o CPF ou e-mail do comprador fo
 - Produtos seguem armazenados na lista JSONB `config.produtos`; a opção administrativa `repasseJurosComprador` é salva nesse produto e copiada para o pedido. A opção é enviada como metadado no pagamento, sem permitir alteração pelo checkout.
 - O checkout seguro de cartão usa o Brick do Mercado Pago. O modo sem juros também depende de planos/campanhas sem juros habilitados na conta Mercado Pago da loja; essa regra comercial da conta não pode ser criada por um campo da API de pagamento. Valide os planos disponíveis na conta de produção antes de anunciar parcelamento sem juros.
 - A tela inicial inclui manifesto PWA e service worker para o shell estático. As respostas da API não são armazenadas offline.
-- A tela inicial/login pode ser alternada sem recarregar entre português (padrão), inglês, espanhol, mandarim, italiano e francês; a preferência fica salva no navegador.
+- A tela de login pode ser alternada sem recarregar entre português (padrão), inglês, espanhol, mandarim, italiano e francês; a preferência fica salva no navegador.
 - A aprovação, cancelamento e estorno de pedidos são sincronizados pelo Mercado Pago (webhook e consulta do checkout). O painel não oferece confirmação manual de pedido; a liquidação de comissões continua sendo uma operação administrativa separada.
 - Ao excluir um afiliado, a conta de acesso é removida na mesma transação e o cupom relacionado é removido pela FK `ON DELETE CASCADE`. Pedidos e snapshots de comissão permanecem para preservar o histórico financeiro.
 

@@ -203,15 +203,40 @@ async function obterTokenCJ() {
   return cjTokenCache;
 }
 
-async function listarProdutosCJ(pagina = 1, tamanho = 50) {
+async function listarProdutosCJ(limite = 1000) {
   const token = await obterTokenCJ();
-  const resposta = await fetch(`${CJ_BASE_URL}/product/list?pageNum=${pagina}&pageSize=${tamanho}`, {
-    headers: { 'CJ-Access-Token': token, 'Content-Type': 'application/json' },
-    signal: AbortSignal.timeout(20000)
-  });
-  const dados = await resposta.json().catch(() => ({}));
-  if (!resposta.ok || !dados.result) throw new Error('A consulta de produtos à CJ Dropshipping falhou.');
-  return Array.isArray(dados.data?.list) ? dados.data.list : [];
+  const tamanho = 100;
+  const paginas = Math.ceil(Math.min(Math.max(limite, 1), 1000) / tamanho);
+  const itens = [];
+  const vistos = new Set();
+  for (let pagina = 1; pagina <= paginas; pagina++) {
+    const resposta = await fetch(`${CJ_BASE_URL}/product/list?pageNum=${pagina}&pageSize=${tamanho}`, {
+      headers: { 'CJ-Access-Token': token, 'Content-Type': 'application/json' },
+      signal: AbortSignal.timeout(20000)
+    });
+    const dados = await resposta.json().catch(() => ({}));
+    if (!resposta.ok || !dados.result) throw new Error('A consulta de produtos à CJ Dropshipping falhou.');
+    const lista = Array.isArray(dados.data?.list) ? dados.data.list : [];
+    for (const item of lista) {
+      const pid = txt(item.pid, 100);
+      if (!pid || vistos.has(pid)) continue;
+      vistos.add(pid);
+      itens.push(item);
+      if (itens.length >= limite) break;
+    }
+    if (itens.length >= limite || lista.length < tamanho) break;
+  }
+  return itens;
+}
+
+function nomeInglesProdutoCJ(item) {
+  const nomes = [
+    item.productNameEn, item.productNameEnglish, item.englishName,
+    item.nameEn, item.productTitleEn, item.productName, item.entryName
+  ];
+  return nomes.map(nome => txt(nome, 255))
+    .find(nome => nome && /\p{Script=Latin}/u.test(nome)
+      && !/[^\p{Script=Latin}\p{N}\p{P}\p{S}\s]/u.test(nome)) || '';
 }
 
 function dataAtualBrasil() {
@@ -404,6 +429,14 @@ async function iniciarBanco() {
   await q("ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS forma text NOT NULL DEFAULT 'pix'");
   await q("ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS cliente_nome text NOT NULL DEFAULT ''");
   await q("ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS cliente_email text NOT NULL DEFAULT ''");
+  await q("ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS entrega_cep text NOT NULL DEFAULT ''");
+  await q("ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS entrega_rua text NOT NULL DEFAULT ''");
+  await q("ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS entrega_numero text NOT NULL DEFAULT ''");
+  await q("ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS entrega_bairro text NOT NULL DEFAULT ''");
+  await q("ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS entrega_cidade text NOT NULL DEFAULT ''");
+  await q("ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS entrega_estado char(2) NOT NULL DEFAULT ''");
+  await q("ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS entrega_email text NOT NULL DEFAULT ''");
+  await q("ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS entrega_telefone text NOT NULL DEFAULT ''");
   await q("ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS cliente_cpf text NOT NULL DEFAULT ''");
   await q('ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS patrocinador_usuario text');
   await q('ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS comissao_patrocinador numeric(12,2) NOT NULL DEFAULT 0');
@@ -1379,7 +1412,7 @@ async function sincronizarCatalogoCJ() {
     await client.query('BEGIN');
     for (const item of itens) {
       const pid = txt(item.pid, 100);
-      const nome = txt(item.productName || item.entryName, 255);
+      const nome = nomeInglesProdutoCJ(item);
       const custo = precoCJ(item.sellPrice || item.productPrice);
       if (!pid || !nome || custo === null || custo <= 0) continue;
       const categoria = txt(item.categoryName || item.category, 120);
@@ -1446,6 +1479,7 @@ app.put('/api/admin/produtos-cj/:pid', auth, soAdmin, wrap(async (req, res) => {
 
 app.post('/api/checkout/unificado', auth, limitarTentativas, wrap(async (req, res) => {
   const itens = req.body.items;
+  const dadosEntrega = req.body.entrega || {};
   const forma = norm(req.body.forma || 'pix');
   if (!Array.isArray(itens) || itens.length < 1 || itens.length > 50) {
     return res.status(400).json({ erro: 'Informe de 1 a 50 produtos no carrinho.' });
@@ -1455,6 +1489,24 @@ app.post('/api/checkout/unificado', auth, limitarTentativas, wrap(async (req, re
   }
   if (!['cliente', 'afiliado'].includes(req.user.perfil)) {
     return res.status(403).json({ erro: 'Entre com uma conta de cliente ou afiliado para finalizar a compra.' });
+  }
+  const entrega = {
+    cep: txt(dadosEntrega.cep, 12).replace(/\D/g, ''),
+    rua: txt(dadosEntrega.rua, 200),
+    numero: txt(dadosEntrega.numero, 30),
+    bairro: txt(dadosEntrega.bairro, 120),
+    cidade: txt(dadosEntrega.cidade, 120),
+    estado: txt(dadosEntrega.estado, 2).toUpperCase(),
+    email: txt(dadosEntrega.email, 120).toLowerCase(),
+    telefone: txt(dadosEntrega.telefone, 20)
+  };
+  if (!/^\d{8}$/.test(entrega.cep)
+    || !entrega.rua || !entrega.numero || !entrega.bairro || !entrega.cidade
+    || !/^[A-Z]{2}$/.test(entrega.estado)
+    || !RE_EMAIL.test(entrega.email)
+    || !/^\+?[\d\s().-]{10,20}$/.test(entrega.telefone)
+    || soDigitos(entrega.telefone).length < 10 || soDigitos(entrega.telefone).length > 15) {
+    return res.status(400).json({ erro: 'Informe um endereço de entrega, e-mail e telefone válidos.' });
   }
   const contaTabela = req.user.perfil === 'afiliado' ? 'afiliados' : 'contas';
   const usuario = normUsuario(req.user.usuario);
@@ -1518,13 +1570,18 @@ app.post('/api/checkout/unificado', auth, limitarTentativas, wrap(async (req, re
     await client.query('BEGIN');
     const inserido = await client.query(`INSERT INTO pedidos
       (id, afiliado_usuario, produto_id, produto_nome, valor, valor_original, forma,
-       cliente_nome, cliente_email, cliente_cpf, download_token, payment_idempotency_key,
+       cliente_nome, cliente_email, cliente_cpf, entrega_cep, entrega_rua, entrega_numero,
+       entrega_bairro, entrega_cidade, entrega_estado, entrega_email, entrega_telefone,
+       download_token, payment_idempotency_key,
        tipo_pedido, custo_total, patrocinador_usuario, avo_usuario)
-      VALUES ($1, $2, 'carrinho-cj', $3, $4, $4, $5, $6, $7, $8, $9, $10, 'cj', $11, $12, $13)
+      VALUES ($1, $2, 'carrinho-cj', $3, $4, $4, $5, $6, $7, $8, $9, $10, $11, $12,
+        $13, $14, $15, $16, $17, $18, 'cj', $19, $20, $21)
       RETURNING id`,
     [pedidoId, afiliado, `Carrinho físico (${itensPedido.length} produtos)`, valor, forma,
-      txt(conta.nome, 100), txt(conta.email, 120), soDigitos(conta.cpf), downloadToken, crypto.randomUUID(),
-      custoTotal, patrocinadorUsuario, avoUsuario]);
+      txt(conta.nome, 100), entrega.email, soDigitos(conta.cpf),
+      entrega.cep, entrega.rua, entrega.numero, entrega.bairro, entrega.cidade, entrega.estado,
+      entrega.email, entrega.telefone, downloadToken, crypto.randomUUID(), custoTotal,
+      patrocinadorUsuario, avoUsuario]);
     exigirUmaLinhaPersistida(inserido, 'pedidos');
     for (const item of itensPedido) {
       await client.query(`INSERT INTO itens_pedido
