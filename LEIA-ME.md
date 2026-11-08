@@ -39,10 +39,17 @@ Crie um repositório e envie **o conteúdo da pasta `loja-tech`** (com `package.
 | `MERCADO_PAGO_ACCESS_TOKEN` ou `ACCESS_TOKEN` | token privado de produção ou teste da aplicação Mercado Pago |
 | `MERCADO_PAGO_PUBLIC_KEY` ou `PUBLIC_KEY` | chave pública da mesma aplicação, injetada no formulário seguro de cartão |
 | `MERCADO_PAGO_WEBHOOK_URL` | (recomendado) URL pública `https://seu-dominio/api/webhook/mercadopago` |
+| `CJ_TOKEN` | token privado da CJ Dropshipping; necessário para consultar e sincronizar o catálogo físico |
 
 No plano gratuito o Render "dorme" sem uso; o primeiro acesso depois disso demora alguns segundos (as páginas avisam enquanto carregam).
 
 Configure no painel Mercado Pago o webhook de pagamentos para apontar para `MERCADO_PAGO_WEBHOOK_URL`. O servidor consulta a API do Mercado Pago e confere o pedido e o valor antes de atualizar o status; a mesma verificação também é feita durante a consulta de status da página.
+
+## Catálogo CJ e carrinho unificado
+- A sincronização é restrita ao administrador (`GET /api/sincronizar-produtos`); configure `CJ_TOKEN` no serviço Node do Render, nunca no navegador.
+- O catálogo público (`GET /api/produtos-salvos`) não inclui custos. Preços e quantidades enviados pelo navegador nunca são usados para cobrar: os valores atuais do Neon são usados para criar o pedido e cada item recebe snapshots de preço e custo.
+- A área gerencial permite sincronizar, ajustar preços e ativar/desativar produtos. Pedidos físicos aceitam PIX ou cartão; comissões dos três níveis são calculadas por item sobre preço menos custo somente após confirmação do Mercado Pago.
+- O cálculo de frete não está integrado nesta versão; o total do carrinho não inclui frete. Não anuncie entrega com frete calculado até integrar cotação logística e endereço de destino.
 
 ## 4. A dinâmica de comissões (o "patriarca")
 **O administrador é o topo da rede: não tem pai, e todo mundo está abaixo dele.**
@@ -98,7 +105,7 @@ A primeira tela da loja tem o **login à esquerda** (usuário e senha, ou "Crie 
 ## 8. Como funciona a venda
 1. O cliente entra pelo link do afiliado, escolhe o produto e vai para o checkout.
 2. No checkout preenche nome, e-mail e CPF e escolhe a forma de pagamento. O servidor registra um pedido **aguardando pagamento** (preço sempre vindo do catálogo do servidor). **Nenhuma comissão é gerada aqui.**
-3. **Pix:** o Mercado Pago gera o QR Code e o código Copia e Cola na própria página. **Cartão e débito:** o formulário seguro do Mercado Pago tokeniza os dados no navegador; somente o token é enviado ao servidor, que cria a cobrança.
+3. **Pix:** o Mercado Pago gera o QR Code e o código Copia e Cola na própria página. **Cartão:** o formulário do Mercado Pago tokeniza os dados no navegador; somente o token é enviado ao servidor, que cria a cobrança.
 4. A página consulta o status a cada cinco segundos. O webhook e a consulta de status confirmam a cobrança com o Mercado Pago; só uma cobrança aprovada marca o pedido como pago, gera comissões e libera o download automaticamente.
 
 O status financeiro dos pedidos é atualizado pelo webhook e pela consulta ao Mercado Pago. A confirmação, o cancelamento e o estorno não são feitos manualmente pelo painel.
@@ -123,7 +130,7 @@ Proteções: o afiliado só ganha se existir; se o CPF ou e-mail do comprador fo
 - As taxas de comissão direta, do patrocinador e do avô são editáveis separadamente pelo administrador e são aplicadas às vendas aprovadas após a alteração. A taxa do avô fica em `config` na chave `taxaAvo` (padrão inicial 5%).
 - Produtos seguem armazenados na lista JSONB `config.produtos`; a opção administrativa `repasseJurosComprador` é salva nesse produto e copiada para o pedido. A opção é enviada como metadado no pagamento, sem permitir alteração pelo checkout.
 - O checkout seguro de cartão usa o Brick do Mercado Pago. O modo sem juros também depende de planos/campanhas sem juros habilitados na conta Mercado Pago da loja; essa regra comercial da conta não pode ser criada por um campo da API de pagamento. Valide os planos disponíveis na conta de produção antes de anunciar parcelamento sem juros.
-- As telas da loja, checkout, afiliado e administração compartilham as regras mobile de `public/responsive.css`.
+- A tela inicial inclui manifesto PWA e service worker para o shell estático. As respostas da API não são armazenadas offline.
 - A tela inicial/login pode ser alternada sem recarregar entre português (padrão), inglês, espanhol, mandarim, italiano e francês; a preferência fica salva no navegador.
 - A aprovação, cancelamento e estorno de pedidos são sincronizados pelo Mercado Pago (webhook e consulta do checkout). O painel não oferece confirmação manual de pedido; a liquidação de comissões continua sendo uma operação administrativa separada.
 - Ao excluir um afiliado, a conta de acesso é removida na mesma transação e o cupom relacionado é removido pela FK `ON DELETE CASCADE`. Pedidos e snapshots de comissão permanecem para preservar o histórico financeiro.

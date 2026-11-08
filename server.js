@@ -11,6 +11,8 @@ const { DATABASE_URL, JWT_SECRET, ADMIN_SENHA } = process.env;
 const ADMIN_USUARIO = (process.env.ADMIN_USUARIO || 'admin').trim().toLowerCase();
 const MERCADO_PAGO_ACCESS_TOKEN = (process.env.MERCADO_PAGO_ACCESS_TOKEN || '').trim() || (process.env.ACCESS_TOKEN || '').trim();
 const MERCADO_PAGO_PUBLIC_KEY = (process.env.MERCADO_PAGO_PUBLIC_KEY || '').trim() || (process.env.PUBLIC_KEY || '').trim();
+const CJ_TOKEN = (process.env.CJ_TOKEN || '').trim();
+const CJ_BASE_URL = 'https://developers.cjdropshipping.com/api2.0/v1';
 if (!DATABASE_URL || !JWT_SECRET || !ADMIN_SENHA) {
   console.error('Defina DATABASE_URL, JWT_SECRET e ADMIN_SENHA nas variáveis de ambiente.');
   process.exit(1);
@@ -174,6 +176,43 @@ async function lerTaxas(client = pool) {
 }
 const centavos = (valor, taxa) => Math.round(valor * taxa) / 100;
 const dinheiro = v => Math.round(Number(v || 0) * 100) / 100;
+const precoCJ = valor => {
+  const primeiro = String(valor == null ? '' : valor).match(/-?\d+(?:[.,]\d+)?/);
+  if (!primeiro) return null;
+  const preco = Number(primeiro[0].replace(',', '.'));
+  return Number.isFinite(preco) && preco >= 0 ? dinheiro(preco) : null;
+};
+
+let cjTokenCache = '';
+let cjTokenExpiraEm = 0;
+async function obterTokenCJ() {
+  if (!CJ_TOKEN) throw new Error('CJ_TOKEN não configurado no servidor.');
+  if (cjTokenCache && Date.now() < cjTokenExpiraEm) return cjTokenCache;
+  const resposta = await fetch(`${CJ_BASE_URL}/authentication/getAccessToken`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ apiKey: CJ_TOKEN }),
+    signal: AbortSignal.timeout(15000)
+  });
+  const dados = await resposta.json().catch(() => ({}));
+  if (!resposta.ok || !dados.result || !dados.data?.accessToken) {
+    throw new Error('Não foi possível autenticar na API da CJ Dropshipping.');
+  }
+  cjTokenCache = dados.data.accessToken;
+  cjTokenExpiraEm = Date.now() + 50 * 60 * 1000;
+  return cjTokenCache;
+}
+
+async function listarProdutosCJ(pagina = 1, tamanho = 50) {
+  const token = await obterTokenCJ();
+  const resposta = await fetch(`${CJ_BASE_URL}/product/list?pageNum=${pagina}&pageSize=${tamanho}`, {
+    headers: { 'CJ-Access-Token': token, 'Content-Type': 'application/json' },
+    signal: AbortSignal.timeout(20000)
+  });
+  const dados = await resposta.json().catch(() => ({}));
+  if (!resposta.ok || !dados.result) throw new Error('A consulta de produtos à CJ Dropshipping falhou.');
+  return Array.isArray(dados.data?.list) ? dados.data.list : [];
+}
 
 function dataAtualBrasil() {
   const partes = new Intl.DateTimeFormat('en-CA', {
@@ -421,6 +460,23 @@ async function iniciarBanco() {
   await q('ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS cupom_desconto numeric(12,2) NOT NULL DEFAULT 0');
   await q('ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS repasse_juros_comprador boolean NOT NULL DEFAULT true');
   await q('ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS max_parcelas_sem_juros integer NOT NULL DEFAULT 1');
+  await q("ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS tipo_pedido text NOT NULL DEFAULT 'software'");
+  await q('ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS custo_total numeric(12,2) NOT NULL DEFAULT 0');
+
+  await q(`CREATE TABLE IF NOT EXISTS produtos_cj (
+    pid text PRIMARY KEY, nome text NOT NULL, descricao text NOT NULL DEFAULT '',
+    preco numeric(12,2) NOT NULL CHECK (preco >= 0),
+    custo numeric(12,2) NOT NULL DEFAULT 0 CHECK (custo >= 0),
+    categoria text NOT NULL DEFAULT '', imagem text NOT NULL DEFAULT '',
+    ativo boolean NOT NULL DEFAULT true, atualizado_em timestamptz NOT NULL DEFAULT now())`);
+  await q(`CREATE TABLE IF NOT EXISTS itens_pedido (
+    id bigserial PRIMARY KEY, pedido_id text NOT NULL REFERENCES pedidos(id) ON DELETE CASCADE,
+    produto_pid text NOT NULL, produto_nome text NOT NULL,
+    quantidade integer NOT NULL CHECK (quantidade > 0),
+    preco_unitario numeric(12,2) NOT NULL CHECK (preco_unitario >= 0),
+    custo_unitario numeric(12,2) NOT NULL CHECK (custo_unitario >= 0),
+    imagem text NOT NULL DEFAULT '')`);
+  await q('CREATE INDEX IF NOT EXISTS itens_pedido_pedido_id_idx ON itens_pedido (pedido_id)');
   
   await q(`CREATE TABLE IF NOT EXISTS vendas_aprovadas (
     payment_id text PRIMARY KEY,
@@ -771,6 +827,54 @@ app.get('/api/rede', auth, wrap(async (req, res) => {
   });
 }));
 
+app.get('/api/afiliado/dashboard', auth, wrap(async (req, res) => {
+  if (req.user.perfil !== 'afiliado') {
+    return res.status(403).json({ erro: 'Este painel é exclusivo para afiliados.' });
+  }
+  const usuario = norm(req.user.usuario);
+  const afiliado = (await q(`SELECT usuario, nome FROM afiliados WHERE usuario = $1`, [usuario])).rows[0];
+  if (!afiliado) return res.status(404).json({ erro: 'Conta de afiliado não encontrada.' });
+  const [saldo, extrato] = await Promise.all([
+    q(`SELECT COALESCE(sum(comissao), 0) AS direta,
+        COALESCE(sum(comissao_patrocinador), 0) AS patrocinador,
+        COALESCE(sum(comissao_avo), 0) AS avo
+      FROM pedidos WHERE status = 'pago'
+        AND (afiliado_usuario = $1 OR patrocinador_usuario = $1 OR avo_usuario = $1)`, [usuario]),
+    q(`SELECT pedido_id, produto_nome, data, geracao, valor, situacao FROM (
+        SELECT id AS pedido_id, produto_nome, pago_em AS data, 'Direta' AS geracao,
+          comissao AS valor, status_comissao_direta AS situacao
+        FROM pedidos WHERE status = 'pago' AND afiliado_usuario = $1 AND comissao > 0
+        UNION ALL
+        SELECT id, produto_nome, pago_em, 'Patrocinador', comissao_patrocinador, status_comissao_patrocinador
+        FROM pedidos WHERE status = 'pago' AND patrocinador_usuario = $1 AND comissao_patrocinador > 0
+        UNION ALL
+        SELECT id, produto_nome, pago_em, 'Avô', comissao_avo, status_comissao_avo
+        FROM pedidos WHERE status = 'pago' AND avo_usuario = $1 AND comissao_avo > 0
+      ) comissoes ORDER BY data DESC NULLS LAST, pedido_id DESC`, [usuario])
+  ]);
+  const totais = saldo.rows[0];
+  res.set('Cache-Control', 'no-store');
+  res.json({
+    usuario: afiliado.usuario,
+    nome: afiliado.nome,
+    linkIndicacao: `${req.protocol}://${req.get('host')}/?afiliado=${encodeURIComponent(usuario)}`,
+    ganhos: {
+      direta: dinheiro(totais.direta),
+      patrocinador: dinheiro(totais.patrocinador),
+      avo: dinheiro(totais.avo),
+      total: dinheiro(Number(totais.direta) + Number(totais.patrocinador) + Number(totais.avo))
+    },
+    extrato: extrato.rows.map(item => ({
+      pedidoId: item.pedido_id,
+      produtoNome: item.produto_nome,
+      data: item.data,
+      geracao: item.geracao,
+      valor: dinheiro(item.valor),
+      situacao: item.situacao
+    }))
+  });
+}));
+
 async function configuracaoCupons() {
   const [ativo, percentualMaximo] = await Promise.all([
     lerConfig('cupom_global_ativo', false),
@@ -993,6 +1097,19 @@ app.post('/api/checkout/:id/pagar', limitarTentativas, wrap(async (req, res) => 
   }
   if (pedido.status === 'pago') return res.status(409).json({ erro: 'Pedido já pago.' });
 
+  let paymentData = null;
+  let parcelas = 1;
+  if (pedido.forma === 'cartao') {
+    paymentData = req.body.paymentData || {};
+    parcelas = Number(paymentData.installments);
+    if (!txt(paymentData.token, 500) || !/^[a-z0-9_-]{1,40}$/i.test(txt(paymentData.payment_method_id, 40))) {
+      return res.status(400).json({ erro: 'Os dados tokenizados do cartão são inválidos.' });
+    }
+    if (!Number.isInteger(parcelas) || parcelas < 1 || parcelas > MAX_PARCELAS_CARTAO) {
+      return res.status(400).json({ erro: `Escolha de 1 a ${MAX_PARCELAS_CARTAO} parcelas.` });
+    }
+  }
+
   const paymentIdempotencyKey = pedido.payment_idempotency_key || crypto.randomUUID();
   const idempotencyResult = await q(`UPDATE pedidos
     SET payment_idempotency_key = COALESCE(NULLIF(payment_idempotency_key, ''), $2)
@@ -1005,8 +1122,10 @@ app.post('/api/checkout/:id/pagar', limitarTentativas, wrap(async (req, res) => 
     transaction_amount: Number(pedido.valor),
     description: pedido.produto_nome,
     external_reference: pedido.id,
-    payment_method_id: pedido.forma === 'pix' ? 'pix' : req.body.paymentData?.payment_method_id,
-    token: req.body.paymentData?.token,
+    payment_method_id: pedido.forma === 'pix' ? 'pix' : paymentData.payment_method_id,
+    token: paymentData?.token,
+    installments: parcelas,
+    issuer_id: paymentData?.issuer_id,
     payer: { email: pedido.cliente_email, identification: { type: 'CPF', number: soDigitos(pedido.cliente_cpf) } }
   };
 
@@ -1134,38 +1253,77 @@ async function confirmarPedido(id, paymentIdRecebido) {
     const taxas = await lerTaxas(client);
     const valor = Number(ped.valor);
     let vendedor = 0, patrocinador = 0, avo = 0;
-    let patrocinadorUsuario = null, avoUsuario = null;
+    let patrocinadorUsuario = ped.tipo_pedido === 'cj' ? ped.patrocinador_usuario : null;
+    let avoUsuario = ped.tipo_pedido === 'cj' ? ped.avo_usuario : null;
+    let afiliadoExiste = false;
 
     if (ped.afiliado_usuario) {
       const af = (await client.query('SELECT usuario, patrocinador_id FROM afiliados WHERE usuario = $1', [ped.afiliado_usuario])).rows[0];
       if (af) {
+        afiliadoExiste = true;
         vendedor = centavos(valor, taxas.taxaComissao);
-        const pai = (await client.query('SELECT usuario, patrocinador_id FROM afiliados WHERE usuario = $1 OR id = $1', [af.patrocinador_id])).rows[0];
-        if (pai) {
-          patrocinadorUsuario = pai.usuario;
-          patrocinador = centavos(valor, taxas.taxaPatrocinador);
-          const afiliadoAvo = (await client.query('SELECT usuario FROM afiliados WHERE usuario = $1 OR id = $1', [pai.patrocinador_id])).rows[0];
-          if (afiliadoAvo) { avoUsuario = afiliadoAvo.usuario; avo = centavos(valor, taxas.taxaAvo); }
+        if (ped.tipo_pedido !== 'cj') {
+          const pai = (await client.query('SELECT usuario, patrocinador_id FROM afiliados WHERE usuario = $1 OR id = $1', [af.patrocinador_id])).rows[0];
+          if (pai) {
+            patrocinadorUsuario = pai.usuario;
+            patrocinador = centavos(valor, taxas.taxaPatrocinador);
+            const afiliadoAvo = (await client.query('SELECT usuario FROM afiliados WHERE usuario = $1 OR id = $1', [pai.patrocinador_id])).rows[0];
+            if (afiliadoAvo) { avoUsuario = afiliadoAvo.usuario; avo = centavos(valor, taxas.taxaAvo); }
+          }
         }
       }
     }
-    const central = dinheiro(valor - vendedor - patrocinador - avo);
+    let central;
+    if (ped.tipo_pedido === 'cj') {
+      const itens = (await client.query(
+        'SELECT quantidade, preco_unitario, custo_unitario FROM itens_pedido WHERE pedido_id = $1',
+        [ped.id]
+      )).rows;
+      if (!itens.length) throw new Error(`Pedido físico ${ped.id} não possui itens para calcular os repasses.`);
+      let custoTotal = 0;
+      vendedor = 0;
+      patrocinador = 0;
+      avo = 0;
+      for (const item of itens) {
+        const quantidade = Number(item.quantidade);
+        const precoUnitario = Number(item.preco_unitario);
+        const custoUnitario = Number(item.custo_unitario);
+        const margemUnitario = dinheiro(precoUnitario - custoUnitario);
+        if (!Number.isInteger(quantidade) || quantidade < 1 || margemUnitario < 0) {
+          throw new Error(`Snapshot financeiro inválido no pedido ${ped.id}.`);
+        }
+        custoTotal = dinheiro(custoTotal + custoUnitario * quantidade);
+        if (afiliadoExiste) {
+          vendedor = dinheiro(vendedor + centavos(margemUnitario, taxas.taxaComissao) * quantidade);
+          if (patrocinadorUsuario) {
+            patrocinador = dinheiro(patrocinador + centavos(margemUnitario, taxas.taxaPatrocinador) * quantidade);
+          }
+          if (avoUsuario) avo = dinheiro(avo + centavos(margemUnitario, taxas.taxaAvo) * quantidade);
+        }
+      }
+      central = dinheiro(valor - custoTotal - vendedor - patrocinador - avo);
+      await client.query('UPDATE pedidos SET custo_total = $2 WHERE id = $1', [ped.id, custoTotal]);
+    } else {
+      central = dinheiro(valor - vendedor - patrocinador - avo);
+    }
 
     await client.query(`UPDATE pedidos SET status = 'pago', payment_id = $8, comissao = $2, patrocinador_usuario = $3,
        comissao_patrocinador = $4, avo_usuario = $5, comissao_avo = $6, comissao_central = $7, pago_em = now() WHERE id = $1`,
       [ped.id, vendedor, patrocinadorUsuario, patrocinador, avoUsuario, avo, central, paymentId]);
-    const vendaSincronizada = await client.query(`INSERT INTO vendas_aprovadas (payment_id, cpf, email, produto, valor, status, ativa)
-      VALUES ($1, $2, $3, $4, $5, 'APROVADO', true)
-      ON CONFLICT (payment_id) DO UPDATE SET
-        cpf = EXCLUDED.cpf,
-        email = EXCLUDED.email,
-        produto = EXCLUDED.produto,
-        valor = EXCLUDED.valor,
-        status = EXCLUDED.status,
-        ativa = EXCLUDED.ativa
-      RETURNING payment_id`,
-    [paymentId, cpf, ped.cliente_email, ped.produto_nome, dinheiro(ped.valor)]);
-    exigirUmaLinhaPersistida(vendaSincronizada, 'vendas_aprovadas');
+    if (ped.tipo_pedido !== 'cj') {
+      const vendaSincronizada = await client.query(`INSERT INTO vendas_aprovadas (payment_id, cpf, email, produto, valor, status, ativa)
+        VALUES ($1, $2, $3, $4, $5, 'APROVADO', true)
+        ON CONFLICT (payment_id) DO UPDATE SET
+          cpf = EXCLUDED.cpf,
+          email = EXCLUDED.email,
+          produto = EXCLUDED.produto,
+          valor = EXCLUDED.valor,
+          status = EXCLUDED.status,
+          ativa = EXCLUDED.ativa
+        RETURNING payment_id`,
+      [paymentId, cpf, ped.cliente_email, ped.produto_nome, dinheiro(ped.valor)]);
+      exigirUmaLinhaPersistida(vendaSincronizada, 'vendas_aprovadas');
+    }
     await client.query('COMMIT');
   } catch (e) {
     await client.query('ROLLBACK');
@@ -1176,9 +1334,217 @@ async function confirmarPedido(id, paymentIdRecebido) {
 }
 
 // ----- Produtos, Configurações e Exclusões -----
-app.get('/api/produtos', wrap(async (req, res) => {
+app.get('/api/produtos', (req, res, next) => {
+  if (req.query.origem !== 'cj') return next();
+  auth(req, res, () => soAdmin(req, res, next));
+}, wrap(async (req, res) => {
   res.set('Cache-Control', 'no-store');
-  res.json(await lerConfig('produtos', PRODUTOS_INICIAIS));
+  if (req.query.origem === 'cj') {
+    try {
+      return res.json(await listarProdutosCJ());
+    } catch (err) {
+      console.error('Erro ao consultar catálogo da CJ:', err.message);
+      return res.status(502).json({ erro: 'Não foi possível consultar os produtos da CJ Dropshipping.' });
+    }
+  }
+  const softwares = await lerConfig('produtos', PRODUTOS_INICIAIS);
+  res.json(softwares.map(({ custo, ...produto }) => produto));
+}));
+
+app.get('/api/produtos-salvos', wrap(async (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  const softwares = (await lerConfig('produtos', PRODUTOS_INICIAIS)).map(({ custo, ...produto }) => ({
+    ...produto,
+    pid: produto.id,
+    tipo: 'software',
+    preco: Number(produto.precoPor)
+  }));
+  const fisicos = await q(`SELECT pid, nome, descricao, preco, categoria, imagem
+    FROM produtos_cj WHERE ativo = true AND preco > custo ORDER BY atualizado_em DESC, nome`);
+  res.json([
+    ...softwares,
+    ...fisicos.rows.map(produto => ({
+      ...produto,
+      preco: Number(produto.preco),
+      tipo: 'cj'
+    }))
+  ]);
+}));
+
+async function sincronizarCatalogoCJ() {
+  const itens = await listarProdutosCJ();
+  const client = await pool.connect();
+  let sincronizados = 0;
+  try {
+    await client.query('BEGIN');
+    for (const item of itens) {
+      const pid = txt(item.pid, 100);
+      const nome = txt(item.productName || item.entryName, 255);
+      const custo = precoCJ(item.sellPrice || item.productPrice);
+      if (!pid || !nome || custo === null || custo <= 0) continue;
+      const categoria = txt(item.categoryName || item.category, 120);
+      const imagem = txt(item.productImage || item.bigImage || item.image, 1000);
+      const descricao = txt(item.description || item.productDescription, 2000);
+      const inserido = await client.query(`INSERT INTO produtos_cj
+          (pid, nome, descricao, preco, custo, categoria, imagem)
+        VALUES ($1, $2, $3, $4, $5, $6, $7)
+        ON CONFLICT (pid) DO UPDATE SET
+          nome = EXCLUDED.nome, descricao = EXCLUDED.descricao,
+          custo = EXCLUDED.custo, categoria = EXCLUDED.categoria,
+          imagem = EXCLUDED.imagem, atualizado_em = now()
+        RETURNING pid`, [pid, nome, descricao, dinheiro(custo * 2), custo, categoria, imagem]);
+      if (inserido.rowCount) sincronizados++;
+    }
+    await client.query('COMMIT');
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
+  return sincronizados;
+}
+
+app.get('/api/sincronizar-produtos', auth, soAdmin, wrap(async (req, res) => {
+  const sincronizados = await sincronizarCatalogoCJ();
+  res.json({ ok: true, sincronizados });
+}));
+
+app.post('/api/sincronizar-produtos', auth, soAdmin, wrap(async (req, res) => {
+  const sincronizados = await sincronizarCatalogoCJ();
+  res.json({ ok: true, sincronizados });
+}));
+
+app.get('/api/admin/produtos-cj', auth, soAdmin, wrap(async (req, res) => {
+  const resultado = await q(`SELECT pid, nome, descricao, preco, custo, categoria, imagem, ativo, atualizado_em
+    FROM produtos_cj ORDER BY atualizado_em DESC, nome`);
+  res.json(resultado.rows.map(produto => ({
+    ...produto,
+    preco: Number(produto.preco),
+    custo: Number(produto.custo)
+  })));
+}));
+
+app.put('/api/admin/produtos-cj/:pid', auth, soAdmin, wrap(async (req, res) => {
+  const preco = Number(req.body.preco);
+  if (!Number.isFinite(preco) || preco < 0 || Math.abs(preco * 100 - Math.round(preco * 100)) > 1e-8) {
+    return res.status(400).json({ erro: 'Informe um preço de venda válido em centavos.' });
+  }
+  if (typeof req.body.ativo !== 'boolean') {
+    return res.status(400).json({ erro: 'Informe se o produto está ativo.' });
+  }
+  const resultado = await q(`UPDATE produtos_cj SET preco = $2, ativo = $3, atualizado_em = now()
+    WHERE pid = $1 AND (NOT $3 OR $2 > custo) RETURNING pid, preco, custo, ativo`,
+  [txt(req.params.pid, 100), dinheiro(preco), req.body.ativo]);
+  if (!resultado.rowCount) {
+    const existe = await q('SELECT pid FROM produtos_cj WHERE pid = $1', [txt(req.params.pid, 100)]);
+    if (!existe.rowCount) return res.status(404).json({ erro: 'Produto CJ não encontrado.' });
+    return res.status(400).json({ erro: 'O preço de venda precisa ser maior que o custo do fornecedor.' });
+  }
+  res.json({ ok: true });
+}));
+
+app.post('/api/checkout/unificado', auth, limitarTentativas, wrap(async (req, res) => {
+  const itens = req.body.items;
+  const forma = norm(req.body.forma || 'pix');
+  if (!Array.isArray(itens) || itens.length < 1 || itens.length > 50) {
+    return res.status(400).json({ erro: 'Informe de 1 a 50 produtos no carrinho.' });
+  }
+  if (!FORMAS.includes(forma) || forma === 'debito') {
+    return res.status(400).json({ erro: 'O carrinho unificado aceita pagamento por PIX ou cartão de crédito.' });
+  }
+  if (!['cliente', 'afiliado'].includes(req.user.perfil)) {
+    return res.status(403).json({ erro: 'Entre com uma conta de cliente ou afiliado para finalizar a compra.' });
+  }
+  const contaTabela = req.user.perfil === 'afiliado' ? 'afiliados' : 'contas';
+  const usuario = normUsuario(req.user.usuario);
+  const conta = (await q(`SELECT nome, email, cpf FROM ${contaTabela} WHERE usuario = $1`, [usuario])).rows[0];
+  if (!conta || !RE_EMAIL.test(conta.email) || !cpfValido(conta.cpf)) {
+    return res.status(400).json({ erro: 'Atualize seu cadastro com nome, e-mail e CPF válidos antes de comprar.' });
+  }
+
+  const agregados = new Map();
+  for (const item of itens) {
+    const pid = txt(item?.pid, 100);
+    const quantidade = Number(item?.quantidade);
+    if (!pid || !Number.isInteger(quantidade) || quantidade < 1 || quantidade > 20) {
+      return res.status(400).json({ erro: 'Cada item deve ter um identificador e uma quantidade entre 1 e 20.' });
+    }
+    agregados.set(pid, (agregados.get(pid) || 0) + quantidade);
+    if (agregados.get(pid) > 20) return res.status(400).json({ erro: 'A quantidade máxima por produto é 20.' });
+  }
+
+  const produtos = await q(`SELECT pid, nome, preco, custo, imagem
+    FROM produtos_cj WHERE ativo = true AND preco > custo AND pid = ANY($1::text[])`, [[...agregados.keys()]]);
+  const porPid = new Map(produtos.rows.map(produto => [produto.pid, produto]));
+  if (porPid.size !== agregados.size) return res.status(400).json({ erro: 'Um ou mais produtos não estão mais disponíveis.' });
+
+  const itensPedido = [...agregados.entries()].map(([pid, quantidade]) => {
+    const produto = porPid.get(pid);
+    const precoUnitario = dinheiro(produto.preco);
+    const custoUnitario = dinheiro(produto.custo);
+    return { ...produto, quantidade, precoUnitario, custoUnitario };
+  });
+  const valor = dinheiro(itensPedido.reduce((total, item) => total + item.precoUnitario * item.quantidade, 0));
+  const custoTotal = dinheiro(itensPedido.reduce((total, item) => total + item.custoUnitario * item.quantidade, 0));
+  if (valor <= custoTotal) return res.status(409).json({ erro: 'O catálogo está sendo atualizado. Tente novamente em instantes.' });
+  let afiliado = normUsuario(req.body.afiliado || '');
+  let patrocinadorUsuario = null;
+  let avoUsuario = null;
+  if (afiliado) {
+    const indicado = (await q('SELECT usuario, email, cpf, patrocinador_id FROM afiliados WHERE usuario = $1', [afiliado])).rows[0];
+    if (!indicado) return res.status(400).json({ erro: 'O link de indicação informado não é válido.' });
+    if (norm(indicado.email) === norm(conta.email)
+      || (soDigitos(indicado.cpf) && soDigitos(indicado.cpf) === soDigitos(conta.cpf))) {
+      afiliado = null;
+    } else if (indicado.patrocinador_id && norm(indicado.patrocinador_id) !== 'admin') {
+      const pai = (await q('SELECT usuario, patrocinador_id FROM afiliados WHERE usuario = $1 OR id = $1', [norm(indicado.patrocinador_id)])).rows[0];
+      if (pai && pai.usuario !== indicado.usuario) {
+        patrocinadorUsuario = pai.usuario;
+        if (pai.patrocinador_id && norm(pai.patrocinador_id) !== 'admin') {
+          const avo = (await q('SELECT usuario FROM afiliados WHERE usuario = $1 OR id = $1', [norm(pai.patrocinador_id)])).rows[0];
+          if (avo && avo.usuario !== pai.usuario && avo.usuario !== indicado.usuario) avoUsuario = avo.usuario;
+        }
+      }
+    }
+  } else {
+    afiliado = null;
+  }
+
+  const pedidoId = crypto.randomBytes(8).toString('hex');
+  const downloadToken = crypto.randomBytes(32).toString('hex');
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const inserido = await client.query(`INSERT INTO pedidos
+      (id, afiliado_usuario, produto_id, produto_nome, valor, valor_original, forma,
+       cliente_nome, cliente_email, cliente_cpf, download_token, payment_idempotency_key,
+       tipo_pedido, custo_total, patrocinador_usuario, avo_usuario)
+      VALUES ($1, $2, 'carrinho-cj', $3, $4, $4, $5, $6, $7, $8, $9, $10, 'cj', $11, $12, $13)
+      RETURNING id`,
+    [pedidoId, afiliado, `Carrinho físico (${itensPedido.length} produtos)`, valor, forma,
+      txt(conta.nome, 100), txt(conta.email, 120), soDigitos(conta.cpf), downloadToken, crypto.randomUUID(),
+      custoTotal, patrocinadorUsuario, avoUsuario]);
+    exigirUmaLinhaPersistida(inserido, 'pedidos');
+    for (const item of itensPedido) {
+      await client.query(`INSERT INTO itens_pedido
+        (pedido_id, produto_pid, produto_nome, quantidade, preco_unitario, custo_unitario, imagem)
+        VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+      [pedidoId, item.pid, item.nome, item.quantidade, item.precoUnitario, item.custoUnitario, item.imagem || '']);
+    }
+    await client.query('COMMIT');
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
+  res.status(201).json({
+    pedidoId,
+    downloadToken,
+    valor,
+    quantidadeItens: itensPedido.reduce((total, item) => total + item.quantidade, 0)
+  });
 }));
 
 app.get('/api/admin/produtos', auth, soAdmin, wrap(async (req, res) => {
@@ -1191,11 +1557,58 @@ app.put('/api/produtos', auth, soAdmin, wrap(async (req, res) => {
 }));
 
 app.get('/api/config', wrap(async (req, res) => {
+  const resposta = { whatsappSuporte: String(await lerConfig('whatsappSuporte', '')) };
+  const bearer = req.headers.authorization || '';
+  const usuario = await new Promise(resolve => {
+    jwt.verify(bearer.startsWith('Bearer ') ? bearer.slice(7) : '', JWT_SECRET, (err, payload) => {
+      resolve(err ? null : payload);
+    });
+  });
+  if (usuario?.perfil === 'admin' && !usuario.trocar) {
+    Object.assign(resposta, await lerTaxas(), {
+      valorMinimoSaque: Number(await lerConfig('valorMinimoSaque', VALOR_MINIMO_SAQUE_PADRAO)),
+      calendarioSaque: calendarioSaqueHoje()
+    });
+  }
+  res.json(resposta);
+}));
+
+app.get('/api/admin/config', auth, soAdmin, wrap(async (req, res) => {
   res.json({
     ...(await lerTaxas()),
     valorMinimoSaque: Number(await lerConfig('valorMinimoSaque', VALOR_MINIMO_SAQUE_PADRAO)),
     calendarioSaque: calendarioSaqueHoje(),
     whatsappSuporte: String(await lerConfig('whatsappSuporte', ''))
+  });
+}));
+
+app.get('/api/admin/dashboard', auth, soAdmin, wrap(async (req, res) => {
+  const [financeiro, catalogo] = await Promise.all([
+    q(`SELECT count(*)::int AS pedidos,
+        COALESCE(sum(valor), 0) AS faturamento,
+        COALESCE(sum(custo_total), 0) AS custo_fornecedor,
+        COALESCE(sum(comissao), 0) AS comissao_nivel_1,
+        COALESCE(sum(comissao_patrocinador), 0) AS comissao_nivel_2,
+        COALESCE(sum(comissao_avo), 0) AS comissao_nivel_3,
+        COALESCE(sum(comissao_central), 0) AS central
+      FROM pedidos WHERE status = 'pago'`),
+    q(`SELECT count(*)::int AS produtos,
+        count(*) FILTER (WHERE ativo = true)::int AS ativos
+      FROM produtos_cj`)
+  ]);
+  const valores = financeiro.rows[0];
+  res.set('Cache-Control', 'no-store');
+  res.json({
+    pedidosPagos: valores.pedidos,
+    faturamento: dinheiro(valores.faturamento),
+    custoFornecedor: dinheiro(valores.custo_fornecedor),
+    comissoes: {
+      nivel1: dinheiro(valores.comissao_nivel_1),
+      nivel2: dinheiro(valores.comissao_nivel_2),
+      nivel3: dinheiro(valores.comissao_nivel_3)
+    },
+    central: dinheiro(valores.central),
+    catalogoCJ: catalogo.rows[0]
   });
 }));
 
