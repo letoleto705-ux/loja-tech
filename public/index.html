@@ -344,7 +344,8 @@
                     </div>
                     <div>
                         <label class="block mb-1 uppercase tracking-wider text-emerald-900">Valor Mínimo de Saque (R$)</label>
-                        <input type="number" id="af_valor_minimo_saque" min="0" step="0.01" value="50" required onchange="salvarValorMinimoSaque()" class="w-full px-3 py-2.5 rounded-xl border border-emerald-300 bg-white font-bold text-emerald-700">
+                        <input type="number" id="af_valor_minimo_saque" min="0" step="0.01" value="50" required oninput="agendarSalvamentoValorMinimoSaque()" onchange="salvarValorMinimoSaque()" class="w-full px-3 py-2.5 rounded-xl border border-emerald-300 bg-white font-bold text-emerald-700">
+                        <p id="statusValorMinimoSaque" class="mt-1 text-[11px] font-medium text-slate-500" role="status" aria-live="polite"></p>
                     </div>
                     <div>
                         <label class="block mb-1 uppercase tracking-wider text-emerald-900">Valor Total a Pagar (R$)</label>
@@ -1207,19 +1208,51 @@
             }
         }
 
+        let timerSalvamentoValorMinimoSaque = null;
+        let salvandoValorMinimoSaque = false;
+        let salvarValorMinimoSaqueNovamente = false;
+
+        function agendarSalvamentoValorMinimoSaque() {
+            clearTimeout(timerSalvamentoValorMinimoSaque);
+            const status = document.getElementById('statusValorMinimoSaque');
+            status.classList.remove('text-red-600');
+            status.innerText = 'Alteração pendente...';
+            timerSalvamentoValorMinimoSaque = setTimeout(salvarValorMinimoSaque, 600);
+        }
+
         async function salvarValorMinimoSaque() {
+            clearTimeout(timerSalvamentoValorMinimoSaque);
+            if (salvandoValorMinimoSaque) {
+                salvarValorMinimoSaqueNovamente = true;
+                return;
+            }
             const textoValor = document.getElementById('af_valor_minimo_saque').value.trim();
             const valor = Number(textoValor);
+            const status = document.getElementById('statusValorMinimoSaque');
             try {
                 if (!textoValor || !Number.isFinite(valor) || valor < 0) {
                     throw new Error('O valor mínimo de saque deve ser igual ou superior a R$ 0,00.');
                 }
-                await api('PUT', '/api/config', { valorMinimoSaque: valor });
-                alert('Valor mínimo de saque salvo.');
+                salvandoValorMinimoSaque = true;
+                status.innerText = 'Salvando no Neon...';
+                const resposta = await api('PUT', '/api/config', { valorMinimoSaque: valor });
+                const valorSalvo = Number(resposta.valorMinimoSaque);
+                if (!Number.isFinite(valorSalvo) || valorSalvo !== valor) {
+                    throw new Error('A API não confirmou o valor mínimo de saque persistido.');
+                }
+                status.classList.remove('text-red-600');
+                status.innerText = 'Valor mínimo de saque salvo no Neon.';
             } catch (err) {
-                alert(err.message);
+                status.innerText = 'Falha ao salvar o valor mínimo de saque: ' + err.message;
+                status.classList.add('text-red-600');
+                return;
+            } finally {
+                salvandoValorMinimoSaque = false;
+                if (salvarValorMinimoSaqueNovamente) {
+                    salvarValorMinimoSaqueNovamente = false;
+                    timerSalvamentoValorMinimoSaque = setTimeout(salvarValorMinimoSaque, 0);
+                }
             }
-            await atualizarTaxasNaTela();
         }
 
         async function carregarListaGerenciaAfiliados() {
