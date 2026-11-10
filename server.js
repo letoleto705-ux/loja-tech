@@ -294,14 +294,14 @@ async function afiliadosComComissao() {
     ) n ON n.u = a.usuario
     LEFT JOIN (
       SELECT afiliado_usuario AS u, sum(comissao) AS direta_pendente,
-             sum(comissao) AS direta_liberar
+             sum(comissao) FILTER (WHERE pago_em < $1::timestamptz) AS direta_liberar
       FROM pedidos
       WHERE status = 'pago' AND status_comissao_direta = 'PENDENTE' AND afiliado_usuario IS NOT NULL
       GROUP BY 1
     ) pd ON pd.u = a.usuario
     LEFT JOIN (
       SELECT u, sum(valor) AS rede_pendente,
-             sum(valor) AS rede_liberar
+             sum(valor) FILTER (WHERE pago_em < $1::timestamptz) AS rede_liberar
       FROM (
         SELECT patrocinador_usuario AS u, comissao_patrocinador AS valor, pago_em
         FROM pedidos
@@ -1375,21 +1375,21 @@ app.get('/api/afiliados', auth, soAdmin, wrap(async (req, res) => {
   res.json(await afiliadosComComissao());
 }));
 
-async function liquidarComissoesAfiliado(client, usuario, valorMinimo) {
+async function liquidarComissoesAfiliado(client, usuario, valorMinimo, dataLimite) {
   const pendentes = await client.query(`SELECT COALESCE(sum(valor), 0) AS total
     FROM (
       SELECT comissao AS valor FROM pedidos
       WHERE status = 'pago' AND status_comissao_direta = 'PENDENTE'
-        AND afiliado_usuario = $1 AND comissao > 0
+        AND afiliado_usuario = $1 AND pago_em < $2 AND comissao > 0
       UNION ALL
       SELECT comissao_patrocinador AS valor FROM pedidos
       WHERE status = 'pago' AND status_comissao_patrocinador = 'PENDENTE'
-        AND patrocinador_usuario = $1 AND comissao_patrocinador > 0
+        AND patrocinador_usuario = $1 AND pago_em < $2 AND comissao_patrocinador > 0
       UNION ALL
       SELECT comissao_avo AS valor FROM pedidos
       WHERE status = 'pago' AND status_comissao_avo = 'PENDENTE'
-        AND avo_usuario = $1 AND comissao_avo > 0
-    ) comissoes`, [usuario]);
+        AND avo_usuario = $1 AND pago_em < $2 AND comissao_avo > 0
+    ) comissoes`, [usuario, dataLimite]);
   const totalElegivel = dinheiro(pendentes.rows[0].total);
   if (totalElegivel <= 0 || totalElegivel < valorMinimo) {
     return { elegivel: totalElegivel, quantidade: 0, valorPago: 0 };
@@ -1404,7 +1404,7 @@ async function liquidarComissoesAfiliado(client, usuario, valorMinimo) {
         CASE WHEN avo_usuario = $1 AND status_comissao_avo = 'PENDENTE' AND comissao_avo > 0
           THEN comissao_avo ELSE 0 END AS avo
       FROM pedidos
-      WHERE status = 'pago' AND (
+      WHERE status = 'pago' AND pago_em < $2 AND (
         (afiliado_usuario = $1 AND status_comissao_direta = 'PENDENTE' AND comissao > 0)
         OR (patrocinador_usuario = $1 AND status_comissao_patrocinador = 'PENDENTE' AND comissao_patrocinador > 0)
         OR (avo_usuario = $1 AND status_comissao_avo = 'PENDENTE' AND comissao_avo > 0)
@@ -1423,7 +1423,7 @@ async function liquidarComissoesAfiliado(client, usuario, valorMinimo) {
       RETURNING e.direta, e.patrocinador, e.avo
     )
     SELECT direta, patrocinador, avo FROM baixadas`,
-  [usuario]);
+  [usuario, dataLimite]);
 
   let valorPago = 0;
   let quantidade = 0;
@@ -1440,6 +1440,7 @@ async function liquidarComissoesAfiliado(client, usuario, valorMinimo) {
 
 app.post('/api/admin/afiliados/liquidar-lote', auth, soAdmin, wrap(async (req, res) => {
   const valorMinimo = Number(await lerConfig('valorMinimoSaque', VALOR_MINIMO_SAQUE_PADRAO));
+  const dataLimite = dataInicioMesBrasil();
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -1449,7 +1450,7 @@ app.post('/api/admin/afiliados/liquidar-lote', auth, soAdmin, wrap(async (req, r
     let valorPago = 0;
 
     for (const afiliado of afiliados.rows) {
-      const resultado = await liquidarComissoesAfiliado(client, afiliado.usuario, valorMinimo);
+      const resultado = await liquidarComissoesAfiliado(client, afiliado.usuario, valorMinimo, dataLimite);
       if (resultado.quantidade > 0) afiliadosLiquidados++;
       quantidade += resultado.quantidade;
       valorPago += resultado.valorPago;
@@ -1463,8 +1464,11 @@ app.post('/api/admin/afiliados/liquidar-lote', auth, soAdmin, wrap(async (req, r
   } finally {
     client.release();
   }
-}));app.post('/api/admin/afiliados/:id/pagar', auth, soAdmin, wrap(async (req, res) => {
+}));
+
+app.post('/api/admin/afiliados/:id/pagar', auth, soAdmin, wrap(async (req, res) => {
   const valorMinimo = Number(await lerConfig('valorMinimoSaque', VALOR_MINIMO_SAQUE_PADRAO));
+  const dataLimite = dataInicioMesBrasil();
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -1474,7 +1478,7 @@ app.post('/api/admin/afiliados/liquidar-lote', auth, soAdmin, wrap(async (req, r
       return res.status(404).json({ erro: 'Afiliado não encontrado.' });
     }
 
-    const resultado = await liquidarComissoesAfiliado(client, afiliado.rows[0].usuario, valorMinimo);
+    const resultado = await liquidarComissoesAfiliado(client, afiliado.rows[0].usuario, valorMinimo, dataLimite);
     if (resultado.elegivel > 0 && resultado.elegivel < valorMinimo) {
       await client.query('ROLLBACK');
       return res.status(409).json({ erro: `O saldo elegível está abaixo do mínimo de R$ ${valorMinimo.toFixed(2)}.` });
