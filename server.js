@@ -1439,10 +1439,6 @@ async function liquidarComissoesAfiliado(client, usuario, valorMinimo, dataLimit
 }
 
 app.post('/api/admin/afiliados/liquidar-lote', auth, soAdmin, wrap(async (req, res) => {
-  if (!calendarioSaqueHoje().liberado) {
-    return res.status(409).json({ erro: 'O processamento fica disponível somente do dia 1º ao dia 10 de cada mês.' });
-  }
-
   const valorMinimo = Number(await lerConfig('valorMinimoSaque', VALOR_MINIMO_SAQUE_PADRAO));
   const dataLimite = dataInicioMesBrasil();
   const client = await pool.connect();
@@ -1471,10 +1467,6 @@ app.post('/api/admin/afiliados/liquidar-lote', auth, soAdmin, wrap(async (req, r
 }));
 
 app.post('/api/admin/afiliados/:id/pagar', auth, soAdmin, wrap(async (req, res) => {
-  if (!calendarioSaqueHoje().liberado) {
-    return res.status(409).json({ erro: 'O processamento fica disponível somente do dia 1º ao dia 10 de cada mês.' });
-  }
-
   const valorMinimo = Number(await lerConfig('valorMinimoSaque', VALOR_MINIMO_SAQUE_PADRAO));
   const dataLimite = dataInicioMesBrasil();
   const client = await pool.connect();

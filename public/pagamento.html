@@ -99,9 +99,9 @@
         <div class="bg-white rounded-3xl p-5 border border-slate-200 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>
                 <h3 class="text-sm font-black text-slate-900">Fechamento do ciclo de afiliados</h3>
-                <p id="resumoLiquidacaoLote" class="text-xs text-slate-500 mt-1">Disponível para o administrador entre os dias 1º e 10, para saldos elegíveis do mês anterior.</p>
+                <p id="resumoLiquidacaoLote" class="text-xs text-slate-500 mt-1">Disponível para o administrador a qualquer momento, para saldos elegíveis de meses anteriores.</p>
             </div>
-            <button type="button" id="btnLiquidarLote" onclick="liquidarCicloAfiliados()" disabled class="px-4 py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition disabled:opacity-50 disabled:cursor-not-allowed">
+            <button type="button" id="btnLiquidarLote" onclick="liquidarCicloAfiliados()" class="px-4 py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition disabled:opacity-50 disabled:cursor-not-allowed">
                 <i class="fa-solid fa-money-bill-transfer mr-1"></i> Processar Fechamento de Ciclo e Liquidar Pagamentos
             </button>
         </div>
@@ -181,6 +181,7 @@
         const API_URL = ''; // vazio = mesmo endereço do site (Render serve as páginas e a API juntas)
         const CHAVE_INDICADOR = 'tech_afiliado_indicador';
         let configuracaoSaque = { valorMinimoSaque: 50, calendarioSaque: { liberado: false, dataSaque: '' } };
+        let liquidacaoEmAndamento = false;
 
         function esc(t) {
             return String(t == null ? '' : t).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -218,7 +219,6 @@
             const container = document.getElementById('relatorioPagamentosContainer');
             const lblTotalGeral = document.getElementById('lblTotalGeralPagar');
             const badgeQtd = document.getElementById('qtdAfiliadosRelatorio');
-            document.getElementById('btnLiquidarLote').disabled = true;
 
             // Fonte única de dados: banco Neon, via API (tabela afiliados)
             let listaAfiliados = [];
@@ -236,22 +236,17 @@
                 container.innerHTML = `<div class="text-center py-12 text-xs font-semibold text-red-600">${esc(err.message)}</div>`;
                 return;
             }
-            const calendario = configuracaoSaque.calendarioSaque;
-            document.getElementById('avisoCalendarioSaque').innerHTML = calendario.liberado
-                ? `<strong>Janela administrativa aberta:</strong> o administrador pode processar manualmente os pagamentos entre os dias 1º e 10. Os pagamentos aos afiliados seguem o calendário de até o 5º dia útil. São elegíveis os saldos de comissões aprovadas em meses anteriores e iguais ou superiores ao mínimo de <strong>R$ ${configuracaoSaque.valorMinimoSaque.toFixed(2)}</strong>.`
-                : `<strong>Janela administrativa:</strong> o processamento manual fica disponível do dia 1º ao dia 10 de cada mês. Os pagamentos aos afiliados seguem o calendário de até o 5º dia útil. O saque mínimo configurado é <strong>R$ ${configuracaoSaque.valorMinimoSaque.toFixed(2)}</strong>.`;
+            document.getElementById('avisoCalendarioSaque').innerHTML =
+                `<strong>Pagamentos:</strong> o administrador pode processar as baixas manualmente a qualquer momento. Os pagamentos aos afiliados seguem o calendário de até o 5º dia útil. São elegíveis as comissões aprovadas em meses anteriores e iguais ou superiores ao mínimo de <strong>R$ ${configuracaoSaque.valorMinimoSaque.toFixed(2)}</strong>.`;
 
             const afiliadosComSaldo = listaAfiliados.filter(af => Number(af.comissaoPendente) > 0);
-            const afiliadosElegiveis = calendario.liberado
-                ? listaAfiliados.filter(af => Number(af.comissaoLiberar) >= configuracaoSaque.valorMinimoSaque
-                    && Number(af.comissaoLiberar) > 0)
-                : [];
+            const afiliadosElegiveis = listaAfiliados.filter(af => Number(af.comissaoLiberar) >= configuracaoSaque.valorMinimoSaque
+                && Number(af.comissaoLiberar) > 0);
             badgeQtd.innerText = `${afiliadosComSaldo.length} afiliado(s) com saldo · ${afiliadosElegiveis.length} elegível(is) para pagamento`;
             const botaoLote = document.getElementById('btnLiquidarLote');
-            botaoLote.disabled = !calendario.liberado || afiliadosElegiveis.length === 0;
-            document.getElementById('resumoLiquidacaoLote').innerText = calendario.liberado
-                ? `${afiliadosElegiveis.length} afiliado(s) elegível(is) para liquidação; os demais saldos permanecerão acumulados.`
-                : `${afiliadosComSaldo.length} afiliado(s) têm comissões pendentes. O administrador poderá processar a liquidação entre os dias 1º e 10, para saldos de meses anteriores acima do mínimo de R$ ${configuracaoSaque.valorMinimoSaque.toFixed(2)}.`;
+            botaoLote.disabled = liquidacaoEmAndamento;
+            document.getElementById('resumoLiquidacaoLote').innerText =
+                `${afiliadosElegiveis.length} afiliado(s) elegível(is) para liquidação; os demais saldos permanecerão acumulados. O processamento pode ser feito a qualquer momento.`;
 
             if (listaAfiliados.length === 0) {
                 container.innerHTML = `
@@ -301,8 +296,7 @@
                 const comissaoRede = com.rede;
                 const totalAfiliado = com.total;
                 const totalElegivelAfiliado = Number(af.comissaoLiberar) || 0;
-                const podeLiquidarAfiliado = calendario.liberado
-                    && totalElegivelAfiliado > 0
+                const podeLiquidarAfiliado = totalElegivelAfiliado > 0
                     && totalElegivelAfiliado >= configuracaoSaque.valorMinimoSaque;
                 somaTotalGeral += totalAfiliado;
 
@@ -320,7 +314,7 @@
                                     <span class="text-base font-black">R$ ${totalAfiliado.toFixed(2)}</span>
                                     <span class="text-[10px] block text-emerald-100">Elegível neste ciclo: R$ ${totalElegivelAfiliado.toFixed(2)}</span>
                                 </div>
-                                <button onclick="confirmarPagamentoAfiliado(this)" data-afiliado-id="${esc(af.id)}" data-afiliado-nome="${esc(af.nome)}" data-valor-pendente="${totalElegivelAfiliado}" ${podeLiquidarAfiliado ? '' : 'disabled'} class="px-3 py-2.5 bg-orange-500 hover:bg-orange-600 text-white rounded-xl text-[10px] sm:text-xs font-bold transition disabled:opacity-50 disabled:cursor-not-allowed" title="${podeLiquidarAfiliado ? 'Confirme após realizar o pagamento Pix manualmente' : 'Disponível do dia 1º ao dia 10 para saldo de meses anteriores acima do mínimo'}">
+                                <button onclick="confirmarPagamentoAfiliado(this)" data-afiliado-id="${esc(af.id)}" data-afiliado-nome="${esc(af.nome)}" data-valor-pendente="${totalElegivelAfiliado}" ${podeLiquidarAfiliado ? '' : 'disabled'} class="px-3 py-2.5 bg-orange-500 hover:bg-orange-600 text-white rounded-xl text-[10px] sm:text-xs font-bold transition disabled:opacity-50 disabled:cursor-not-allowed" title="${podeLiquidarAfiliado ? 'Confirme após realizar o pagamento Pix manualmente' : 'O saldo de meses anteriores ainda não atingiu o mínimo para pagamento'}">
                                     <i class="fa-solid fa-money-bill-transfer mr-1"></i> Confirmar Pagamento / Dar Baixa
                                 </button>
                                 <button onclick="deletarAfiliado('${esc(af.id)}')" class="px-3.5 py-3 bg-red-50 hover:bg-red-100 text-red-600 rounded-xl text-xs font-bold transition" title="Excluir Afiliado" aria-label="Excluir afiliado">
@@ -370,9 +364,10 @@
 
         async function liquidarCicloAfiliados() {
             const botao = document.getElementById('btnLiquidarLote');
-            if (botao.disabled || !configuracaoSaque.calendarioSaque.liberado) return;
+            if (liquidacaoEmAndamento) return;
             if (!confirm('Confirma que os pagamentos Pix de todos os afiliados elegíveis já foram realizados? O sistema dará baixa apenas em saldos de meses anteriores que atingiram o mínimo. Saldos abaixo do mínimo continuarão acumulados.')) return;
 
+            liquidacaoEmAndamento = true;
             botao.disabled = true;
             const conteudoOriginal = botao.innerHTML;
             botao.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-1"></i> Processando fechamento...';
@@ -384,7 +379,9 @@
                 await carregarRelatorioPagamentos();
                 alert(err.message);
             } finally {
+                liquidacaoEmAndamento = false;
                 botao.innerHTML = conteudoOriginal;
+                botao.disabled = false;
             }
         }
 
@@ -392,10 +389,6 @@
             const id = botao.dataset.afiliadoId;
             const nome = botao.dataset.afiliadoNome;
             const saldo = Number(botao.dataset.valorPendente) || 0;
-            if (!configuracaoSaque.calendarioSaque.liberado) {
-                alert('Pagamento não realizado: o processamento pelo administrador fica disponível somente do dia 1º ao dia 10 de cada mês.');
-                return;
-            }
             if (saldo < configuracaoSaque.valorMinimoSaque) {
                 alert(`Pagamento não realizado: O saldo está abaixo do mínimo exigido de R$ ${configuracaoSaque.valorMinimoSaque.toFixed(2)}. O valor continuará acumulado.`);
                 return;

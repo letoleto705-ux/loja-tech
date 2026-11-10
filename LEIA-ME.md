@@ -65,7 +65,7 @@ As porcentagens de comissão direta e de patrocinador são ajustáveis na loja: 
 - As comissões são gravadas quando o webhook ou a consulta de status confirma a aprovação do Mercado Pago; os totais de cada afiliado são somados dos pedidos pagos.
 - O administrador configura o **valor mínimo de saque** em "Regra Geral de Comissões e Pagamentos" (padrão R$ 50,00). Os saldos abaixo do mínimo permanecem pendentes e acumulam.
 - Os pagamentos aos afiliados são realizados até o **5º dia útil de cada mês**, para comissões aprovadas em meses anteriores. Pedidos do mês corrente ficam acumulados para o próximo ciclo. O calendário exclui fins de semana e feriados nacionais, Sexta-feira Santa, Carnaval e Corpus Christi.
-- No Portal de Comissões, o administrador pode processar manualmente o fechamento entre os dias **1º e 10** de cada mês: somente afiliados que atingem o mínimo são liquidados. As baixas ficam registradas nos lançamentos com status e data de pagamento; quem não atinge o limite mantém o saldo pendente para o ciclo seguinte.
+- No Portal de Comissões, o administrador pode processar manualmente o fechamento a qualquer momento: somente afiliados que atingem o mínimo são liquidados. As baixas ficam registradas nos lançamentos com status e data de pagamento; quem não atinge o limite mantém o saldo pendente.
 
 Venda sem afiliado gera 100% para a Central. Nas vendas com afiliados, a Central recebe o restante após as comissões aplicáveis àquela posição na rede.
 
