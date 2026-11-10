@@ -233,7 +233,7 @@ function calendarioSaqueHoje() {
   const { year, month, day } = dataAtualBrasil();
   const hoje = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
   const dataEsteMes = quintoDiaUtilBrasil(year, month);
-  const liberado = dataEsteMes === hoje;
+  const liberado = day >= 1 && day <= 10;
   if (!liberado && hoje > dataEsteMes) {
     const proximoMes = new Date(Date.UTC(year, month, 1));
     return {
@@ -1373,6 +1373,133 @@ app.get('/api/admin/contas', auth, soAdmin, wrap(async (req, res) => {
 
 app.get('/api/afiliados', auth, soAdmin, wrap(async (req, res) => {
   res.json(await afiliadosComComissao());
+}));
+
+async function liquidarComissoesAfiliado(client, usuario, valorMinimo, dataLimite) {
+  const pendentes = await client.query(`SELECT COALESCE(sum(valor), 0) AS total
+    FROM (
+      SELECT comissao AS valor FROM pedidos
+      WHERE status = 'pago' AND status_comissao_direta = 'PENDENTE'
+        AND afiliado_usuario = $1 AND pago_em < $2 AND comissao > 0
+      UNION ALL
+      SELECT comissao_patrocinador AS valor FROM pedidos
+      WHERE status = 'pago' AND status_comissao_patrocinador = 'PENDENTE'
+        AND patrocinador_usuario = $1 AND pago_em < $2 AND comissao_patrocinador > 0
+      UNION ALL
+      SELECT comissao_avo AS valor FROM pedidos
+      WHERE status = 'pago' AND status_comissao_avo = 'PENDENTE'
+        AND avo_usuario = $1 AND pago_em < $2 AND comissao_avo > 0
+    ) comissoes`, [usuario, dataLimite]);
+  const totalElegivel = dinheiro(pendentes.rows[0].total);
+  if (totalElegivel <= 0 || totalElegivel < valorMinimo) {
+    return { elegivel: totalElegivel, quantidade: 0, valorPago: 0 };
+  }
+
+  const baixadas = await client.query(`WITH elegiveis AS (
+      SELECT id,
+        CASE WHEN afiliado_usuario = $1 AND status_comissao_direta = 'PENDENTE' AND comissao > 0
+          THEN comissao ELSE 0 END AS direta,
+        CASE WHEN patrocinador_usuario = $1 AND status_comissao_patrocinador = 'PENDENTE' AND comissao_patrocinador > 0
+          THEN comissao_patrocinador ELSE 0 END AS patrocinador,
+        CASE WHEN avo_usuario = $1 AND status_comissao_avo = 'PENDENTE' AND comissao_avo > 0
+          THEN comissao_avo ELSE 0 END AS avo
+      FROM pedidos
+      WHERE status = 'pago' AND pago_em < $2 AND (
+        (afiliado_usuario = $1 AND status_comissao_direta = 'PENDENTE' AND comissao > 0)
+        OR (patrocinador_usuario = $1 AND status_comissao_patrocinador = 'PENDENTE' AND comissao_patrocinador > 0)
+        OR (avo_usuario = $1 AND status_comissao_avo = 'PENDENTE' AND comissao_avo > 0)
+      )
+      FOR UPDATE
+    ), baixadas AS (
+      UPDATE pedidos p SET
+        status_comissao_direta = CASE WHEN e.direta > 0 THEN 'PAGO' ELSE p.status_comissao_direta END,
+        data_pagamento_comissao_direta = CASE WHEN e.direta > 0 THEN now() ELSE p.data_pagamento_comissao_direta END,
+        status_comissao_patrocinador = CASE WHEN e.patrocinador > 0 THEN 'PAGO' ELSE p.status_comissao_patrocinador END,
+        data_pagamento_comissao_patrocinador = CASE WHEN e.patrocinador > 0 THEN now() ELSE p.data_pagamento_comissao_patrocinador END,
+        status_comissao_avo = CASE WHEN e.avo > 0 THEN 'PAGO' ELSE p.status_comissao_avo END,
+        data_pagamento_comissao_avo = CASE WHEN e.avo > 0 THEN now() ELSE p.data_pagamento_comissao_avo END
+      FROM elegiveis e
+      WHERE p.id = e.id
+      RETURNING e.direta, e.patrocinador, e.avo
+    )
+    SELECT direta, patrocinador, avo FROM baixadas`,
+  [usuario, dataLimite]);
+
+  let valorPago = 0;
+  let quantidade = 0;
+  for (const baixa of baixadas.rows) {
+    for (const valor of [baixa.direta, baixa.patrocinador, baixa.avo]) {
+      if (Number(valor) > 0) {
+        valorPago += Number(valor);
+        quantidade++;
+      }
+    }
+  }
+  return { elegivel: totalElegivel, quantidade, valorPago: dinheiro(valorPago) };
+}
+
+app.post('/api/admin/afiliados/liquidar-lote', auth, soAdmin, wrap(async (req, res) => {
+  if (!calendarioSaqueHoje().liberado) {
+    return res.status(409).json({ erro: 'O processamento fica disponível somente do dia 1º ao dia 10 de cada mês.' });
+  }
+
+  const valorMinimo = Number(await lerConfig('valorMinimoSaque', VALOR_MINIMO_SAQUE_PADRAO));
+  const dataLimite = dataInicioMesBrasil();
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const afiliados = await client.query('SELECT usuario FROM afiliados ORDER BY usuario FOR UPDATE');
+    let afiliadosLiquidados = 0;
+    let quantidade = 0;
+    let valorPago = 0;
+
+    for (const afiliado of afiliados.rows) {
+      const resultado = await liquidarComissoesAfiliado(client, afiliado.usuario, valorMinimo, dataLimite);
+      if (resultado.quantidade > 0) afiliadosLiquidados++;
+      quantidade += resultado.quantidade;
+      valorPago += resultado.valorPago;
+    }
+
+    await client.query('COMMIT');
+    res.json({ ok: true, afiliadosLiquidados, quantidade, valorPago: dinheiro(valorPago) });
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+}));
+
+app.post('/api/admin/afiliados/:id/pagar', auth, soAdmin, wrap(async (req, res) => {
+  if (!calendarioSaqueHoje().liberado) {
+    return res.status(409).json({ erro: 'O processamento fica disponível somente do dia 1º ao dia 10 de cada mês.' });
+  }
+
+  const valorMinimo = Number(await lerConfig('valorMinimoSaque', VALOR_MINIMO_SAQUE_PADRAO));
+  const dataLimite = dataInicioMesBrasil();
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const afiliado = await client.query('SELECT usuario FROM afiliados WHERE id = $1 FOR UPDATE', [req.params.id]);
+    if (!afiliado.rows.length) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ erro: 'Afiliado não encontrado.' });
+    }
+
+    const resultado = await liquidarComissoesAfiliado(client, afiliado.rows[0].usuario, valorMinimo, dataLimite);
+    if (resultado.elegivel > 0 && resultado.elegivel < valorMinimo) {
+      await client.query('ROLLBACK');
+      return res.status(409).json({ erro: `O saldo elegível está abaixo do mínimo de R$ ${valorMinimo.toFixed(2)}.` });
+    }
+
+    await client.query('COMMIT');
+    res.json({ ok: true, quantidade: resultado.quantidade, valorPago: resultado.valorPago });
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
 }));
 
 app.delete('/api/afiliados/:id', auth, soAdmin, wrap(async (req, res) => {

@@ -643,7 +643,7 @@
             document.getElementById('lblRegras').innerText =
                 `Regras de comissão: Vendedor (comissão direta): ${rede.taxas.taxaComissao}%; Patrocinador (comissão do pai): ${rede.taxas.taxaPatrocinador}%; Avô (comissão do avô): ${rede.taxas.taxaAvo}% quando essa geração existir. Seu patrocinador: ${eu.patrocinadorNome}.`;
             document.getElementById('avisoSaqueAfiliado').innerHTML =
-                `<strong>Calendário de pagamentos:</strong> os pagamentos consolidados são realizados exclusivamente no 5º dia útil de cada mês, referentes aos saldos de comissões aprovados em meses anteriores. O saque mínimo configurado é <strong>${esc(brl(rede.valorMinimoSaque))}</strong>. Seu saldo pendente acumulado é <strong>${esc(brl(eu.comissaoPendente))}</strong>; valores abaixo do mínimo permanecem acumulados.`;
+                `<strong>Calendário de pagamentos:</strong> os pagamentos consolidados são realizados até o 5º dia útil de cada mês, referentes aos saldos de comissões aprovados em meses anteriores. O saque mínimo configurado é <strong>${esc(brl(rede.valorMinimoSaque))}</strong>. Seu saldo pendente acumulado é <strong>${esc(brl(eu.comissaoPendente))}</strong>; valores abaixo do mínimo permanecem acumulados.`;
             document.getElementById('avisoSaqueAfiliado').classList.remove('hidden');
 
             document.getElementById('dashVendasDiretas').innerText = brl(eu.comissaoDireta);

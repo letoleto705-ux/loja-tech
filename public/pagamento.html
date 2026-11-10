@@ -99,7 +99,7 @@
         <div class="bg-white rounded-3xl p-5 border border-slate-200 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>
                 <h3 class="text-sm font-black text-slate-900">Fechamento do ciclo de afiliados</h3>
-                <p id="resumoLiquidacaoLote" class="text-xs text-slate-500 mt-1">Disponível no 5º dia útil para saldos elegíveis do mês anterior.</p>
+                <p id="resumoLiquidacaoLote" class="text-xs text-slate-500 mt-1">Disponível para o administrador entre os dias 1º e 10, para saldos elegíveis do mês anterior.</p>
             </div>
             <button type="button" id="btnLiquidarLote" onclick="liquidarCicloAfiliados()" disabled class="px-4 py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition disabled:opacity-50 disabled:cursor-not-allowed">
                 <i class="fa-solid fa-money-bill-transfer mr-1"></i> Processar Fechamento de Ciclo e Liquidar Pagamentos
@@ -237,12 +237,9 @@
                 return;
             }
             const calendario = configuracaoSaque.calendarioSaque;
-            const dataSaque = calendario.dataSaque
-                ? new Date(`${calendario.dataSaque}T12:00:00`).toLocaleDateString('pt-BR')
-                : 'indisponível';
             document.getElementById('avisoCalendarioSaque').innerHTML = calendario.liberado
-                ? `<strong>Dia de pagamento:</strong> hoje é o 5º dia útil. Somente saldos acumulados de comissões aprovadas em meses anteriores e iguais ou superiores ao mínimo de <strong>R$ ${configuracaoSaque.valorMinimoSaque.toFixed(2)}</strong> estão liberados para Pix.`
-                : `<strong>Calendário de pagamentos:</strong> os pagamentos são realizados exclusivamente no 5º dia útil de cada mês, referentes aos saldos aprovados em meses anteriores. Próxima data de liberação: <strong>${dataSaque}</strong>. Saque mínimo configurado: <strong>R$ ${configuracaoSaque.valorMinimoSaque.toFixed(2)}</strong>.`;
+                ? `<strong>Janela administrativa aberta:</strong> o administrador pode processar manualmente os pagamentos entre os dias 1º e 10. Os pagamentos aos afiliados seguem o calendário de até o 5º dia útil. São elegíveis os saldos de comissões aprovadas em meses anteriores e iguais ou superiores ao mínimo de <strong>R$ ${configuracaoSaque.valorMinimoSaque.toFixed(2)}</strong>.`
+                : `<strong>Janela administrativa:</strong> o processamento manual fica disponível do dia 1º ao dia 10 de cada mês. Os pagamentos aos afiliados seguem o calendário de até o 5º dia útil. O saque mínimo configurado é <strong>R$ ${configuracaoSaque.valorMinimoSaque.toFixed(2)}</strong>.`;
 
             const afiliadosComSaldo = listaAfiliados.filter(af => Number(af.comissaoPendente) > 0);
             const afiliadosElegiveis = calendario.liberado
@@ -254,7 +251,7 @@
             botaoLote.disabled = !calendario.liberado || afiliadosElegiveis.length === 0;
             document.getElementById('resumoLiquidacaoLote').innerText = calendario.liberado
                 ? `${afiliadosElegiveis.length} afiliado(s) elegível(is) para liquidação; os demais saldos permanecerão acumulados.`
-                : `${afiliadosComSaldo.length} afiliado(s) têm comissões pendentes. A baixa fica disponível somente no 5º dia útil (${dataSaque}), para valores acumulados de meses anteriores acima do mínimo de R$ ${configuracaoSaque.valorMinimoSaque.toFixed(2)}.`;
+                : `${afiliadosComSaldo.length} afiliado(s) têm comissões pendentes. O administrador poderá processar a liquidação entre os dias 1º e 10, para saldos de meses anteriores acima do mínimo de R$ ${configuracaoSaque.valorMinimoSaque.toFixed(2)}.`;
 
             if (listaAfiliados.length === 0) {
                 container.innerHTML = `
@@ -323,7 +320,7 @@
                                     <span class="text-base font-black">R$ ${totalAfiliado.toFixed(2)}</span>
                                     <span class="text-[10px] block text-emerald-100">Elegível neste ciclo: R$ ${totalElegivelAfiliado.toFixed(2)}</span>
                                 </div>
-                                <button onclick="confirmarPagamentoAfiliado(this)" data-afiliado-id="${esc(af.id)}" data-afiliado-nome="${esc(af.nome)}" data-valor-pendente="${totalElegivelAfiliado}" ${podeLiquidarAfiliado ? '' : 'disabled'} class="px-3 py-2.5 bg-orange-500 hover:bg-orange-600 text-white rounded-xl text-[10px] sm:text-xs font-bold transition disabled:opacity-50 disabled:cursor-not-allowed" title="${podeLiquidarAfiliado ? 'Confirme após realizar o pagamento Pix manualmente' : 'Disponível no 5º dia útil para saldo de meses anteriores acima do mínimo'}">
+                                <button onclick="confirmarPagamentoAfiliado(this)" data-afiliado-id="${esc(af.id)}" data-afiliado-nome="${esc(af.nome)}" data-valor-pendente="${totalElegivelAfiliado}" ${podeLiquidarAfiliado ? '' : 'disabled'} class="px-3 py-2.5 bg-orange-500 hover:bg-orange-600 text-white rounded-xl text-[10px] sm:text-xs font-bold transition disabled:opacity-50 disabled:cursor-not-allowed" title="${podeLiquidarAfiliado ? 'Confirme após realizar o pagamento Pix manualmente' : 'Disponível do dia 1º ao dia 10 para saldo de meses anteriores acima do mínimo'}">
                                     <i class="fa-solid fa-money-bill-transfer mr-1"></i> Confirmar Pagamento / Dar Baixa
                                 </button>
                                 <button onclick="deletarAfiliado('${esc(af.id)}')" class="px-3.5 py-3 bg-red-50 hover:bg-red-100 text-red-600 rounded-xl text-xs font-bold transition" title="Excluir Afiliado" aria-label="Excluir afiliado">
@@ -396,7 +393,7 @@
             const nome = botao.dataset.afiliadoNome;
             const saldo = Number(botao.dataset.valorPendente) || 0;
             if (!configuracaoSaque.calendarioSaque.liberado) {
-                alert(`Pagamento não realizado: a liberação ocorre somente no 5º dia útil do mês (${configuracaoSaque.calendarioSaque.dataSaque}).`);
+                alert('Pagamento não realizado: o processamento pelo administrador fica disponível somente do dia 1º ao dia 10 de cada mês.');
                 return;
             }
             if (saldo < configuracaoSaque.valorMinimoSaque) {
