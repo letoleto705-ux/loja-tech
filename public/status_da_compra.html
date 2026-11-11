@@ -1,0 +1,1061 @@
+
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Status da Compra | Tech Store</title>
+  <meta name="description" content="Acompanhe seus pedidos, entregas e downloads na Tech Store.">
+
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+
+  <style>
+    :root {
+      --azul: #075caa;
+      --marinho: #082f4b;
+      --fundo: #f3f7fc;
+      --borda: #dce7f2;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      background: var(--fundo);
+      font-family: 'Inter', sans-serif;
+      color: #172b43;
+    }
+
+    .cabecalho {
+      background: white;
+      border-bottom: 1px solid var(--borda);
+      position: sticky;
+      top: 0;
+      z-index: 20;
+    }
+
+    .marca {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-weight: 900;
+      font-size: 21px;
+      color: var(--marinho);
+      text-decoration: none;
+    }
+
+    .marca-icone {
+      width: 44px;
+      height: 44px;
+      display: grid;
+      place-items: center;
+      border-radius: 13px;
+      background: linear-gradient(135deg,#075caa,#00a0e4);
+      color: white;
+    }
+
+    .banner {
+      background: linear-gradient(120deg,#082f4b,#075caa);
+      color: white;
+      border-radius: 20px;
+      padding: 30px;
+    }
+
+    .cartao {
+      background: white;
+      border: 1px solid var(--borda);
+      border-radius: 18px;
+      padding: 22px;
+      box-shadow: 0 5px 20px rgba(0,35,75,.035);
+    }
+
+    .titulo-secao {
+      font-size: 16px;
+      font-weight: 900;
+      color: var(--marinho);
+      margin-bottom: 17px;
+    }
+
+    .botao {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 9px;
+      border: none;
+      border-radius: 11px;
+      padding: 12px 18px;
+      font-size: 12px;
+      font-weight: 800;
+      cursor: pointer;
+      text-decoration: none;
+      transition: .2s;
+    }
+
+    .botao-azul {
+      background: var(--azul);
+      color: white;
+    }
+
+    .botao-azul:hover { background: #064b8a; }
+
+    .botao-claro {
+      background: #eaf4ff;
+      color: var(--azul);
+    }
+
+    .botao:disabled {
+      opacity: .5;
+      cursor: not-allowed;
+    }
+
+    .campo {
+      width: 100%;
+      border: 1px solid #cbd9e7;
+      border-radius: 11px;
+      padding: 12px 14px;
+      outline: none;
+      background: white;
+      font-size: 13px;
+    }
+
+    .campo:focus { border-color: var(--azul); }
+
+    .etiqueta {
+      display: inline-block;
+      border-radius: 999px;
+      padding: 7px 12px;
+      font-size: 11px;
+      font-weight: 800;
+      background: #eaf4ff;
+      color: #075caa;
+    }
+
+    .etiqueta.sucesso {
+      background: #e5f8ed;
+      color: #167447;
+    }
+
+    .etiqueta.alerta {
+      background: #fff3d6;
+      color: #946000;
+    }
+
+    .etiqueta.erro {
+      background: #ffebeb;
+      color: #a52222;
+    }
+
+    .etapa {
+      display: flex;
+      gap: 15px;
+      position: relative;
+      padding-bottom: 24px;
+    }
+
+    .etapa:not(:last-child)::before {
+      content: "";
+      position: absolute;
+      left: 17px;
+      top: 36px;
+      bottom: 0;
+      width: 2px;
+      background: #dce7f2;
+    }
+
+    .etapa-icone {
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      display: grid;
+      place-items: center;
+      flex-shrink: 0;
+      background: #edf2f7;
+      color: #94a3b8;
+      z-index: 1;
+    }
+
+    .etapa.concluida .etapa-icone {
+      background: #e0f5e9;
+      color: #16834c;
+    }
+
+    .etapa.atual .etapa-icone {
+      background: #e3f1ff;
+      color: var(--azul);
+    }
+
+    .produto {
+      display: flex;
+      gap: 14px;
+      align-items: center;
+      padding: 15px 0;
+      border-bottom: 1px solid #edf2f7;
+    }
+
+    .produto:last-child { border-bottom: none; }
+
+    .produto-imagem {
+      width: 68px;
+      height: 68px;
+      border-radius: 12px;
+      object-fit: cover;
+      background: #edf2f7;
+    }
+
+    .mensagem {
+      padding: 15px;
+      border-radius: 12px;
+      font-size: 12px;
+      line-height: 1.7;
+      background: #eaf4ff;
+      color: #174e80;
+    }
+
+    .mensagem.erro {
+      background: #fff0f0;
+      color: #a52222;
+    }
+
+    .mensagem.alerta {
+      background: #fff6df;
+      color: #8c6000;
+    }
+
+    .oculto { display: none !important; }
+
+    @media(max-width:640px) {
+      .banner { padding: 22px; }
+      .cartao { padding: 17px; }
+      .marca { font-size: 17px; }
+      .botao { padding: 11px 13px; }
+    }
+  </style>
+</head>
+
+<body>
+
+<header class="cabecalho">
+  <div class="max-w-6xl mx-auto px-4 py-4 flex items-center justify-between gap-3">
+    <a href="index.html" class="marca">
+      <span class="marca-icone">
+        <i class="fa-solid fa-microchip"></i>
+      </span>
+      <span>TECH STORE</span>
+    </a>
+
+    <a href="index.html" class="botao botao-claro">
+      <i class="fa-solid fa-arrow-left"></i>
+      <span>Voltar à loja</span>
+    </a>
+  </div>
+</header>
+
+<main class="max-w-6xl mx-auto px-4 py-8 space-y-6">
+
+  <section class="banner">
+    <div class="flex items-center gap-3 mb-3">
+      <i class="fa-solid fa-box-open text-2xl"></i>
+      <span class="text-xs font-bold uppercase tracking-widest text-blue-100">
+        Central de pedidos
+      </span>
+    </div>
+
+    <h1 class="text-2xl sm:text-3xl font-black">
+      Status da Compra
+    </h1>
+
+    <p class="text-sm text-blue-100 mt-3 max-w-2xl leading-relaxed">
+      Consulte seus pedidos, acompanhe pagamentos e entregas
+      e acesse os softwares adquiridos quando estiverem liberados.
+    </p>
+  </section>
+
+  <section class="cartao">
+    <h2 class="titulo-secao">
+      <i class="fa-solid fa-magnifying-glass text-blue-600 mr-2"></i>
+      Consultar pedido
+    </h2>
+
+    <form id="formConsulta" class="flex flex-col sm:flex-row gap-3">
+      <div class="flex-1">
+        <label for="numeroPedido" class="block text-xs font-bold mb-2">
+          Número do pedido
+        </label>
+        <input
+          id="numeroPedido"
+          class="campo"
+          type="text"
+          placeholder="Informe o número do seu pedido"
+          autocomplete="off"
+          maxlength="100"
+          required
+        >
+      </div>
+
+      <div class="flex items-end gap-2">
+        <button type="submit" id="btnConsultar" class="botao botao-azul">
+          <i class="fa-solid fa-search"></i>
+          Consultar
+        </button>
+
+        <button type="button" id="btnAtualizar" class="botao botao-claro" disabled>
+          <i class="fa-solid fa-rotate"></i>
+          Atualizar
+        </button>
+      </div>
+    </form>
+
+    <p class="text-xs text-slate-500 mt-3">
+      Por segurança, você precisa estar autenticado na conta
+      vinculada ao pedido.
+    </p>
+  </section>
+
+  <div id="mensagemSistema" class="mensagem" role="status" aria-live="polite">
+    Informe o número do pedido para consultar as informações.
+  </div>
+
+  <div id="conteudoPedido" class="oculto space-y-6">
+
+    <section class="cartao">
+      <div class="flex flex-wrap justify-between items-start gap-4">
+        <div>
+          <p class="text-xs text-slate-500 font-bold uppercase">
+            Pedido
+          </p>
+          <h2 id="pedidoNumero" class="text-xl font-black mt-1"></h2>
+          <p id="pedidoData" class="text-xs text-slate-500 mt-2"></p>
+          <p id="pedidoCliente" class="text-xs text-slate-500 mt-1"></p>
+        </div>
+
+        <div class="text-right">
+          <span id="pedidoStatusPagamento" class="etiqueta"></span>
+          <p id="pedidoFormaPagamento" class="text-xs text-slate-500 mt-3"></p>
+        </div>
+      </div>
+    </section>
+
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+      <div class="lg:col-span-2 space-y-6">
+
+        <section class="cartao">
+          <h2 class="titulo-secao">
+            <i class="fa-solid fa-bag-shopping text-blue-600 mr-2"></i>
+            Produtos comprados
+          </h2>
+          <div id="listaProdutos"></div>
+        </section>
+
+        <section class="cartao">
+          <h2 class="titulo-secao">
+            <i class="fa-solid fa-truck-fast text-blue-600 mr-2"></i>
+            Entrega e rastreamento
+          </h2>
+
+          <div id="entregaConteudo"></div>
+        </section>
+
+        <section class="cartao">
+          <h2 class="titulo-secao">
+            <i class="fa-solid fa-download text-blue-600 mr-2"></i>
+            Meus downloads
+          </h2>
+
+          <p class="text-xs text-slate-500 mb-4 leading-relaxed">
+            Os arquivos digitais ficam disponíveis somente
+            após a autorização do servidor e a validação do pagamento.
+          </p>
+
+          <div id="downloadsConteudo"></div>
+        </section>
+
+      </div>
+
+      <div class="space-y-6">
+
+        <section class="cartao">
+          <h2 class="titulo-secao">
+            <i class="fa-solid fa-list-check text-blue-600 mr-2"></i>
+            Acompanhamento
+          </h2>
+          <div id="linhaTempo"></div>
+        </section>
+
+        <section class="cartao">
+          <h2 class="titulo-secao">
+            <i class="fa-solid fa-receipt text-blue-600 mr-2"></i>
+            Resumo financeiro
+          </h2>
+
+          <div class="space-y-3 text-sm">
+            <div class="flex justify-between gap-2">
+              <span class="text-slate-500">Subtotal</span>
+              <strong id="valorSubtotal">—</strong>
+            </div>
+
+            <div class="flex justify-between gap-2">
+              <span class="text-slate-500">Desconto</span>
+              <strong id="valorDesconto">—</strong>
+            </div>
+
+            <div class="flex justify-between gap-2">
+              <span class="text-slate-500">Frete</span>
+              <strong id="valorFrete">—</strong>
+            </div>
+
+            <div class="border-t pt-4 flex justify-between gap-2">
+              <strong>Total</strong>
+              <strong id="valorTotal" class="text-blue-700 text-lg">—</strong>
+            </div>
+          </div>
+        </section>
+
+        <section class="cartao">
+          <h2 class="titulo-secao">
+            <i class="fa-solid fa-headset text-blue-600 mr-2"></i>
+            Precisa de ajuda?
+          </h2>
+
+          <p class="text-xs text-slate-500 leading-relaxed">
+            Se houver alguma divergência no pagamento, no prazo
+            ou na entrega, entre em contato com o suporte da loja
+            e informe o número do pedido.
+          </p>
+
+          <a href="index.html" class="botao botao-claro mt-4">
+            Ir para a loja
+          </a>
+        </section>
+
+      </div>
+
+    </div>
+  </div>
+
+</main>
+
+<footer class="text-center text-xs text-slate-500 py-8 px-4">
+  © 2026 Tech Store — Todos os direitos reservados.
+</footer>
+
+<script>
+'use strict';
+
+/*
+  STATUS DA COMPRA — CONTRATO DE INTEGRAÇÃO
+
+  Esta página NÃO confirma pagamentos nem concede downloads.
+
+  O backend deve implementar/adaptar:
+
+  GET /api/me/pedidos/:id
+
+  Resposta esperada:
+  {
+    id: "123",
+    numero: "LT-123",
+    criadoEm: "2026-11-11T15:00:00Z",
+    clienteNome: "Cliente",
+    statusPagamento: "approved",
+    formaPagamento: "pix",
+    statusEntrega: "preparando",
+    subtotal: 100,
+    desconto: 0,
+    frete: 10,
+    total: 110,
+    prazoEntregaDias: 10,
+    previsaoEntrega: "2026-11-21",
+    transportadora: "Correios",
+    codigoRastreio: null,
+    urlRastreio: null,
+    enderecoEntrega: "...",
+    itens: [
+      {
+        id: "item-1",
+        nome: "CMV Food Pro",
+        quantidade: 1,
+        precoUnitario: 100,
+        imagem: "",
+        tipo: "digital",
+        downloadDisponivel: false
+      }
+    ],
+    historico: [
+      {
+        titulo: "Pedido criado",
+        descricao: "Pedido registrado",
+        data: "2026-11-11T15:00:00Z",
+        concluido: true
+      }
+    ]
+  }
+
+  GET /api/me/pedidos/:id/itens/:itemId/download
+
+  O servidor deve verificar a sessão, a titularidade do
+  pedido, a autorização do item e o pagamento atualizado.
+
+  IMPORTANTE:
+  - Não retornar links privados na consulta do pedido.
+  - Não confiar em status enviados pelo navegador.
+  - Não conceder acesso com base em temporizador frontend.
+  - Os endpoints acima são um contrato proposto, não
+    uma afirmação de que já existem no server.js.
+*/
+
+const API_STATUS = '/api/me/pedidos';
+
+const $ = id => document.getElementById(id);
+
+let pedidoAtual = null;
+let consultando = false;
+
+function texto(valor, padrao = 'Não informado') {
+  if (valor === null || valor === undefined || valor === '') {
+    return padrao;
+  }
+  return String(valor);
+}
+
+function dinheiro(valor) {
+  const numero = Number(valor);
+
+  if (!Number.isFinite(numero)) return '—';
+
+  return new Intl.NumberFormat('pt-BR', {
+    style: 'currency',
+    currency: 'BRL'
+  }).format(numero);
+}
+
+function dataFormatada(valor) {
+  if (!valor) return 'Não informada';
+
+  const data = new Date(valor);
+
+  if (Number.isNaN(data.getTime())) return 'Não informada';
+
+  return new Intl.DateTimeFormat('pt-BR', {
+    dateStyle: 'short',
+    timeStyle: 'short'
+  }).format(data);
+}
+
+function dataSimples(valor) {
+  if (!valor) return 'A definir';
+
+  const data = /^\d{4}-\d{2}-\d{2}$/.test(valor)
+    ? new Date(valor + 'T12:00:00')
+    : new Date(valor);
+
+  if (Number.isNaN(data.getTime())) return 'A definir';
+
+  return new Intl.DateTimeFormat('pt-BR', {
+    dateStyle: 'short'
+  }).format(data);
+}
+
+function criar(tag, classe, conteudo) {
+  const elemento = document.createElement(tag);
+
+  if (classe) elemento.className = classe;
+
+  if (conteudo !== undefined) {
+    elemento.textContent = texto(conteudo, '');
+  }
+
+  return elemento;
+}
+
+function mostrarMensagem(mensagem, tipo = '') {
+  const box = $('mensagemSistema');
+
+  box.textContent = mensagem;
+  box.className = 'mensagem' + (tipo ? ' ' + tipo : '');
+  box.classList.remove('oculto');
+}
+
+function esconderMensagem() {
+  $('mensagemSistema').classList.add('oculto');
+}
+
+function statusPagamento(status) {
+  const estados = {
+    approved: ['Pagamento aprovado', 'sucesso'],
+    pending: ['Pagamento pendente', 'alerta'],
+    in_process: ['Pagamento em análise', 'alerta'],
+    authorized: ['Pagamento autorizado', 'alerta'],
+    rejected: ['Pagamento recusado', 'erro'],
+    cancelled: ['Pagamento cancelado', 'erro'],
+    canceled: ['Pagamento cancelado', 'erro'],
+    refunded: ['Pagamento reembolsado', 'erro'],
+    charged_back: ['Pagamento contestado', 'erro']
+  };
+
+  return estados[status] || ['Status em verificação', 'alerta'];
+}
+
+function formaPagamento(valor) {
+  const formas = {
+    pix: 'Pix',
+    cartao: 'Cartão de crédito',
+    credit_card: 'Cartão de crédito',
+    debito: 'Cartão de débito',
+    debit_card: 'Cartão de débito'
+  };
+
+  return formas[valor] || texto(valor);
+}
+
+function limpar(elemento) {
+  elemento.replaceChildren();
+}
+
+function renderizarProdutos(itens) {
+  const destino = $('listaProdutos');
+  limpar(destino);
+
+  if (!Array.isArray(itens) || !itens.length) {
+    destino.append(criar('p', 'text-xs text-slate-500',
+      'Nenhum produto encontrado.'));
+    return;
+  }
+
+  itens.forEach(item => {
+    const linha = criar('div', 'produto');
+    const imagem = criar('div',
+      'produto-imagem flex items-center justify-center text-blue-600');
+
+    if (item.imagem) {
+      const img = document.createElement('img');
+      img.src = item.imagem;
+      img.alt = texto(item.nome, 'Produto');
+      img.className = 'produto-imagem';
+      img.loading = 'lazy';
+      img.referrerPolicy = 'no-referrer';
+      img.onerror = () => {
+        imagem.replaceChildren(
+          criar('i', 'fa-solid fa-box text-xl')
+        );
+      };
+      imagem.append(img);
+    } else {
+      imagem.append(criar('i', 'fa-solid fa-box text-xl'));
+    }
+
+    const dados = criar('div', 'flex-1 min-w-0');
+
+    dados.append(
+      criar('p', 'font-extrabold text-sm',
+        texto(item.nome, 'Produto'))
+    );
+
+    dados.append(
+      criar('p', 'text-xs text-slate-500 mt-1',
+        'Quantidade: ' + texto(item.quantidade, '1'))
+    );
+
+    dados.append(
+      criar('p', 'text-xs text-blue-700 font-bold mt-1',
+        item.tipo === 'digital' ? 'Produto digital' : 'Produto físico')
+    );
+
+    const valor = criar('strong',
+      'text-sm text-slate-800 whitespace-nowrap',
+      dinheiro(Number(item.precoUnitario) * Number(item.quantidade))
+    );
+
+    linha.append(imagem, dados, valor);
+    destino.append(linha);
+  });
+}
+
+function renderizarEntrega(pedido) {
+  const destino = $('entregaConteudo');
+  limpar(destino);
+
+  const itens = Array.isArray(pedido.itens) ? pedido.itens : [];
+  const fisicos = itens.filter(item => item.tipo !== 'digital');
+
+  if (!fisicos.length) {
+    destino.append(criar('div', 'mensagem',
+      'Este pedido não possui produtos físicos. ' +
+      'A entrega dos softwares é realizada digitalmente.'));
+    return;
+  }
+
+  const campos = [
+    ['Situação', texto(pedido.statusEntrega, 'Aguardando atualização')],
+    ['Prazo informado',
+      pedido.prazoEntregaDias != null
+        ? pedido.prazoEntregaDias + ' dias'
+        : 'A definir'],
+    ['Previsão de entrega', dataSimples(pedido.previsaoEntrega)],
+    ['Transportadora', texto(pedido.transportadora)],
+    ['Código de rastreamento', texto(pedido.codigoRastreio)],
+    ['Endereço de entrega', texto(pedido.enderecoEntrega)]
+  ];
+
+  const grade = criar('div',
+    'grid grid-cols-1 sm:grid-cols-2 gap-4');
+
+  campos.forEach(([rotulo, valor]) => {
+    const campo = criar('div', 'space-y-1');
+    campo.append(
+      criar('p', 'text-xs text-slate-500 font-bold', rotulo),
+      criar('p', 'text-sm font-semibold break-words', valor)
+    );
+    grade.append(campo);
+  });
+
+  destino.append(grade);
+
+  if (pedido.urlRastreio) {
+    try {
+      const url = new URL(pedido.urlRastreio);
+      if (url.protocol === 'https:') {
+        const link = criar('a',
+          'botao botao-azul mt-5',
+          'Consultar rastreamento');
+        link.href = url.href;
+        link.target = '_blank';
+        link.rel = 'noopener noreferrer';
+        destino.append(link);
+      }
+    } catch (_) {
+      // URL inválida: não criar link.
+    }
+  }
+
+  if (!pedido.codigoRastreio) {
+    destino.append(criar('p',
+      'text-xs text-slate-500 mt-4',
+      'O rastreamento ficará disponível após o cadastro da postagem.'));
+  }
+}
+
+function renderizarHistorico(historico) {
+  const destino = $('linhaTempo');
+  limpar(destino);
+
+  if (!Array.isArray(historico) || !historico.length) {
+    destino.append(criar('p', 'text-xs text-slate-500',
+      'Ainda não existem atualizações de acompanhamento.'));
+    return;
+  }
+
+  historico.forEach((evento, indice) => {
+    const classe = evento.concluido
+      ? 'etapa concluida'
+      : indice === historico.length - 1
+        ? 'etapa atual'
+        : 'etapa';
+
+    const etapa = criar('div', classe);
+    const icone = criar('div', 'etapa-icone');
+    icone.append(criar('i',
+      evento.concluido
+        ? 'fa-solid fa-check'
+        : 'fa-solid fa-clock'));
+
+    const detalhes = criar('div', 'flex-1 pt-1');
+
+    detalhes.append(
+      criar('p', 'text-xs font-extrabold',
+        texto(evento.titulo, 'Atualização'))
+    );
+
+    if (evento.descricao) {
+      detalhes.append(
+        criar('p', 'text-xs text-slate-500 mt-1',
+          evento.descricao)
+      );
+    }
+
+    if (evento.data) {
+      detalhes.append(
+        criar('p', 'text-[11px] text-slate-400 mt-1',
+          dataFormatada(evento.data))
+      );
+    }
+
+    etapa.append(icone, detalhes);
+    destino.append(etapa);
+  });
+}
+
+function renderizarDownloads(pedido) {
+  const destino = $('downloadsConteudo');
+  limpar(destino);
+
+  const itens = Array.isArray(pedido.itens) ? pedido.itens : [];
+  const digitais = itens.filter(item => item.tipo === 'digital');
+
+  if (!digitais.length) {
+    destino.append(criar('div', 'mensagem',
+      'Este pedido não contém softwares para download.'));
+    return;
+  }
+
+  digitais.forEach(item => {
+    const box = criar('div',
+      'border border-slate-200 rounded-xl p-4 mb-3 space-y-3');
+
+    box.append(
+      criar('p', 'font-extrabold text-sm',
+        texto(item.nome, 'Software'))
+    );
+
+    if (item.downloadDisponivel === true &&
+        pedido.statusPagamento === 'approved') {
+
+      const botao = criar('button',
+        'botao botao-azul',
+        'Solicitar download');
+
+      botao.type = 'button';
+      botao.addEventListener('click', () => {
+        solicitarDownload(pedido.id, item.id, botao);
+      });
+
+      box.append(botao);
+    } else {
+      box.append(criar('div', 'mensagem alerta',
+        'Download indisponível no momento. ' +
+        'Aguarde a validação e autorização do pagamento.'));
+    }
+
+    destino.append(box);
+  });
+}
+
+async function solicitarDownload(pedidoId, itemId, botao) {
+  if (!pedidoId || !itemId) {
+    mostrarMensagem('Identificação do item indisponível.', 'erro');
+    return;
+  }
+
+  botao.disabled = true;
+  botao.textContent = 'Validando autorização...';
+
+  try {
+    const caminho =
+      API_STATUS + '/' + encodeURIComponent(pedidoId) +
+      '/itens/' + encodeURIComponent(itemId) + '/download';
+
+    const resposta = await fetch(caminho, {
+      method: 'GET',
+      credentials: 'include',
+      cache: 'no-store',
+      headers: { Accept: 'application/json' }
+    });
+
+    const tipo = resposta.headers.get('content-type') || '';
+
+    if (!resposta.ok) {
+      let mensagem = 'O download ainda não foi autorizado.';
+
+      if (tipo.includes('application/json')) {
+        const erro = await resposta.json();
+        mensagem = texto(erro.message || erro.erro, mensagem);
+      }
+
+      throw new Error(mensagem);
+    }
+
+    if (!tipo.includes('application/json')) {
+      throw new Error('Resposta inesperada do servidor.');
+    }
+
+    const dados = await resposta.json();
+
+    if (!dados.autorizado || !dados.url) {
+      throw new Error('Download ainda não autorizado.');
+    }
+
+    const url = new URL(dados.url, window.location.origin);
+
+    if (!['http:', 'https:'].includes(url.protocol)) {
+      throw new Error('Endereço de download inválido.');
+    }
+
+    /*
+      O servidor deve retornar uma URL temporária,
+      autorizada para o cliente e item específicos.
+      A página nunca usa diretamente o campo pdf
+      cadastrado pelo administrador.
+    */
+
+    const link = document.createElement('a');
+    link.href = url.href;
+    link.target = '_blank';
+    link.rel = 'noopener noreferrer';
+    link.textContent = 'Abrir download';
+
+    const box = criar('div', 'mensagem mt-3');
+    box.append(
+      document.createTextNode('Download autorizado. '),
+      link
+    );
+
+    botao.after(box);
+
+  } catch (erro) {
+    mostrarMensagem(erro.message, 'erro');
+  } finally {
+    botao.disabled = false;
+    botao.textContent = 'Solicitar download';
+  }
+}
+
+function renderizarFinanceiro(pedido) {
+  $('valorSubtotal').textContent = dinheiro(pedido.subtotal);
+  $('valorDesconto').textContent = dinheiro(pedido.desconto);
+  $('valorFrete').textContent = dinheiro(pedido.frete);
+  $('valorTotal').textContent = dinheiro(pedido.total);
+}
+
+function renderizarPedido(pedido) {
+  $('pedidoNumero').textContent =
+    texto(pedido.numero || pedido.id);
+
+  $('pedidoData').textContent =
+    'Realizado em: ' + dataFormatada(pedido.criadoEm);
+
+  $('pedidoCliente').textContent =
+    'Cliente: ' + texto(pedido.clienteNome);
+
+  const [rotulo, classe] =
+    statusPagamento(pedido.statusPagamento);
+
+  const etiqueta = $('pedidoStatusPagamento');
+  etiqueta.textContent = rotulo;
+  etiqueta.className = 'etiqueta ' + classe;
+
+  $('pedidoFormaPagamento').textContent =
+    'Pagamento: ' + formaPagamento(pedido.formaPagamento);
+
+  renderizarProdutos(pedido.itens);
+  renderizarEntrega(pedido);
+  renderizarHistorico(pedido.historico);
+  renderizarDownloads(pedido);
+  renderizarFinanceiro(pedido);
+
+  $('conteudoPedido').classList.remove('oculto');
+  esconderMensagem();
+}
+
+async function consultarPedido(id) {
+  if (!id || consultando) return;
+
+  consultando = true;
+  $('btnConsultar').disabled = true;
+  $('btnAtualizar').disabled = true;
+
+  mostrarMensagem('Consultando informações do pedido...');
+  $('conteudoPedido').classList.add('oculto');
+
+  try {
+    const resposta = await fetch(
+      API_STATUS + '/' + encodeURIComponent(id),
+      {
+        method: 'GET',
+        credentials: 'include',
+        cache: 'no-store',
+        headers: { Accept: 'application/json' }
+      }
+    );
+
+    if (resposta.status === 401) {
+      throw new Error(
+        'Sua sessão não está ativa. Entre na loja e faça login.'
+      );
+    }
+
+    if (resposta.status === 403) {
+      throw new Error(
+        'Você não tem autorização para consultar este pedido.'
+      );
+    }
+
+    if (resposta.status === 404) {
+      throw new Error(
+        'Pedido não encontrado ou indisponível para sua conta.'
+      );
+    }
+
+    if (!resposta.ok) {
+      throw new Error(
+        'Não foi possível consultar o pedido. Tente novamente.'
+      );
+    }
+
+    const tipo = resposta.headers.get('content-type') || '';
+
+    if (!tipo.includes('application/json')) {
+      throw new Error(
+        'A integração de consulta de pedidos ainda não está configurada.'
+      );
+    }
+
+    const dados = await resposta.json();
+    const pedido = dados.pedido || dados;
+
+    if (!pedido || !pedido.id || !Array.isArray(pedido.itens)) {
+      throw new Error(
+        'O servidor retornou dados incompletos do pedido.'
+      );
+    }
+
+    pedidoAtual = pedido;
+    renderizarPedido(pedido);
+
+    const url = new URL(window.location.href);
+    url.searchParams.set('pedido', id);
+    window.history.replaceState({}, '', url);
+
+  } catch (erro) {
+    pedidoAtual = null;
+    mostrarMensagem(erro.message, 'erro');
+  } finally {
+    consultando = false;
+    $('btnConsultar').disabled = false;
+    $('btnAtualizar').disabled = !pedidoAtual;
+  }
+}
+
+$('formConsulta').addEventListener('submit', evento => {
+  evento.preventDefault();
+
+  const id = $('numeroPedido').value.trim();
+
+  if (!id) {
+    mostrarMensagem('Informe o número do pedido.', 'alerta');
+    return;
+  }
+
+  consultarPedido(id);
+});
+
+$('btnAtualizar').addEventListener('click', () => {
+  if (pedidoAtual) {
+    consultarPedido($('numeroPedido').value.trim());
+  }
+});
+
+document.addEventListener('DOMContentLoaded', () => {
+  const parametros = new URLSearchParams(window.location.search);
+  const id = parametros.get('pedido');
+
+  if (id) {
+    $('numeroPedido').value = id;
+    consultarPedido(id);
+  }
+});
+</script>
+
+</body>
+</html>
