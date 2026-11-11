@@ -36,6 +36,31 @@
         .gradient-orange { background: linear-gradient(135deg, #FF5722 0%, #FF9800 100%); }
         .shadow-orange-glow { box-shadow: 0 10px 25px -5px rgba(255, 87, 34, 0.3); }
         .glass-header { background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(10px); }
+    
+    /* Vitrine Tech Store: identidade azul, sem modificar lógica de pedidos ou pagamentos */
+    #conteudoSistemaLoja { --tech-azul:#075caa; --tech-marinho:#082943; }
+    #conteudoSistemaLoja .gradient-orange { background:linear-gradient(135deg,#075caa,#0099dc) !important; }
+    #conteudoSistemaLoja .shadow-orange-glow {box-shadow:0 8px 22px rgba(4,95,170,.20) !important;}
+    #conteudoSistemaLoja .text-orange-600,#conteudoSistemaLoja .text-orange-500 {color:#075caa !important;}
+    #conteudoSistemaLoja .bg-orange-50 {background-color:#eff8ff !important;}
+    #conteudoSistemaLoja .bg-orange-100 {background-color:#dbeeff !important;}
+    #conteudoSistemaLoja .border-orange-200 {border-color:#b9dbf7 !important;}
+    #conteudoSistemaLoja .text-emerald-700,#conteudoSistemaLoja .text-emerald-600 {color:#075caa !important;}
+    #conteudoSistemaLoja .bg-emerald-50 {background-color:#eff8ff !important;}
+    #conteudoSistemaLoja .bg-emerald-600 {background-color:#075caa !important;}
+    #conteudoSistemaLoja .border-emerald-200 {border-color:#b9dbf7 !important;}
+    .tech-vitrine-layout{display:grid;grid-template-columns:220px minmax(0,1fr);gap:22px;align-items:start;}
+    .tech-categorias{background:#082f4b;color:#e6f5ff;border-radius:17px;padding:18px 12px;position:sticky;top:100px;box-shadow:0 12px 30px rgba(2,28,48,.10)}
+    .tech-categorias h3{font-weight:900;font-size:13px;letter-spacing:.06em;text-transform:uppercase;padding:0 12px 14px;border-bottom:1px solid #29526c;margin-bottom:10px}
+    .tech-cat-btn{display:flex;width:100%;align-items:center;gap:10px;padding:12px 13px;border-radius:10px;color:#d5e7f5;text-align:left;font-weight:700;font-size:12px;transition:background .2s}
+    .tech-cat-btn:hover,.tech-cat-btn.ativa{background:#0866a5;color:white}
+    .tech-banner{width:100%;aspect-ratio:1001/378;object-fit:cover;border-radius:18px;box-shadow:0 14px 28px rgba(0,39,81,.15);display:block}
+    .tech-banner-wrap{margin-bottom:28px;background:#082f4b;border-radius:18px;overflow:hidden}
+    .tech-sacola-mobile{display:none;align-items:center;justify-content:center;position:relative;width:44px;height:44px;border:1px solid #c5e3fa;border-radius:12px;background:#eaf5ff;color:#075caa;flex-shrink:0}
+    .tech-sacola-mobile span{position:absolute;top:-6px;right:-5px;min-width:19px;height:19px;padding:0 4px;border-radius:999px;background:#075caa;color:white;font-size:10px;font-weight:900;display:flex;align-items:center;justify-content:center}
+    @media(max-width:767px){.tech-sacola-mobile{display:flex}.tech-vitrine-layout{display:block}.tech-categorias{position:static;margin-bottom:18px;padding:12px}.tech-categorias h3{margin-bottom:6px;padding-bottom:9px}.tech-cat-list{display:flex;gap:7px;overflow-x:auto}.tech-cat-btn{white-space:nowrap;width:auto;flex-shrink:0;padding:9px 11px}.tech-banner-wrap{margin-bottom:22px}.tech-banner{border-radius:12px}.tech-logo-subtitle{display:none}}
+    @media(min-width:768px) and (max-width:1024px){.tech-vitrine-layout{grid-template-columns:175px minmax(0,1fr);gap:14px}}
+
     </style>
 </head>
 <body class="bg-slate-100 text-slate-800 font-sans antialiased min-h-screen flex flex-col justify-between">
@@ -203,12 +228,18 @@
             <div class="relative max-w-7xl mx-auto px-4 h-20 flex items-center justify-between">
                 <div class="flex items-center gap-3">
                     <div class="w-11 h-11 rounded-2xl gradient-orange flex items-center justify-center text-white shadow-orange-glow">
-                        <i class="fa-solid fa-utensils text-lg"></i>
+                        <i class="fa-solid fa-microchip text-lg"></i>
                     </div>
                     <div>
-                        <h1 class="font-extrabold text-xl tracking-wide text-slate-900">TECH</h1>
+                        <h1 class="font-extrabold text-xl tracking-wide text-slate-900">TECH STORE</h1>
                         <p class="text-[10px] text-slate-500 font-semibold tracking-wider uppercase -mt-1">Software de Gestão para o Seu Negócio</p>
                     </div>
+                </div>
+
+                <div class="flex items-center gap-2 md:hidden">
+                    <a href="checkout_sacola.html" class="tech-sacola-mobile" aria-label="Abrir minha sacola" title="Minha sacola">
+                        <i class="fa-solid fa-bag-shopping"></i><span id="badgeQtdSacolaMobile">0</span>
+                    </a>
                 </div>
 
                 <button type="button" id="btnMenuMobile" aria-controls="menuMobile" aria-expanded="false" onclick="alternarMenuMobile()"
@@ -273,26 +304,26 @@
             </div>
         </header>
 
-        <section class="pt-32 pb-12 px-4 bg-gradient-to-b from-orange-50/60 to-slate-100 border-b border-slate-200">
-            <div class="max-w-4xl mx-auto text-center space-y-4">
-                <span class="inline-block px-4 py-1.5 rounded-full bg-orange-100 text-orange-700 text-xs font-extrabold uppercase tracking-widest border border-orange-200 shadow-sm">
-                    Tecnologia Profissional para Food Service
-                </span>
-                <h2 class="text-3xl sm:text-5xl font-black text-slate-900 tracking-tight leading-tight">
-                    Sistemas de Gestão, Ficha Técnica e CMV <span class="text-orange-600">Sob Medida</span>
-                </h2>
-                <p class="text-slate-600 text-base sm:text-lg max-w-2xl mx-auto font-normal">
-                    Confira o catálogo oficial dos softwares da Tech e escolha a versão ideal para multiplicar o lucro do seu restaurante ou delivery.
-                </p>
+        <section id="produtos" class="pt-28 pb-12 max-w-7xl mx-auto px-4 w-full">
+            <div class="tech-vitrine-layout">
+                <aside class="tech-categorias" aria-label="Categorias de produtos">
+                    <h3><i class="fa-solid fa-bars-staggered mr-2"></i>Categorias</h3>
+                    <div id="listaCategoriasLoja" class="tech-cat-list"></div>
+                </aside>
+                <div class="min-w-0">
+                    <div class="tech-banner-wrap">
+                        <img class="tech-banner" src="assets/tech-store-banner.jpg" alt="Tech Store: tecnologia, eletrônicos, acessórios e produtos" loading="eager">
+                    </div>
+                    <div class="flex flex-wrap justify-between items-center gap-3 mb-6">
+                        <div>
+                            <h2 class="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">Produtos em Destaque</h2>
+                            <p class="text-xs text-slate-500 mt-1">Explore os produtos disponíveis na Loja Tech</p>
+                        </div>
+                        <span id="qtdProdutosLabel" class="text-xs font-semibold text-slate-500 bg-white px-3 py-1.5 rounded-lg border border-slate-200">0 Produtos Ativos</span>
+                    </div>
+                    <div id="gridProdutos" class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-5"></div>
+                </div>
             </div>
-        </section>
-
-        <section id="produtos" class="py-12 max-w-7xl mx-auto px-4 w-full">
-            <div class="flex justify-between items-center mb-8">
-                <h3 class="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">Softwares e Produtos em Destaque</h3>
-                <span id="qtdProdutosLabel" class="text-xs font-semibold text-slate-500 bg-white px-3 py-1.5 rounded-lg border border-slate-200">0 Produtos Ativos</span>
-            </div>
-            <div id="gridProdutos" class="grid grid-cols-1 md:grid-cols-3 gap-8"></div>
         </section>
 
         <section id="afiliase" class="py-16 bg-white border-t border-b border-slate-200 my-8">
@@ -805,6 +836,8 @@
                 const totalQtd = sacolaSalva.reduce((acc, item) => acc + (item.qtd || 1), 0);
                 const badge = document.getElementById('badgeQtdSacolaTop');
                 if (badge) badge.innerText = totalQtd;
+                const mobile = document.getElementById('badgeQtdSacolaMobile');
+                if (mobile) mobile.innerText = totalQtd;
             } catch(e) {}
         }
 
@@ -1088,18 +1121,40 @@
             }
         }
 
+        let categoriaAtivaLoja = 'Todos';
+        function categoriaDoProdutoLoja(p) {
+            const explicita = String(p.categoria || p.category || '').trim();
+            if (explicita) return explicita;
+            const texto = `${p.nome || ''} ${p.desc || ''}`.toLowerCase();
+            if (/software|sistema|gestão|cmv|licença|aplicativo|planilha/.test(texto)) return 'Softwares';
+            if (/celular|smartphone|iphone|tablet/.test(texto)) return 'Celulares';
+            if (/fone|headset|áudio|audio|caixa de som/.test(texto)) return 'Áudio';
+            if (/roupa|camisa|tênis|tenis|calçado|vestuário/.test(texto)) return 'Moda';
+            if (/notebook|computador|mouse|teclado|monitor|ssd/.test(texto)) return 'Informática';
+            if (/câmera|camera|drone|console|game|relógio|relogio/.test(texto)) return 'Eletrônicos';
+            return 'Outros';
+        }
+        function selecionarCategoriaLoja(categoria) {
+            categoriaAtivaLoja = categoria;
+            renderizarProdutos();
+        }
         function renderizarProdutos() {
             const grid = document.getElementById('gridProdutos');
             const labelCount = document.getElementById('qtdProdutosLabel');
             
             grid.innerHTML = '';
-            labelCount.innerText = `${produtos.length} Produto(s) Ativo(s)`;
+            const categorias = ['Todos', ...new Set(produtos.map(categoriaDoProdutoLoja))];
+            if (!categorias.includes(categoriaAtivaLoja)) categoriaAtivaLoja = 'Todos';
+            const lista = document.getElementById('listaCategoriasLoja');
+            if (lista) lista.innerHTML = categorias.map(c => `<button type="button" class="tech-cat-btn ${c === categoriaAtivaLoja ? 'ativa' : ''}" onclick="selecionarCategoriaLoja(decodeURIComponent('${encodeURIComponent(c)}'))"><i class="fa-solid ${c === 'Todos' ? 'fa-border-all' : 'fa-tag'}"></i>${esc(c)}</button>`).join('');
+            const exibidos = produtos.map((p, idx) => ({p, idx})).filter(({p}) => categoriaAtivaLoja === 'Todos' || categoriaDoProdutoLoja(p) === categoriaAtivaLoja);
+            labelCount.innerText = `${exibidos.length} Produto(s) Ativo(s)`;
 
             const urlParams = new URLSearchParams(window.location.search);
             const refParam = urlParams.get('ref') || 'admin';
             const afiliadoParam = (urlParams.get('afiliado') || localStorage.getItem(CHAVE_INDICADOR) || '').replace(/[^a-zA-Z0-9_.-]/g, '');
 
-            produtos.forEach((p, idx) => {
+            exibidos.forEach(({p, idx}) => {
                 let arquivoCheckout = 'checkout_sacola.html';
                 let prodIdNormalizado = (p.id || '').toLowerCase().trim();
 
@@ -1115,7 +1170,7 @@
                             <div class="h-48 rounded-2xl overflow-hidden mb-6 bg-slate-100 flex items-center justify-center">
                                 <img src="${esc(p.imagem || '')}" alt="${esc(p.nome)}" class="w-full h-full object-cover group-hover:scale-105 transition-transform">
                             </div>
-                            <span class="text-[10px] font-black uppercase tracking-widest text-orange-600 bg-orange-50 px-2.5 py-1 rounded-md">Software Tech</span>
+                            <span class="text-[10px] font-black uppercase tracking-widest text-orange-600 bg-orange-50 px-2.5 py-1 rounded-md">${esc(categoriaDoProdutoLoja(p))}</span>
                             <h4 class="text-xl font-extrabold text-slate-900 mt-2">${p.nome}</h4>
                             <p class="text-xs text-slate-500 mt-2 leading-relaxed">${p.desc}</p>
                             <div class="mt-6">
