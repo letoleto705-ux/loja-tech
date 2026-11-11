@@ -17,9 +17,9 @@ if (!DATABASE_URL || !JWT_SECRET || !ADMIN_SENHA) {
 }
 
 // ===== Regras padrão de comissão =====
-const TAXA_COMISSAO_PADRAO = 35;
+const TAXA_COMISSAO_PADRAO = 30;
 const TAXA_PATROCINADOR_PADRAO = 10;
-const TAXA_AVO_PADRAO = 5;
+const TAXA_AVO_PADRAO = 10;
 const VALOR_MINIMO_SAQUE_PADRAO = 50;
 const MAX_PARCELAS_CARTAO = 12;
 const ATRASO_LIBERACAO_PAGAMENTO_MS = 15_000;
@@ -203,6 +203,13 @@ function dataPascoa(ano) {
   return new Date(Date.UTC(ano, mes - 1, dia));
 }
 
+function periodoApuracaoAnteriorBrasil() {
+  const { year, month } = dataAtualBrasil();
+  const inicioAtual = new Date(Date.UTC(year, month - 1, 1, 3));
+  const inicioAnterior = new Date(Date.UTC(year, month - 2, 1, 3));
+  return { inicio: inicioAnterior.toISOString(), fim: inicioAtual.toISOString() };
+}
+
 function quintoDiaUtilBrasil(ano, mes) {
   const pascoa = dataPascoa(ano);
   const feriados = new Set([
@@ -233,15 +240,10 @@ function calendarioSaqueHoje() {
   const { year, month, day } = dataAtualBrasil();
   const hoje = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
   const dataEsteMes = quintoDiaUtilBrasil(year, month);
-  const liberado = day >= 1 && day <= 10;
-  if (!liberado && hoje > dataEsteMes) {
-    const proximoMes = new Date(Date.UTC(year, month, 1));
-    return {
-      dataSaque: quintoDiaUtilBrasil(proximoMes.getUTCFullYear(), proximoMes.getUTCMonth() + 1),
-      liberado
-    };
-  }
-  return { dataSaque: dataEsteMes, liberado };
+  const liberado = hoje >= dataEsteMes;
+  if (!liberado) return { dataSaque: dataEsteMes, liberado: false };
+  const proximoMes = new Date(Date.UTC(year, month, 1));
+  return { dataSaque: quintoDiaUtilBrasil(proximoMes.getUTCFullYear(), proximoMes.getUTCMonth() + 1), liberado: true };
 }
 
 const mapAf = r => {
@@ -390,6 +392,21 @@ async function iniciarBanco() {
   await q("ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS payment_qr_code text NOT NULL DEFAULT ''");
   await q("ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS payment_qr_code_base64 text NOT NULL DEFAULT ''");
   
+  await q(`CREATE TABLE IF NOT EXISTS pedido_itens (
+    id bigserial PRIMARY KEY, pedido_id text NOT NULL REFERENCES pedidos(id) ON DELETE CASCADE,
+    produto_id text NOT NULL, produto_nome text NOT NULL, quantidade integer NOT NULL CHECK (quantidade > 0),
+    preco_unitario numeric(12,2) NOT NULL CHECK (preco_unitario >= 0),
+    subtotal numeric(12,2) NOT NULL CHECK (subtotal >= 0), imagem text NOT NULL DEFAULT '',
+    criado_em timestamptz NOT NULL DEFAULT now()
+  )`);
+  await q('CREATE INDEX IF NOT EXISTS pedido_itens_pedido_idx ON pedido_itens(pedido_id)');
+  await q('ALTER TABLE pedido_itens ADD COLUMN IF NOT EXISTS custo_unitario numeric(12,2) NOT NULL DEFAULT 0');
+  await q('ALTER TABLE pedido_itens ADD COLUMN IF NOT EXISTS custo_total numeric(12,2) NOT NULL DEFAULT 0');
+  await q('ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS custo_total numeric(12,2) NOT NULL DEFAULT 0');
+  await q('ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS lucro_bruto numeric(12,2) NOT NULL DEFAULT 0');
+  await q("ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS cliente_telefone text NOT NULL DEFAULT ''");
+  await q("ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS endereco_entrega jsonb NOT NULL DEFAULT '{}'::jsonb");
+
   await q(`CREATE TABLE IF NOT EXISTS config (chave text PRIMARY KEY, valor jsonb NOT NULL)`);
   await q("DELETE FROM config WHERE chave = 'pixChave'");
   
@@ -924,6 +941,89 @@ app.delete('/api/admin/notificacoes/:id', auth, soAdmin, wrap(async (req, res) =
 // ----- Checkout e Pagamentos -----
 const FORMAS = ['pix', 'cartao', 'debito'];
 
+
+// Checkout unificado: vários produtos, quantidades e um único pagamento/pedido.
+app.post('/api/checkout/sacola', limitarTentativas, wrap(async (req, res) => {
+  const nome = txt(req.body.nome, 100), email = txt(req.body.email, 120);
+  const cpf = soDigitos(req.body.cpf), telefone = txt(req.body.telefone, 30);
+  const forma = norm(req.body.forma || 'pix');
+  if (!FORMAS.includes(forma)) return res.status(400).json({ erro: 'Forma de pagamento inválida.' });
+  let afiliado = normUsuario(req.body.afiliado || req.body.afiliado_ref || req.body.indicador || (req.body.ref !== 'admin' ? req.body.ref : '')).replace(/[^a-z0-9_.-]/g, '');
+  const codigoCupom = txt(req.body.codigoCupom, 50).toUpperCase();
+  const endereco = req.body.endereco && typeof req.body.endereco === 'object' ? req.body.endereco : {};
+  const itensRecebidos = Array.isArray(req.body.itens) ? req.body.itens : [];
+  if (!nome || !semTags(nome)) return res.status(400).json({ erro: 'Informe seu nome.' });
+  if (!RE_EMAIL.test(email)) return res.status(400).json({ erro: 'E-mail inválido.' });
+  if (!cpfValido(cpf)) return res.status(400).json({ erro: 'CPF inválido.' });
+  if (!telefone || !semTags(telefone)) return res.status(400).json({ erro: 'Informe um telefone válido.' });
+  if (!itensRecebidos.length || itensRecebidos.length > 50) return res.status(400).json({ erro: 'A sacola está vazia ou possui itens demais.' });
+  const produtos = await lerConfig('produtos', PRODUTOS_INICIAIS);
+  const agregados = new Map();
+  for (const item of itensRecebidos) {
+    const id = norm(item.produtoId);
+    const qtd = Number(item.quantidade);
+    if (!id || !Number.isInteger(qtd) || qtd < 1 || qtd > 99) return res.status(400).json({ erro: 'Produto ou quantidade inválida.' });
+    agregados.set(id, (agregados.get(id) || 0) + qtd);
+  }
+  if ([...agregados.values()].some(q => q > 99)) return res.status(400).json({ erro: 'Quantidade máxima por produto excedida.' });
+  const itens = [];
+  for (const [id, quantidade] of agregados) {
+    const produto = produtos.find(p => norm(p.id) === id);
+    if (!produto || produto.ativo === false) return res.status(400).json({ erro: 'Um dos produtos não está disponível.' });
+    const preco = dinheiro(produto.precoPor);
+    if (!Number.isFinite(preco) || preco < 0) return res.status(400).json({ erro: 'Preço de produto inválido.' });
+    const custo = Number(produto.custo);
+    if (!Number.isFinite(custo) || custo < 0) return res.status(400).json({ erro: 'Custo de aquisição do produto inválido ou não cadastrado.' });
+    itens.push({ id: String(produto.id), nome: txt(produto.nome, 180), quantidade, preco, custo: dinheiro(custo), imagem: txt(produto.imagem, 500) });
+  }
+  const valorOriginal = dinheiro(itens.reduce((s, i) => s + i.preco * i.quantidade, 0));
+  if (valorOriginal <= 0) return res.status(400).json({ erro: 'O total do pedido deve ser maior que zero.' });
+  let desconto = 0;
+  if (codigoCupom) {
+    const cfgCupom = await configuracaoCupons();
+    const cupom = (await q(`SELECT c.afiliado_usuario FROM afiliado_cupons c
+      WHERE lower(c.codigo_cupom) = lower($1) AND c.ativo = true
+      AND (c.data_validade IS NULL OR c.data_validade >= CURRENT_DATE)`, [codigoCupom])).rows[0];
+    if (!cfgCupom.ativo || cfgCupom.percentualMaximo <= 0 || !cupom)
+      return res.status(400).json({ erro: 'Cupom inválido, expirado ou indisponível.' });
+    afiliado = cupom.afiliado_usuario;
+    desconto = dinheiro(valorOriginal * cfgCupom.percentualMaximo / 100);
+  }
+  let afiliadoValido = false;
+  if (afiliado) {
+    const af = (await q('SELECT usuario FROM afiliados WHERE usuario = $1', [afiliado])).rows[0];
+    if (af) afiliadoValido = true; else afiliado = '';
+  }
+  const custoTotal = dinheiro(itens.reduce((total, item) => total + item.custo * item.quantidade, 0));
+  const valorFinal = dinheiro(Math.max(0, valorOriginal - desconto));
+  if (valorFinal <= 0) return res.status(400).json({ erro: 'O total após desconto deve ser maior que zero.' });
+  const pedidoId = crypto.randomBytes(8).toString('hex');
+  const downloadToken = crypto.randomBytes(32).toString('hex');
+  const idempotency = crypto.randomUUID();
+  const produtoNome = itens.map(i => `${i.quantidade}x ${i.nome}`).join(' | ').slice(0, 500);
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query(`INSERT INTO pedidos
+      (id, afiliado_usuario, produto_id, produto_nome, valor, valor_original, cupom_codigo, cupom_desconto,
+       forma, cliente_nome, cliente_email, cliente_cpf, cliente_telefone, endereco_entrega, download_token, payment_idempotency_key, custo_total)
+      VALUES ($1,$2,'sacola',$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13::jsonb,$14,$15,$16)`,
+      [pedidoId, afiliadoValido ? afiliado : null, produtoNome, valorFinal, valorOriginal, codigoCupom, desconto,
+       forma, nome, email, cpf, telefone, JSON.stringify(endereco), downloadToken, idempotency, custoTotal]);
+    for (const item of itens) {
+      const subtotal = dinheiro(item.preco * item.quantidade);
+      await client.query(`INSERT INTO pedido_itens
+        (pedido_id, produto_id, produto_nome, quantidade, preco_unitario, subtotal, imagem, custo_unitario, custo_total)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+        [pedidoId, item.id, item.nome, item.quantidade, item.preco, subtotal, item.imagem, item.custo, dinheiro(item.custo * item.quantidade)]);
+    }
+    await client.query('COMMIT');
+  } catch (err) {
+    await client.query('ROLLBACK'); throw err;
+  } finally { client.release(); }
+  res.status(201).json({ pedidoId, produtoNome, itens: itens.length, valor: valorFinal, valorOriginal, desconto, forma, afiliadoValido, downloadToken });
+}));
+
 app.post('/api/checkout', limitarTentativas, wrap(async (req, res) => {
   const produtoId = norm(req.body.produtoId);
   const nome = txt(req.body.nome, 100), email = txt(req.body.email, 120);
@@ -969,10 +1069,10 @@ app.post('/api/checkout', limitarTentativas, wrap(async (req, res) => {
   const paymentIdempotencyKey = crypto.randomUUID();
 
   const pedidoInserido = await q(`INSERT INTO pedidos (id, afiliado_usuario, produto_id, produto_nome, valor, valor_original,
-      cupom_codigo, cupom_desconto, forma, cliente_nome, cliente_email, cliente_cpf, download_token, payment_idempotency_key)
-    VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING id`,
+      cupom_codigo, cupom_desconto, forma, cliente_nome, cliente_email, cliente_cpf, download_token, payment_idempotency_key, custo_total)
+    VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15) RETURNING id`,
   [pedidoId, afiliadoValido ? afiliado : null, prod.id, prod.nome, valorFinal, valorOriginal,
-    codigoCupom, desconto, forma, nome, email, cpf, downloadToken, paymentIdempotencyKey]);
+    codigoCupom, desconto, forma, nome, email, cpf, downloadToken, paymentIdempotencyKey, dinheiro(Number(prod.custo))]);
   exigirUmaLinhaPersistida(pedidoInserido, 'pedidos');
 
   res.json({ pedidoId, produtoNome: prod.nome, valor: valorFinal, valorOriginal, desconto, forma, afiliadoValido, downloadToken });
@@ -1004,12 +1104,23 @@ app.post('/api/checkout/:id/pagar', limitarTentativas, wrap(async (req, res) => 
   const chaveIdempotencia = idempotencyResult.rows[0]?.payment_idempotency_key;
   if (!chaveIdempotencia) throw new Error('Não foi possível garantir a idempotência do pagamento.');
 
+  const dadosCartao = req.body && req.body.paymentData && typeof req.body.paymentData === 'object' ? req.body.paymentData : {};
+  if (pedido.forma !== 'pix' && (!dadosCartao.token || !dadosCartao.payment_method_id)) {
+    return res.status(400).json({ erro: 'Tokenização segura do cartão obrigatória.' });
+  }
+  const parcelas = Number(dadosCartao.installments);
+  if (pedido.forma !== 'pix' && (!Number.isInteger(parcelas) || parcelas < 1 || parcelas > MAX_PARCELAS_CARTAO)) {
+    return res.status(400).json({ erro: 'Quantidade de parcelas inválida.' });
+  }
+  if (pedido.forma === 'debito' && parcelas !== 1) return res.status(400).json({ erro: 'Débito não permite parcelamento.' });
+  if (pedido.payment_id) return res.status(409).json({ erro: 'Este pedido já tem uma tentativa de pagamento. Consulte o status antes de tentar novamente.' });
   const pagamento = {
     transaction_amount: Number(pedido.valor),
     description: pedido.produto_nome,
     external_reference: pedido.id,
-    payment_method_id: pedido.forma === 'pix' ? 'pix' : req.body.paymentData?.payment_method_id,
-    token: req.body.paymentData?.token,
+    payment_method_id: pedido.forma === 'pix' ? 'pix' : txt(dadosCartao.payment_method_id, 80),
+    ...(pedido.forma !== 'pix' ? { token: txt(dadosCartao.token, 1000), installments: parcelas } : {}),
+    ...(pedido.forma !== 'pix' && dadosCartao.issuer_id ? { issuer_id: txt(dadosCartao.issuer_id, 80) } : {}),
     payer: { email: pedido.cliente_email, identification: { type: 'CPF', number: soDigitos(pedido.cliente_cpf) } }
   };
 
@@ -1230,13 +1341,19 @@ app.get('/api/checkout/:id/download', wrap(async (req, res) => {
   if (pedido.status !== 'pago') return res.status(409).json({ erro: 'Pagamento ainda não confirmado.' });
 
   const produtos = await lerConfig('produtos', PRODUTOS_INICIAIS);
+  const itensPedido = (await q('SELECT produto_id, produto_nome, quantidade FROM pedido_itens WHERE pedido_id = $1 ORDER BY id', [pedido.id])).rows;
+  if (itensPedido.length) {
+    const downloads = itensPedido.map(item => {
+      const produto = produtos.find(p => norm(p.id) === norm(item.produto_id));
+      return { produto: item.produto_nome, quantidade: Number(item.quantidade), url: txt(produto?.pdf, 2000) };
+    });
+    if (downloads.some(d => !ehUrlWeb(d.url))) return res.status(503).json({ erro: 'Um ou mais arquivos ainda não estão configurados. Entre em contato com o suporte.' });
+    res.set('Cache-Control', 'no-store'); return res.json({ downloads });
+  }
   const produto = produtos.find(item => norm(item.id) === norm(pedido.produto_id));
   const url = txt(produto?.pdf, 2000);
-  if (!ehUrlWeb(url)) {
-    return res.status(503).json({ erro: 'Pagamento aprovado, mas o link do arquivo não está configurado. Entre em contato com o suporte.' });
-  }
-  res.set('Cache-Control', 'no-store');
-  res.json({ url });
+  if (!ehUrlWeb(url)) return res.status(503).json({ erro: 'Pagamento aprovado, mas o link do arquivo não está configurado. Entre em contato com o suporte.' });
+  res.set('Cache-Control', 'no-store'); res.json({ url });
 }));
 
 async function confirmarPedido(id, paymentIdRecebido) {
@@ -1259,7 +1376,7 @@ async function confirmarPedido(id, paymentIdRecebido) {
     }
     
     const taxas = await lerTaxas(client);
-    const valor = Number(ped.valor);
+    const valor = Math.max(0, dinheiro(Number(ped.valor) - Number(ped.custo_total || 0)));
     let vendedor = 0, patrocinador = 0, avo = 0;
     let patrocinadorUsuario = null, avoUsuario = null;
 
@@ -1279,8 +1396,8 @@ async function confirmarPedido(id, paymentIdRecebido) {
     const central = dinheiro(valor - vendedor - patrocinador - avo);
 
     await client.query(`UPDATE pedidos SET status = 'pago', payment_id = $8, comissao = $2, patrocinador_usuario = $3,
-       comissao_patrocinador = $4, avo_usuario = $5, comissao_avo = $6, comissao_central = $7, pago_em = now() WHERE id = $1`,
-      [ped.id, vendedor, patrocinadorUsuario, patrocinador, avoUsuario, avo, central, paymentId]);
+       comissao_patrocinador = $4, avo_usuario = $5, comissao_avo = $6, comissao_central = $7, lucro_bruto = $9, pago_em = now() WHERE id = $1`,
+      [ped.id, vendedor, patrocinadorUsuario, patrocinador, avoUsuario, avo, central, paymentId, valor]);
     const vendaSincronizada = await client.query(`INSERT INTO vendas_aprovadas (payment_id, cpf, email, produto, valor, status, ativa)
       VALUES ($1, $2, $3, $4, $5, 'APROVADO', true)
       ON CONFLICT (payment_id) DO UPDATE SET
@@ -1375,21 +1492,21 @@ app.get('/api/afiliados', auth, soAdmin, wrap(async (req, res) => {
   res.json(await afiliadosComComissao());
 }));
 
-async function liquidarComissoesAfiliado(client, usuario, valorMinimo, dataLimite) {
+async function liquidarComissoesAfiliado(client, usuario, valorMinimo, periodo) {
   const pendentes = await client.query(`SELECT COALESCE(sum(valor), 0) AS total
     FROM (
       SELECT comissao AS valor FROM pedidos
       WHERE status = 'pago' AND status_comissao_direta = 'PENDENTE'
-        AND afiliado_usuario = $1 AND pago_em < $2 AND comissao > 0
+        AND afiliado_usuario = $1 AND pago_em >= $2 AND pago_em < $3 AND comissao > 0
       UNION ALL
       SELECT comissao_patrocinador AS valor FROM pedidos
       WHERE status = 'pago' AND status_comissao_patrocinador = 'PENDENTE'
-        AND patrocinador_usuario = $1 AND pago_em < $2 AND comissao_patrocinador > 0
+        AND patrocinador_usuario = $1 AND pago_em >= $2 AND pago_em < $3 AND comissao_patrocinador > 0
       UNION ALL
       SELECT comissao_avo AS valor FROM pedidos
       WHERE status = 'pago' AND status_comissao_avo = 'PENDENTE'
-        AND avo_usuario = $1 AND pago_em < $2 AND comissao_avo > 0
-    ) comissoes`, [usuario, dataLimite]);
+        AND avo_usuario = $1 AND pago_em >= $2 AND pago_em < $3 AND comissao_avo > 0
+    ) comissoes`, [usuario, periodo.inicio, periodo.fim]);
   const totalElegivel = dinheiro(pendentes.rows[0].total);
   if (totalElegivel <= 0 || totalElegivel < valorMinimo) {
     return { elegivel: totalElegivel, quantidade: 0, valorPago: 0 };
@@ -1404,7 +1521,7 @@ async function liquidarComissoesAfiliado(client, usuario, valorMinimo, dataLimit
         CASE WHEN avo_usuario = $1 AND status_comissao_avo = 'PENDENTE' AND comissao_avo > 0
           THEN comissao_avo ELSE 0 END AS avo
       FROM pedidos
-      WHERE status = 'pago' AND pago_em < $2 AND (
+      WHERE status = 'pago' AND pago_em >= $2 AND pago_em < $3 AND (
         (afiliado_usuario = $1 AND status_comissao_direta = 'PENDENTE' AND comissao > 0)
         OR (patrocinador_usuario = $1 AND status_comissao_patrocinador = 'PENDENTE' AND comissao_patrocinador > 0)
         OR (avo_usuario = $1 AND status_comissao_avo = 'PENDENTE' AND comissao_avo > 0)
@@ -1423,7 +1540,7 @@ async function liquidarComissoesAfiliado(client, usuario, valorMinimo, dataLimit
       RETURNING e.direta, e.patrocinador, e.avo
     )
     SELECT direta, patrocinador, avo FROM baixadas`,
-  [usuario, dataLimite]);
+  [usuario, periodo.inicio, periodo.fim]);
 
   let valorPago = 0;
   let quantidade = 0;
@@ -1440,7 +1557,11 @@ async function liquidarComissoesAfiliado(client, usuario, valorMinimo, dataLimit
 
 app.post('/api/admin/afiliados/liquidar-lote', auth, soAdmin, wrap(async (req, res) => {
   const valorMinimo = Number(await lerConfig('valorMinimoSaque', VALOR_MINIMO_SAQUE_PADRAO));
-  const dataLimite = dataInicioMesBrasil();
+  const hoje = dataAtualBrasil();
+  const hojeISO = `${hoje.year}-${String(hoje.month).padStart(2, '0')}-${String(hoje.day).padStart(2, '0')}`;
+  const dataSaqueMes = quintoDiaUtilBrasil(hoje.year, hoje.month);
+  if (hojeISO < dataSaqueMes) return res.status(409).json({ erro: `A liquidação do mês anterior só fica disponível a partir do 5º dia útil (${dataSaqueMes}).` });
+  const periodo = periodoApuracaoAnteriorBrasil();
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -1450,14 +1571,14 @@ app.post('/api/admin/afiliados/liquidar-lote', auth, soAdmin, wrap(async (req, r
     let valorPago = 0;
 
     for (const afiliado of afiliados.rows) {
-      const resultado = await liquidarComissoesAfiliado(client, afiliado.usuario, valorMinimo, dataLimite);
+      const resultado = await liquidarComissoesAfiliado(client, afiliado.usuario, valorMinimo, periodo);
       if (resultado.quantidade > 0) afiliadosLiquidados++;
       quantidade += resultado.quantidade;
       valorPago += resultado.valorPago;
     }
 
     await client.query('COMMIT');
-    res.json({ ok: true, afiliadosLiquidados, quantidade, valorPago: dinheiro(valorPago) });
+    res.json({ ok: true, periodo: { inicio: periodo.inicio, fim: periodo.fim }, dataSaque: dataSaqueMes, afiliadosLiquidados, quantidade, valorPago: dinheiro(valorPago) });
   } catch (error) {
     await client.query('ROLLBACK');
     throw error;
@@ -1468,7 +1589,11 @@ app.post('/api/admin/afiliados/liquidar-lote', auth, soAdmin, wrap(async (req, r
 
 app.post('/api/admin/afiliados/:id/pagar', auth, soAdmin, wrap(async (req, res) => {
   const valorMinimo = Number(await lerConfig('valorMinimoSaque', VALOR_MINIMO_SAQUE_PADRAO));
-  const dataLimite = dataInicioMesBrasil();
+  const hoje = dataAtualBrasil();
+  const hojeISO = `${hoje.year}-${String(hoje.month).padStart(2, '0')}-${String(hoje.day).padStart(2, '0')}`;
+  const dataSaqueMes = quintoDiaUtilBrasil(hoje.year, hoje.month);
+  if (hojeISO < dataSaqueMes) return res.status(409).json({ erro: `A liquidação do mês anterior só fica disponível a partir do 5º dia útil (${dataSaqueMes}).` });
+  const periodo = periodoApuracaoAnteriorBrasil();
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -1478,14 +1603,14 @@ app.post('/api/admin/afiliados/:id/pagar', auth, soAdmin, wrap(async (req, res) 
       return res.status(404).json({ erro: 'Afiliado não encontrado.' });
     }
 
-    const resultado = await liquidarComissoesAfiliado(client, afiliado.rows[0].usuario, valorMinimo, dataLimite);
+    const resultado = await liquidarComissoesAfiliado(client, afiliado.rows[0].usuario, valorMinimo, periodo);
     if (resultado.elegivel > 0 && resultado.elegivel < valorMinimo) {
       await client.query('ROLLBACK');
       return res.status(409).json({ erro: `O saldo elegível está abaixo do mínimo de R$ ${valorMinimo.toFixed(2)}.` });
     }
 
     await client.query('COMMIT');
-    res.json({ ok: true, quantidade: resultado.quantidade, valorPago: resultado.valorPago });
+    res.json({ ok: true, periodo: { inicio: periodo.inicio, fim: periodo.fim }, dataSaque: dataSaqueMes, quantidade: resultado.quantidade, valorPago: resultado.valorPago });
   } catch (error) {
     await client.query('ROLLBACK');
     throw error;

@@ -1,10 +1,16 @@
 {
-  "name": "loja-tech-api",
-  "version": "1.0.0",
-  "description": "API da Loja Tech + Tech Payments (Neon + Render)",
+  "name": "loja-tech-profissional",
+  "version": "2.0.0",
+  "private": true,
+  "description": "Loja Tech - vitrine, sacola unificada, checkout Pix, afiliados e painel administrativo",
   "main": "server.js",
-  "scripts": { "start": "node server.js" },
-  "engines": { "node": ">=18" },
+  "scripts": {
+    "start": "node server.js",
+    "check": "node --check server.js && node scripts/check.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
   "dependencies": {
     "bcryptjs": "^2.4.3",
     "express": "^4.19.2",

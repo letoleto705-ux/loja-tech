@@ -1,0 +1,17 @@
+VALIDAÇÃO LOCAL — Loja Tech (11/11/2026)
+
+Executado com sucesso:
+- `node --check server.js`.
+- `node scripts/check.js`.
+- Sintaxe de todos os scripts JavaScript inline nas quatro páginas HTML.
+- Presença das rotas/integrações essenciais do checkout unificado, itens, webhook, compatibilidade de indicação e período de liquidação.
+- Conferência da estrutura de arquivos antes do empacotamento.
+
+Não executado (exige ambiente e credenciais privadas do proprietário):
+- Conexão autenticada ao Neon real e migração em banco de produção.
+- Criação de pagamento Pix na conta Mercado Pago (sandbox ou produção).
+- Recepção externa de webhook e conciliação real de pagamento.
+- Teste ponta a ponta de compra, comissões e download com dados reais.
+- Transferência financeira efetiva para afiliados.
+
+Resultado: verificações estáticas locais aprovadas. Não declarar a loja como produção validada até concluir os testes de staging descritos em LEIA-ME.md.

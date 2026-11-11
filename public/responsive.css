@@ -1,62 +1,11 @@
-html {
-    overflow-x: hidden;
-}
-
-body {
-    min-width: 320px;
-}
-
-img,
-video,
-iframe {
-    max-width: 100%;
-}
-
-input,
-select,
-textarea,
-button {
-    max-width: 100%;
-}
-
-@media (max-width: 768px) {
-    main {
-        padding-left: 1rem;
-        padding-right: 1rem;
-    }
-
-    header > div {
-        gap: 0.75rem;
-    }
-
-    header a,
-    header button {
-        overflow-wrap: anywhere;
-    }
-
-    table {
-        display: block;
-        max-width: 100%;
-        overflow-x: auto;
-        white-space: nowrap;
-    }
-
-    [class*="overflow-x-auto"] {
-        -webkit-overflow-scrolling: touch;
-    }
-
-    input,
-    select,
-    textarea {
-        font-size: 16px;
-    }
-
-    button,
-    a {
-        touch-action: manipulation;
-    }
-
-    .sticky {
-        position: static;
-    }
+/* Ajustes responsivos compartilhados da Loja Tech */
+html { scroll-behavior: smooth; }
+img, video { max-width: 100%; }
+input, select, textarea, button { max-width: 100%; }
+@media (max-width: 640px) {
+  body { overflow-x: hidden; }
+  main, header, footer { max-width: 100%; }
+  table { display: block; max-width: 100%; overflow-x: auto; }
+  .overflow-x-auto { -webkit-overflow-scrolling: touch; }
+  button, a { touch-action: manipulation; }
 }

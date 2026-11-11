@@ -652,7 +652,7 @@
             document.getElementById('qtdFilhosEquipe').innerText = eu.filhosDiretos;
             document.getElementById('dashTotalGeral').innerText = brl(eu.comissaoPendente);
 
-            document.getElementById('linkVendaInput').value = `${baseUrl}index.html?ref=admin&afiliado=${encodeURIComponent(eu.usuario)}`;
+            document.getElementById('linkVendaInput').value = `${baseUrl}index.html?ref=admin&afiliado=${encodeURIComponent(eu.usuario)}&afiliado_ref=${encodeURIComponent(eu.usuario)}`;
             document.getElementById('linkConviteInput').value = `${baseUrl}afiliado.html?cad=${encodeURIComponent(eu.usuario)}`;
             document.getElementById('painelExtratoComissoes').classList.remove('hidden');
             const linhasExtrato = rede.extrato || [];

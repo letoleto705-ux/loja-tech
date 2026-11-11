@@ -844,14 +844,16 @@
 
         function sincronizarParametrosURL() {
             const urlParams = new URLSearchParams(window.location.search);
-            let ref = urlParams.get('ref');
-            let afiliado = urlParams.get('afiliado');
-
+            let ref = urlParams.get('ref') || '';
+            let afiliado = urlParams.get('afiliado') || urlParams.get('afiliado_ref') || '';
+            // Compatibilidade com links antigos: ref=CODIGO também pode identificar o afiliado.
+            if (!afiliado && ref && ref.toLowerCase() !== 'admin') afiliado = ref;
             if (afiliado) {
                 afiliado = normalizarTexto(afiliado).replace(/[^a-z0-9_.-]/g, '');
                 localStorage.setItem(CHAVE_INDICADOR, afiliado);
+                localStorage.setItem('afiliado_ref', afiliado);
             } else {
-                afiliado = localStorage.getItem('tech_afiliado_indicador');
+                afiliado = localStorage.getItem(CHAVE_INDICADOR) || localStorage.getItem('afiliado_ref') || '';
             }
 
             if (!ref) ref = 'admin';
@@ -1098,14 +1100,14 @@
             const afiliadoParam = (urlParams.get('afiliado') || localStorage.getItem(CHAVE_INDICADOR) || '').replace(/[^a-zA-Z0-9_.-]/g, '');
 
             produtos.forEach((p, idx) => {
-                let arquivoCheckout = 'check_lite.html';
+                let arquivoCheckout = 'checkout_sacola.html';
                 let prodIdNormalizado = (p.id || '').toLowerCase().trim();
 
-                if (prodIdNormalizado.includes('pro')) arquivoCheckout = 'check_pro.html';
-                else if (prodIdNormalizado.includes('plus')) arquivoCheckout = 'check_plus.html';
+                
+                
 
-                let linkCheckoutFinal = `${arquivoCheckout}?produto=${prodIdNormalizado}&ref=${refParam}`;
-                if (afiliadoParam) linkCheckoutFinal += `&afiliado=${encodeURIComponent(afiliadoParam)}`;
+                let linkCheckoutFinal = `${arquivoCheckout}?produto=${prodIdNormalizado}&ref=${encodeURIComponent(refParam)}`;
+                if (afiliadoParam) linkCheckoutFinal += `&afiliado=${encodeURIComponent(afiliadoParam)}&afiliado_ref=${encodeURIComponent(afiliadoParam)}`;
 
                 grid.innerHTML += `
                     <div class="bg-white rounded-3xl border border-slate-200 p-6 shadow-sm hover:shadow-xl transition-all flex flex-col justify-between group">
@@ -1149,8 +1151,13 @@
         }
 
         function executarCompraEProcessarComissao(idxProduto, usuarioAfiliado, urlCheckout) {
-            if (!produtos[idxProduto]) return;
-            window.location.href = urlCheckout;
+            const produto = produtos[idxProduto];
+            if (!produto) return;
+            // Comprar agora também passa pela sacola unificada; nunca abre checkout isolado.
+            adicionarNaSacolaGeral(produto.id, produto.nome, Number(produto.precoPor), produto.imagem || '');
+            const destino = new URL(urlCheckout, window.location.origin);
+            if (usuarioAfiliado) destino.searchParams.set('afiliado', usuarioAfiliado);
+            window.location.href = destino.pathname + destino.search;
         }
 
         function fecharModalLojista() { document.getElementById('modalLojista').classList.add('hidden'); }

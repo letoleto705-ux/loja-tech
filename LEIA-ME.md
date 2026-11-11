@@ -1,134 +1,51 @@
-# Loja Tech + Checkouts + Área do Afiliado + Tech Payments (Neon + Render)
+# Loja Tech — versão reconstruída com checkout unificado
 
-```
-loja-tech/
-├── package.json
-├── server.js              (API + banco: toda a regra de comissão fica aqui)
-└── public/
-    ├── index.html         (Loja Tech: tela de entrada + catálogo)
-    ├── afiliado.html      (Área do Afiliado: abre pelo botão "Área do Afiliado" da loja)
-    ├── check_lite.html    (Checkout Lite)
-    ├── check_pro.html     (Checkout Pro)
-    ├── check_plus.html    (Checkout Plus)
-    └── pagamento.html     (Tech Payments: pedidos e pagamentos aos afiliados)
-```
+Esta versão parte dos arquivos originais enviados e da integração anterior da sacola. Ela mantém o backend Node/Express, o catálogo JSONB existente no Neon, as tabelas existentes e o fluxo Mercado Pago já presente no projeto. A migração é aditiva e idempotente; não cria uma nova conta ou um novo banco Neon.
 
-O Render serve todas as páginas e a API no mesmo endereço, então não há CORS nem URL para configurar. Tudo usa o **mesmo login** e o **mesmo banco (Neon)**.
+## Estrutura
 
-As imagens públicas dos produtos ficam em `public/imagens/` e são servidas em `/imagens/` pelo mesmo endereço do site. No painel administrativo, informe o caminho relativo da imagem (por exemplo, `/imagens/cmv-food-lite.png`); esse valor fica salvo junto ao produto em `config.produtos` no Neon. Inclua os arquivos de imagem no repositório para que sejam publicados no Render.
+- `server.js`: API, autenticação, Neon, pedidos, Mercado Pago, webhook e comissões.
+- `public/index.html`: vitrine; botão de compra adiciona à sacola unificada.
+- `public/checkout_sacola.html`: carrinho, dados do comprador, pedido e Pix.
+- `public/afiliado.html`: painel e geração de links de indicação.
+- `public/pagamento.html`: página de pagamento já existente.
+- `public/responsive.css`: folha compartilhada que faltava nos arquivos recebidos.
+- `database/migration_checkout_unificado.sql`: extensão de esquema para itens do pedido.
+- `.env.example`: nomes das variáveis necessárias, sem segredos reais.
 
-Para liberar o produto após a aprovação do pagamento, configure também a URL pública do arquivo no campo **Arquivo para Download (PDF ou instalador)** de cada produto no painel administrativo.
+## O que foi implementado nesta revisão
 
-## 1. Neon (banco)
-Copie a **connection string** do seu projeto (`postgresql://...`). O servidor cria/atualiza o schema na primeira inicialização. O script [database/neon-migration.sql](./database/neon-migration.sql) documenta as tabelas/campos novos para aplicar manualmente depois da inicialização do schema original.
+1. Checkout único de vários produtos: a API recebe `itens`, valida os IDs, quantidades, preços no servidor e cria um único pedido e um único pagamento Pix.
+2. Neon como fonte de verdade: pedidos e linhas de pedido são persistidos; o catálogo continua na chave `config.produtos` já usada pelo projeto. A migração adiciona `pedido_itens` e campos de endereço/telefone sem apagar dados existentes.
+3. Indicação compatível: a vitrine e o checkout aceitam `afiliado`, `afiliado_ref` e o formato legado `ref=CODIGO` (exceto `ref=admin`). Os links novos do painel preservam os parâmetros compatíveis. A API valida o usuário afiliado no banco antes de atribuir a venda.
+4. Comissões por pedido: a confirmação é protegida por transação e bloqueio da linha do pedido. A comissão é calculada sobre o total do pedido, uma vez, e a venda aprovada registra um único `payment_id`; itens ficam discriminados em `pedido_itens`.
+5. Liquidação mensal: a apuração agora seleciona somente pedidos pagos no mês-calendário imediatamente anterior e impede liquidação antes do quinto dia útil do mês corrente. Mantém as taxas já configuradas no banco e o mínimo de saque existente. O calendário considera fins de semana e feriados nacionais/móveis já definidos no código; feriados bancários/municipais adicionais precisam ser configurados conforme a praça de operação.
+6. Pagamento e entrega: o pedido é criado antes do pagamento; Mercado Pago recebe o total único com chave de idempotência; confirmação permanece vinculada ao pedido e ao `payment_id`; downloads de cada item são liberados apenas após aprovação.
 
-## 2. GitHub
-Crie um repositório e envie **o conteúdo da pasta `loja-tech`** (com `package.json` e `server.js` na raiz do repositório).
+## Implantação no Render
 
-## 3. Render (Web Service)
-- **Build Command:** `npm install`
-- **Start Command:** `npm start`
-- **Variáveis de ambiente:**
+1. Faça backup do Neon antes de publicar qualquer alteração.
+2. Envie o conteúdo desta pasta para o repositório conectado ao Render, mantendo a estrutura de diretórios.
+3. Configure no Render as variáveis já utilizadas pela sua instalação: `DATABASE_URL`, `JWT_SECRET`, `ADMIN_SENHA`, `MERCADO_PAGO_ACCESS_TOKEN` e `PORT` (o Render fornece `PORT`). Não cole segredos em arquivos públicos ou neste README.
+4. O `server.js` executa as alterações aditivas de esquema ao iniciar. O SQL em `database/migration_checkout_unificado.sql` também pode ser executado manualmente no Neon se preferir controlar a migração.
+5. Configure no painel do Mercado Pago a URL pública de webhook para `https://SEU-DOMINIO/api/webhook/mercadopago`. Use o domínio real do serviço e confirme no painel do Mercado Pago quais eventos de pagamento estão habilitados.
+6. Confirme que cada produto digital possui um link HTTPS válido no campo `pdf` do catálogo salvo em `config.produtos`. O link precisa estar acessível para o comprador autorizado.
+7. Faça deploy e valide primeiro com credenciais de teste/sandbox do Mercado Pago e uma cópia de staging do banco. Só depois troque para as credenciais de produção.
 
-| Variável | Valor |
-|---|---|
-| `DATABASE_URL` | a connection string do Neon |
-| `JWT_SECRET` | um texto longo e aleatório (40+ caracteres) |
-| `ADMIN_SENHA` | a senha do administrador |
-| `ADMIN_USUARIO` | (opcional) padrão é `admin` |
-| `MERCADO_PAGO_ACCESS_TOKEN` ou `ACCESS_TOKEN` | token privado de produção ou teste da aplicação Mercado Pago |
-| `MERCADO_PAGO_PUBLIC_KEY` ou `PUBLIC_KEY` | chave pública da mesma aplicação, injetada no formulário seguro de cartão |
-| `MERCADO_PAGO_WEBHOOK_URL` | (recomendado) URL pública `https://seu-dominio/api/webhook/mercadopago` |
+## Variáveis de ambiente
 
-No plano gratuito o Render "dorme" sem uso; o primeiro acesso depois disso demora alguns segundos (as páginas avisam enquanto carregam).
+Consulte `.env.example`. Não substitua `DATABASE_URL` por outro banco: use a conexão Neon já existente. Não reutilize nem compartilhe tokens em chats, commits ou arquivos servidos ao público.
 
-Configure no painel Mercado Pago o webhook de pagamentos para apontar para `MERCADO_PAGO_WEBHOOK_URL`. O servidor consulta a API do Mercado Pago e confere o pedido e o valor antes de atualizar o status; a mesma verificação também é feita durante a consulta de status da página.
+## Regras e observações importantes
 
-## 4. A dinâmica de comissões (o "patriarca")
-**O administrador é o topo da rede: não tem pai, e todo mundo está abaixo dele.**
+- O carrinho no navegador usa `localStorage` (`tech_sacola_geral`). Ele é compartilhado entre páginas no mesmo navegador/dispositivo, mas não é um carrinho sincronizado entre dispositivos nem entre navegadores. Pedidos e pagamentos são persistidos no Neon. Sincronização de carrinho autenticado entre dispositivos exige uma funcionalidade adicional de carrinho por usuário.
+- Os produtos presentes no catálogo inicial são licenças/arquivos digitais. O checkout não calcula frete, não integra transportadoras e não gera etiqueta de envio para mercadorias físicas. Não publique produtos físicos até implementar e testar cotação, cobrança e logística.
+- A entrega digital utiliza URLs configuradas no campo `pdf`. O armazenamento/expiração/controle de acesso do próprio arquivo depende do provedor dessa URL.
+- As comissões preservam as taxas configuradas no Neon. Os valores padrão existentes no código são apenas fallback quando não há configuração persistida; não altere as taxas sem conferir o painel e o banco.
+- O sistema registra aprovação e comissões no nível do pedido, não em cada linha de produto. Isso evita multiplicar comissão em compras com vários itens.
+- A liquidação marca as comissões do período como pagas no banco. A transferência bancária/Pix efetiva ao afiliado continua sendo uma operação financeira externa e deve ser conciliada pelo administrador; o endpoint não movimenta dinheiro automaticamente.
+- A função de quinto dia útil contempla fins de semana e feriados nacionais/móveis codificados. Feriados estaduais, municipais e calendários bancários excepcionais podem alterar a data e devem ser revistos antes do primeiro ciclo real.
 
-- **1ª geração:** quem entra direto pelo link da Central.
-- **2ª geração:** quem entra pelo link de um afiliado da 1ª geração. **3ª geração:** quem entra pelo link de alguém da 2ª, e assim por diante.
+## Testes executados nesta entrega
 
-As porcentagens de comissão direta e de patrocinador são ajustáveis na loja: entre como administrador → **Gerência de Afiliados** → "Regra Geral de Comissões". Valores iniciais: **35%** e **10%**. A comissão do avô permanece fixa em 5% quando há essa geração.
-
-| Quem | Ganha | Sobre |
-|---|---|---|
-| **Quem vendeu** | taxa direta configurada (padrão 35%) | o preço do produto |
-| **O pai de quem vendeu** (patrocinador direto) | taxa configurada (padrão 10%) | o preço do produto vendido pelo filho |
-| **O avô de quem vendeu** | 5% (fixos) | o preço do produto, quando houver essa geração |
-| **A Central (administrador)** | **todo o resto** | o preço do produto, em qualquer geração |
-
-- Só o patrocinador **direto** recebe a taxa de patrocinador. O percentual do avô é definido pelo administrador; gerações acima dele não recebem comissão. O filho não ganha nada sobre o pai.
-- Não existe uma porcentagem configurável para a Central: ela fica com o que sobra. O total das taxas direta, do patrocinador e do avô, quando aplicáveis, não pode ultrapassar 100%.
-- Mudar uma taxa vale só para as vendas confirmadas dali em diante.
-- As comissões são gravadas quando o webhook ou a consulta de status confirma a aprovação do Mercado Pago; os totais de cada afiliado são somados dos pedidos pagos.
-- O administrador configura o **valor mínimo de saque** em "Regra Geral de Comissões e Pagamentos" (padrão R$ 50,00). Os saldos abaixo do mínimo permanecem pendentes e acumulam.
-- Os pagamentos aos afiliados são realizados até o **5º dia útil de cada mês**, para comissões aprovadas em meses anteriores. Pedidos do mês corrente ficam acumulados para o próximo ciclo. O calendário exclui fins de semana e feriados nacionais, Sexta-feira Santa, Carnaval e Corpus Christi.
-- No Portal de Comissões, o administrador pode processar manualmente o fechamento a qualquer momento: somente afiliados que atingem o mínimo são liquidados. As baixas ficam registradas nos lançamentos com status e data de pagamento; quem não atinge o limite mantém o saldo pendente.
-
-Venda sem afiliado gera 100% para a Central. Nas vendas com afiliados, a Central recebe o restante após as comissões aplicáveis àquela posição na rede.
-
-## 5. Área do Afiliado (`afiliado.html`)
-O botão **Área do Afiliado** da loja abre essa página.
-- **Afiliado:** vê as suas vendas, a comissão direta, a comissão de rede (a taxa atual do patrocinador sobre as vendas dos filhos), o total a receber, os seus dois links e **somente os indicados diretos** (quantas vendas fizeram e quanto você ganhou sobre eles).
-- **Administrador:** vê **toda a rede, de todas as gerações**, com o patrocinador de cada um, as vendas, as comissões e quanto sobra para a Central, mais o total a distribuir.
-- **Link 1 (vendas):** `index.html?ref=admin&afiliado=SEU_USUARIO`. **Link 2 (cadastrar na sua rede):** `afiliado.html?cad=SEU_USUARIO`: quem se cadastra por ele já entra como afiliado, filho de quem convidou.
-
-## 6. Tela de entrada
-A primeira tela da loja tem o **login à esquerda** (usuário e senha, ou "Crie sua conta de cliente", que pede nome, e-mail, CPF, Pix e telefone) e a **mensagem de boas-vindas à direita**, explicando em 3 passos como entrar, criar conta e se afiliar. Serve igual para administrador, afiliado e cliente.
-
-## 7. Suporte e recuperação de senha
-**Telefone no cadastro:** todo cadastro (cliente ou afiliado) agora pede um **telefone / WhatsApp de contato com DDD**. Ele aparece no painel do administrador, junto com e-mail e CPF.
-
-**Botão de suporte:** no Tech Payments, seção "Suporte: Contas e Senha Temporária", cadastre o **WhatsApp do suporte**. A loja passa a mostrar o botão verde "Suporte" (e o link "Esqueceu a senha? Fale com o suporte" na tela de entrada).
-
-**Cliente esqueceu a senha** (a senha é guardada criptografada: ninguém, nem você, consegue ler a original):
-1. O cliente chama o suporte pelo botão do WhatsApp.
-2. **Confirme a identidade** dele (CPF, e-mail e telefone do cadastro).
-3. No Tech Payments, busque a conta (por nome, usuário, e-mail, CPF ou telefone) e clique em **Gerar senha temporária**. A senha aparece uma única vez, com um botão que abre o WhatsApp **do telefone cadastrado** já com a mensagem pronta.
-4. O cliente entra com a senha temporária e o sistema o **obriga a criar uma senha nova** antes de qualquer outra coisa. A senha temporária vale 24 horas, e a senha antiga deixa de funcionar na hora.
-
-**Regra de ouro:** envie a senha temporária **somente para o telefone cadastrado**, nunca para um número novo informado na conversa. Se a conta não tem telefone, o painel avisa.
-
-**Senha do administrador:** fica na variável `ADMIN_SENHA` do Render. Se esquecer, mude o valor lá e reinicie o serviço.
-
-**Dados pessoais (LGPD):** CPF, e-mail e telefone são dados protegidos. Use-os só para venda, contato e pagamento de comissões, e proteja o acesso ao seu painel do Neon e do Render.
-
-## 8. Como funciona a venda
-1. O cliente entra pelo link do afiliado, escolhe o produto e vai para o checkout.
-2. No checkout preenche nome, e-mail e CPF e escolhe a forma de pagamento. O servidor registra um pedido **aguardando pagamento** (preço sempre vindo do catálogo do servidor). **Nenhuma comissão é gerada aqui.**
-3. **Pix:** o Mercado Pago gera o QR Code e o código Copia e Cola na própria página. **Cartão e débito:** o formulário seguro do Mercado Pago tokeniza os dados no navegador; somente o token é enviado ao servidor, que cria a cobrança.
-4. A página consulta o status a cada cinco segundos. O webhook e a consulta de status confirmam a cobrança com o Mercado Pago; só uma cobrança aprovada marca o pedido como pago, gera comissões e libera o download automaticamente.
-
-O status financeiro dos pedidos é atualizado pelo webhook e pela consulta ao Mercado Pago. A confirmação, o cancelamento e o estorno não são feitos manualmente pelo painel.
-
-Proteções: o afiliado só ganha se existir; se o CPF ou e-mail do comprador for igual ao do afiliado (auto-indicação), a venda vira venda direta; a sincronização repetida do mesmo pagamento não duplica as comissões.
-
-## 9. Primeiro uso e teste
-1. Configure as chaves de acesso e pública do Mercado Pago no Render e o webhook na aplicação Mercado Pago.
-2. Em Gerência de Afiliados, confira as duas porcentagens (50 e 15).
-3. Teste ponta a ponta (janelas anônimas):
-   1. **Roll:** abra `afiliado.html?cad=admin`, crie a conta `roll` (já entra como afiliado, 1ª geração).
-   2. **Neyza:** abra o Link 2 do Roll (`afiliado.html?cad=roll`) e crie a conta `neyza` (2ª geração).
-   3. **Cliente:** abra o Link 1 da Neyza, compre um produto e finalize o checkout pelo Pix ou cartão.
-   4. Faça um pagamento de teste e aguarde a aprovação no Mercado Pago; a página deve atualizar o status e liberar o produto automaticamente.
-
-## 10. Cupons, campanhas e parcelamento
-- No Tech Payments, o administrador define o liga/desliga global e a porcentagem máxima dos cupons, aprova os códigos submetidos pelos afiliados e publica/desativa comunicados internos.
-- O afiliado cria o próprio código na Área do Afiliado. Cupons novos aguardam ativação do administrador. No checkout, o servidor valida o status e calcula o desconto sobre o preço cadastrado; comissões são calculadas sobre o valor final pago e a venda fica atribuída ao dono do cupom.
-- A validade de cada cupom é opcional e definida pelo administrador; a data informada permanece válida durante todo aquele dia. Cupons expirados são recusados pelo servidor no checkout e indicados como expirados nos painéis. Deixar a validade vazia mantém o cupom sem expiração.
-- A tabela `afiliado_cupons` referencia `afiliados(usuario)` com `ON DELETE CASCADE`: a exclusão de um afiliado remove seu cupom. Pedidos mantêm o código e o desconto como snapshot histórico, sem depender do registro do cupom.
-- As regras de porcentagem são salvas em `config` (JSONB); cupons e comunicados ficam em `afiliado_cupons` e `notificacoes_afiliados`. O script de atualização está em [database/neon-migration.sql](./database/neon-migration.sql).
-- As taxas de comissão direta, do patrocinador e do avô são editáveis separadamente pelo administrador e são aplicadas às vendas aprovadas após a alteração. A taxa do avô fica em `config` na chave `taxaAvo` (padrão inicial 5%).
-- Produtos seguem armazenados na lista JSONB `config.produtos`; a opção administrativa `repasseJurosComprador` é salva nesse produto e copiada para o pedido. A opção é enviada como metadado no pagamento, sem permitir alteração pelo checkout.
-- O checkout seguro de cartão usa o Brick do Mercado Pago. O modo sem juros também depende de planos/campanhas sem juros habilitados na conta Mercado Pago da loja; essa regra comercial da conta não pode ser criada por um campo da API de pagamento. Valide os planos disponíveis na conta de produção antes de anunciar parcelamento sem juros.
-- As telas da loja, checkout, afiliado e administração compartilham as regras mobile de `public/responsive.css`.
-- A tela inicial/login pode ser alternada sem recarregar entre português (padrão), inglês, espanhol, mandarim, italiano e francês; a preferência fica salva no navegador.
-- A aprovação, cancelamento e estorno de pedidos são sincronizados pelo Mercado Pago (webhook e consulta do checkout). O painel não oferece confirmação manual de pedido; a liquidação de comissões continua sendo uma operação administrativa separada.
-- Ao excluir um afiliado, a conta de acesso é removida na mesma transação e o cupom relacionado é removido pela FK `ON DELETE CASCADE`. Pedidos e snapshots de comissão permanecem para preservar o histórico financeiro.
-
-## Observações
-- Senhas são guardadas com hash (bcrypt); a senha do administrador fica só nas variáveis do Render. O cadastro exige senha de pelo menos 6 caracteres.
-- Os dados antigos do `localStorage` (inclusive o antigo banco do `afiliado.html`) não são migrados: refaça os cadastros no sistema novo.
-- Use as credenciais de teste do Mercado Pago antes de trocar para as credenciais de produção.
+O arquivo `VALIDACAO.txt` registra os testes estáticos executados. Verificações de sintaxe e consistência local não equivalem a teste real de integração: esta sessão não tem acesso às suas variáveis privadas, ao banco Neon de produção nem à conta Mercado Pago. Portanto, não é correto afirmar que um pagamento real, webhook externo, e-mail ou entrega foi testado em produção.
