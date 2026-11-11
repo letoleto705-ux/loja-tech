@@ -225,6 +225,13 @@
                         <i class="fa-solid fa-handshake mr-1.5 text-green-600"></i> Afilie-se
                     </a>
 
+                    <!-- BOTÃO DA SACOLA INTEGRADO DIRETAMENTE AO CHECKOUT DA SACOLA -->
+                    <button onclick="window.location.href='checkout_sacola.html'" class="relative px-4 py-2 text-xs font-bold uppercase tracking-wider text-slate-800 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 transition shadow-sm flex items-center gap-2">
+                        <i class="fa-solid fa-bag-shopping text-emerald-600 text-sm"></i>
+                        <span>Sacola</span>
+                        <span id="badgeQtdSacolaTop" class="bg-emerald-600 text-white text-[10px] font-black px-1.5 py-0.5 rounded-full">0</span>
+                    </button>
+
                     <button id="menuBtnAreaAfiliado" onclick="window.location.href='afiliado.html'" class="hidden px-4 py-2 text-xs font-bold uppercase tracking-wider text-orange-700 bg-orange-50 border border-orange-200 rounded-xl hover:bg-orange-100 transition shadow-sm">
                         <i class="fa-solid fa-users mr-1.5 text-orange-600"></i> Área do Afiliado
                     </button>
@@ -250,6 +257,10 @@
 
                 <nav id="menuMobile" class="hidden md:hidden absolute top-full right-4 left-4 z-50 rounded-2xl border border-slate-200 bg-white p-3 shadow-xl" aria-label="Navegação mobile">
                     <a href="#produtos" onclick="fecharMenuMobile()" class="block rounded-xl px-4 py-3 text-sm font-bold text-slate-700 hover:bg-slate-50">Softwares</a>
+                    <a href="checkout_sacola.html" onclick="fecharMenuMobile()" class="block rounded-xl px-4 py-3 text-sm font-bold text-emerald-700 hover:bg-emerald-50 flex items-center justify-between">
+                        <span>Minha Sacola</span>
+                        <i class="fa-solid fa-bag-shopping"></i>
+                    </a>
                     <a id="mobileLinkAfiliase" href="#afiliase" onclick="fecharMenuMobile()" class="block rounded-xl px-4 py-3 text-sm font-bold text-slate-700 hover:bg-slate-50">Solicitar Afiliação</a>
                     <a id="mobileLinkAreaAfiliado" href="afiliado.html" onclick="fecharMenuMobile()" class="hidden rounded-xl px-4 py-3 text-sm font-bold text-orange-700 hover:bg-orange-50">Área do Afiliado</a>
                     <button id="mobileBtnGerenciaAfiliados" type="button" onclick="fecharMenuMobile(); solicitarSenhaGerenciaAfiliados()" class="hidden w-full rounded-xl px-4 py-3 text-left text-sm font-bold text-emerald-700 hover:bg-emerald-50">Gerência de Afiliados</button>
@@ -787,7 +798,18 @@
             return dados;
         }
 
+        // Atualizar contador da sacola no topo
+        function atualizarContadorSacolaTop() {
+            try {
+                const sacolaSalva = JSON.parse(localStorage.getItem('tech_sacola_geral') || '[]');
+                const totalQtd = sacolaSalva.reduce((acc, item) => acc + (item.qtd || 1), 0);
+                const badge = document.getElementById('badgeQtdSacolaTop');
+                if (badge) badge.innerText = totalQtd;
+            } catch(e) {}
+        }
+
         window.addEventListener('DOMContentLoaded', async () => {
+            atualizarContadorSacolaTop();
             alterarIdioma(localStorage.getItem('tech_language') || IDIOMA_PADRAO);
             sincronizarParametrosURL();
             await carregarDadosPublicos();
@@ -1057,7 +1079,7 @@
                 efetuarLogoutGeral();
             } catch (err) {
                 erro.innerText = err.message;
-                erro.classList.remove('hidden');
+                erro.classList.add('hidden');
             } finally {
                 botao.disabled = false;
                 botao.innerText = 'Confirmar solicitação';
@@ -1099,9 +1121,12 @@
                                 <div class="text-2xl font-black text-orange-600">R$ ${parseFloat(p.precoPor).toFixed(2)}</div>
                             </div>
                         </div>
-                        <div class="mt-6">
+                        <div class="mt-6 space-y-2">
                             <button onclick="executarCompraEProcessarComissao(${idx}, '${afiliadoParam}', '${linkCheckoutFinal}')" class="w-full py-3.5 text-xs font-bold uppercase tracking-wider text-white gradient-orange rounded-xl shadow-orange-glow hover:opacity-95 transition flex items-center justify-center gap-2">
                                 <i class="fa-solid fa-bolt"></i> Comprar Agora
+                            </button>
+                            <button onclick="adicionarNaSacolaGeral('${esc(p.id)}', '${esc(p.nome)}', ${p.precoPor}, '${esc(p.imagem)}')" class="w-full py-2.5 text-xs font-bold uppercase tracking-wider text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-xl hover:bg-emerald-100 transition flex items-center justify-center gap-2">
+                                <i class="fa-solid fa-bag-shopping"></i> Adicionar à Sacola
                             </button>
                         </div>
                     </div>
@@ -1109,9 +1134,21 @@
             });
         }
 
+        // Função para adicionar produtos à sacola unificada e atualizar o contador
+        function adicionarNaSacolaGeral(id, nome, preco, imagem) {
+            let sacola = JSON.parse(localStorage.getItem('tech_sacola_geral') || '[]');
+            const index = sacola.findIndex(item => item.id === id);
+            if (index >= 0) {
+                sacola[index].qtd += 1;
+            } else {
+                sacola.push({ id, nome, preco, qtd: 1, imagem });
+            }
+            localStorage.setItem('tech_sacola_geral', JSON.stringify(sacola));
+            atualizarContadorSacolaTop();
+            alert(`"${nome}" foi adicionado à sua sacola com sucesso!`);
+        }
+
         function executarCompraEProcessarComissao(idxProduto, usuarioAfiliado, urlCheckout) {
-            // Aqui NÃO há venda nem comissão. O pedido é registrado no checkout e a comissão
-            // só nasce quando a Central confirma o recebimento do pagamento.
             if (!produtos[idxProduto]) return;
             window.location.href = urlCheckout;
         }
