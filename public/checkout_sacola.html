@@ -458,15 +458,16 @@ function itensNormalizados() {
 
 function produtoDigital(p) {
   /*
-    Adaptar ao campo real do backend, caso necessário.
-    Somente produtos explicitamente digitais
-    recebem isenção de frete.
+    O servidor envia "digital" em /api/produtos, calculado com a
+    mesma regra usada para cobrar o frete (tipo digital/software
+    ou produto com arquivo). Os demais campos ficam como reforço.
   */
   return (
+    p.digital === true ||
     p.tipo === 'digital' ||
+    p.tipo === 'software' ||
     p.tipo_produto === 'digital' ||
     p.tipoProduto === 'digital' ||
-    p.digital === true ||
     p.isDigital === true
   );
 }

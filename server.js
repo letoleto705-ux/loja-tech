@@ -177,6 +177,10 @@ async function lerTaxas(client = pool) {
 const centavos = (valor, taxa) => Math.round(valor * taxa) / 100;
 const dinheiro = v => Math.round(Number(v || 0) * 100) / 100;
 
+// Fonte única da regra "produto digital" (sem frete).
+// Digital = tipo digital/software OU produto com arquivo (pdf) cadastrado.
+const produtoEhDigital = p => !!p && (p.tipo === 'digital' || p.tipo === 'software' || !!p.pdf);
+
 function dataAtualBrasil() {
   const partes = new Intl.DateTimeFormat('en-CA', {
     timeZone: 'America/Sao_Paulo',
@@ -403,6 +407,15 @@ async function iniciarBanco() {
   await q('ALTER TABLE pedido_itens ADD COLUMN IF NOT EXISTS custo_unitario numeric(12,2) NOT NULL DEFAULT 0');
   await q('ALTER TABLE pedido_itens ADD COLUMN IF NOT EXISTS custo_total numeric(12,2) NOT NULL DEFAULT 0');
   await q('ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS custo_total numeric(12,2) NOT NULL DEFAULT 0');
+
+  // Frete registrado no momento da compra.
+  // O valor histórico não muda quando o administrador
+  // altera o frete para novas vendas.
+  await q(`
+    ALTER TABLE pedidos
+    ADD COLUMN IF NOT EXISTS frete
+    numeric(12,2) NOT NULL DEFAULT 0
+  `);
   await q("ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS entrega_status text NOT NULL DEFAULT 'preparando'");
   await q("ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS transportadora text NOT NULL DEFAULT ''");
   await q("ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS codigo_rastreio text NOT NULL DEFAULT ''");
@@ -419,6 +432,13 @@ async function iniciarBanco() {
   await q("ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS endereco_entrega jsonb NOT NULL DEFAULT '{}'::jsonb");
 
   await q(`CREATE TABLE IF NOT EXISTS config (chave text PRIMARY KEY, valor jsonb NOT NULL)`);
+
+  // Configuração inicial do frete fixo.
+  await q(`
+    INSERT INTO config (chave, valor)
+    VALUES ('freteFixo', '0'::jsonb)
+    ON CONFLICT (chave) DO NOTHING
+  `);
   await q("DELETE FROM config WHERE chave = 'pixChave'");
   
   const produtosSalvos = await lerConfig('produtos', PRODUTOS_INICIAIS);
@@ -986,7 +1006,7 @@ app.post('/api/checkout/sacola', limitarTentativas, wrap(async (req, res) => {
     if (!Number.isFinite(preco) || preco < 0) return res.status(400).json({ erro: 'Preço de produto inválido.' });
     const custo = Number(produto.custo);
     if (!Number.isFinite(custo) || custo < 0) return res.status(400).json({ erro: 'Custo de aquisição do produto inválido ou não cadastrado.' });
-    itens.push({ id: String(produto.id), nome: txt(produto.nome, 180), quantidade, preco, custo: dinheiro(custo), imagem: txt(produto.imagem, 500), tipo: produto.tipo === 'digital' || produto.tipo === 'software' || !!produto.pdf ? 'digital' : 'fisico' });
+    itens.push({ id: String(produto.id), nome: txt(produto.nome, 180), quantidade, preco, custo: dinheiro(custo), imagem: txt(produto.imagem, 500), tipo: produtoEhDigital(produto) ? 'digital' : 'fisico' });
   }
   const valorOriginal = dinheiro(itens.reduce((s, i) => s + i.preco * i.quantidade, 0));
   if (valorOriginal <= 0) return res.status(400).json({ erro: 'O total do pedido deve ser maior que zero.' });
@@ -1006,9 +1026,37 @@ app.post('/api/checkout/sacola', limitarTentativas, wrap(async (req, res) => {
     const af = (await q('SELECT usuario FROM afiliados WHERE usuario = $1', [afiliado])).rows[0];
     if (af) afiliadoValido = true; else afiliado = '';
   }
-  const custoTotal = dinheiro(itens.reduce((total, item) => total + item.custo * item.quantidade, 0));
-  const valorFinal = dinheiro(Math.max(0, valorOriginal - desconto));
-  if (valorFinal <= 0) return res.status(400).json({ erro: 'O total após desconto deve ser maior que zero.' });
+  const custoTotal = dinheiro(
+    itens.reduce(
+      (total, item) =>
+        total + item.custo * item.quantidade,
+      0
+    )
+  );
+
+  // Somente produtos físicos precisam de frete.
+  const possuiProdutoFisico = itens.some(
+    item => item.tipo === 'fisico'
+  );
+
+  // Valor fixo cadastrado pelo administrador no Neon.
+  const frete = possuiProdutoFisico
+    ? await consultarFreteFixo()
+    : 0;
+
+  // Valor dos produtos após o desconto.
+  const valorProdutos = dinheiro(
+    Math.max(0, valorOriginal - desconto)
+  );
+
+  if (valorProdutos <= 0) {
+    return res.status(400).json({
+      erro: 'O total após desconto deve ser maior que zero.'
+    });
+  }
+
+  // Total efetivamente cobrado pelo Mercado Pago.
+  const valorFinal = dinheiro(valorProdutos + frete);
   const pedidoId = crypto.randomBytes(8).toString('hex');
   const downloadToken = crypto.randomBytes(32).toString('hex');
   const idempotency = crypto.randomUUID();
@@ -1016,12 +1064,52 @@ app.post('/api/checkout/sacola', limitarTentativas, wrap(async (req, res) => {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    await client.query(`INSERT INTO pedidos
-      (id, afiliado_usuario, produto_id, produto_nome, valor, valor_original, cupom_codigo, cupom_desconto,
-       forma, cliente_nome, cliente_email, cliente_cpf, cliente_telefone, endereco_entrega, download_token, payment_idempotency_key, custo_total)
-      VALUES ($1,$2,'sacola',$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13::jsonb,$14,$15,$16)`,
-      [pedidoId, afiliadoValido ? afiliado : null, produtoNome, valorFinal, valorOriginal, codigoCupom, desconto,
-       forma, nome, email, cpf, telefone, JSON.stringify(endereco), downloadToken, idempotency, custoTotal]);
+    await client.query(`
+      INSERT INTO pedidos
+      (
+        id,
+        afiliado_usuario,
+        produto_id,
+        produto_nome,
+        valor,
+        valor_original,
+        cupom_codigo,
+        cupom_desconto,
+        forma,
+        cliente_nome,
+        cliente_email,
+        cliente_cpf,
+        cliente_telefone,
+        endereco_entrega,
+        download_token,
+        payment_idempotency_key,
+        custo_total,
+        frete
+      )
+      VALUES (
+        $1, $2, 'sacola', $3, $4, $5, $6, $7,
+        $8, $9, $10, $11, $12, $13::jsonb,
+        $14, $15, $16, $17
+      )
+    `, [
+      pedidoId,
+      afiliadoValido ? afiliado : null,
+      produtoNome,
+      valorFinal,
+      valorOriginal,
+      codigoCupom,
+      desconto,
+      forma,
+      nome,
+      email,
+      cpf,
+      telefone,
+      JSON.stringify(endereco),
+      downloadToken,
+      idempotency,
+      custoTotal,
+      frete
+    ]);
     for (const item of itens) {
       const subtotal = dinheiro(item.preco * item.quantidade);
       await client.query(`INSERT INTO pedido_itens
@@ -1035,7 +1123,18 @@ app.post('/api/checkout/sacola', limitarTentativas, wrap(async (req, res) => {
   } catch (err) {
     await client.query('ROLLBACK'); throw err;
   } finally { client.release(); }
-  res.status(201).json({ pedidoId, produtoNome, itens: itens.length, valor: valorFinal, valorOriginal, desconto, forma, afiliadoValido, downloadToken });
+  res.status(201).json({
+    pedidoId,
+    produtoNome,
+    itens: itens.length,
+    valor: valorFinal,
+    valorOriginal,
+    desconto,
+    frete,
+    forma,
+    afiliadoValido,
+    downloadToken
+  });
 }));
 
 app.post('/api/checkout', limitarTentativas, wrap(async (req, res) => {
@@ -1323,7 +1422,7 @@ app.get('/api/checkout/:id/detalhes', limitarConsultasStatusCheckout, wrap(async
   const produtos=await lerConfig('produtos',PRODUTOS_INICIAIS);
   const itens=linhas.length?linhas.map(i=>({id:String(i.id),nome:i.produto_nome,quantidade:i.quantidade,precoUnitario:Number(i.preco_unitario),imagem:i.imagem,tipo:(i.tipo_produto==='digital'||!!produtos.find(x=>norm(x.id)===norm(i.produto_id))?.pdf)?'digital':'fisico',downloadDisponivel:p.status==='pago'&&!!produtos.find(x=>norm(x.id)===norm(i.produto_id))?.pdf})):[{id:p.produto_id,nome:p.produto_nome,quantidade:1,precoUnitario:Number(p.valor_original),tipo:produtos.find(x=>norm(x.id)===norm(p.produto_id))?.pdf?'digital':'fisico',downloadDisponivel:p.status==='pago'}];
   const historico=(await q('SELECT status,descricao,criado_em FROM historico_entrega WHERE pedido_id=$1 ORDER BY id',[p.id])).rows.map(h=>({titulo:h.status,descricao:h.descricao,data:h.criado_em,concluido:true}));
-  res.set('Cache-Control','no-store');res.json({id:p.id,numero:p.id,criadoEm:p.criado_em,clienteNome:p.cliente_nome,statusPagamento:p.payment_status||p.status,formaPagamento:p.forma,statusEntrega:p.entrega_status,subtotal:Number(p.valor_original),desconto:Number(p.cupom_desconto),frete:0,total:Number(p.valor),prazoEntregaDias:p.prazo_entrega_dias,previsaoEntrega:p.previsao_entrega,transportadora:p.transportadora,codigoRastreio:p.codigo_rastreio,enderecoEntrega:p.endereco,itens,historico});
+  res.set('Cache-Control','no-store');res.json({id:p.id,numero:p.id,criadoEm:p.criado_em,clienteNome:p.cliente_nome,statusPagamento:p.payment_status||p.status,formaPagamento:p.forma,statusEntrega:p.entrega_status,subtotal:Number(p.valor_original),desconto:Number(p.cupom_desconto),frete:Number(p.frete||0),total:Number(p.valor),prazoEntregaDias:p.prazo_entrega_dias,previsaoEntrega:p.previsao_entrega,transportadora:p.transportadora,codigoRastreio:p.codigo_rastreio,enderecoEntrega:p.endereco,itens,historico});
 }));
 app.get('/api/admin/fornecedores/pedidos',auth,soAdmin,wrap(async(req,res)=>{
   const r=await q("SELECT id,produto_nome,custo_total,fornecedor_status,fornecedor_pago_em,pago_em FROM pedidos WHERE status='pago' ORDER BY pago_em DESC LIMIT 300");res.set('Cache-Control','no-store');res.json(r.rows);
@@ -1334,6 +1433,99 @@ app.post('/api/admin/fornecedores/:id/pagar',auth,soAdmin,wrap(async(req,res)=>{
 app.get('/api/categorias',wrap(async(req,res)=>{const r=await q('SELECT id,nome FROM categorias_loja ORDER BY nome');res.json(r.rows)}));
 app.post('/api/admin/categorias',auth,soAdmin,wrap(async(req,res)=>{const nome=txt(req.body?.nome,80);if(!nome||!semTags(nome))return res.status(400).json({erro:'Nome inválido'});const r=await q('INSERT INTO categorias_loja(nome) VALUES($1) ON CONFLICT(nome) DO UPDATE SET nome=EXCLUDED.nome RETURNING id,nome',[nome]);res.json(r.rows[0])}));
 app.delete('/api/admin/categorias/:id',auth,soAdmin,wrap(async(req,res)=>{const r=await q('DELETE FROM categorias_loja WHERE id=$1 RETURNING id',[req.params.id]);res.status(r.rowCount?200:404).json({ok:!!r.rowCount})}));
+// ======================================================
+// FRETE FIXO — CONFIGURAÇÃO ADMINISTRATIVA
+// ======================================================
+
+async function consultarFreteFixo(client = pool) {
+  const resultado = await client.query(
+    "SELECT valor FROM config WHERE chave = 'freteFixo'"
+  );
+
+  const bruto = resultado.rows.length
+    ? resultado.rows[0].valor
+    : 0;
+
+  const valor = Number(bruto);
+
+  if (
+    !Number.isFinite(valor) ||
+    valor < 0 ||
+    valor > 999999.99
+  ) {
+    throw new Error(
+      'O valor de frete cadastrado no Neon é inválido.'
+    );
+  }
+
+  return dinheiro(valor);
+}
+
+// Consulta pública: utilizada pelo checkout.
+app.get(
+  '/api/frete/config',
+  wrap(async (req, res) => {
+    const valor = await consultarFreteFixo();
+
+    res.set('Cache-Control', 'no-store');
+    res.json({ valor });
+  })
+);
+
+// Consulta administrativa: utilizada por admin_operacoes.html.
+app.get(
+  '/api/admin/frete/config',
+  auth,
+  soAdmin,
+  wrap(async (req, res) => {
+    const valor = await consultarFreteFixo();
+
+    res.set('Cache-Control', 'no-store');
+    res.json({ valor });
+  })
+);
+
+// Gravação administrativa: salva o frete no Neon.
+app.put(
+  '/api/admin/frete/config',
+  auth,
+  soAdmin,
+  wrap(async (req, res) => {
+    const informado = req.body?.valor;
+    const valor = Number(informado);
+
+    // Aceita no máximo 2 casas decimais. A tolerância evita rejeitar
+    // valores como 19.90 (em JS, 19.9 * 100 = 1989.9999999999998).
+    const centavosInformados = valor * 100;
+
+    if (
+      informado === null ||
+      informado === undefined ||
+      informado === '' ||
+      !Number.isFinite(valor) ||
+      valor < 0 ||
+      valor > 999999.99 ||
+      Math.abs(centavosInformados - Math.round(centavosInformados)) > 1e-6
+    ) {
+      return res.status(400).json({
+        erro: 'Informe um frete válido entre R$ 0,00 e R$ 999.999,99.'
+      });
+    }
+
+    const frete = dinheiro(valor);
+
+    await gravarConfig('freteFixo', frete);
+
+    res.set('Cache-Control', 'no-store');
+
+    res.json({
+      ok: true,
+      valor: frete,
+      mensagem: 'Frete atualizado com sucesso.'
+    });
+  })
+);
+
 app.get('/api/admin/prazo-entrega',auth,soAdmin,wrap(async(req,res)=>res.json({dias:await lerConfig('prazoEntregaDias',15)})));
 app.put('/api/admin/prazo-entrega',auth,soAdmin,wrap(async(req,res)=>{const dias=Number(req.body?.dias);if(!Number.isInteger(dias)||dias<1||dias>365)return res.status(400).json({erro:'Informe 1 a 365 dias'});await gravarConfig('prazoEntregaDias',dias);res.json({dias})}));
 app.put('/api/admin/pedidos/:id/entrega',auth,soAdmin,wrap(async(req,res)=>{
@@ -1425,7 +1617,17 @@ async function confirmarPedido(id, paymentIdRecebido) {
     }
     
     const taxas = await lerTaxas(client);
-    const valor = Math.max(0, dinheiro(Number(ped.valor) - Number(ped.custo_total || 0)));
+    // Base das comissões:
+    // produtos - desconto - custo dos fornecedores.
+    // O frete não participa do cálculo de comissões.
+    const valor = Math.max(
+      0,
+      dinheiro(
+        Number(ped.valor) -
+        Number(ped.frete || 0) -
+        Number(ped.custo_total || 0)
+      )
+    );
     let vendedor = 0, patrocinador = 0, avo = 0;
     let patrocinadorUsuario = null, avoUsuario = null;
 
@@ -1471,7 +1673,9 @@ async function confirmarPedido(id, paymentIdRecebido) {
 // ----- Produtos, Configurações e Exclusões -----
 app.get('/api/produtos', wrap(async (req, res) => {
   res.set('Cache-Control', 'no-store');
-  res.json((await lerConfig('produtos', PRODUTOS_INICIAIS)).map(({custo,pdf,...publico})=>publico));
+  // O link do arquivo (pdf) e o custo continuam privados; o navegador recebe
+  // apenas o booleano "digital", calculado com a mesma regra do servidor.
+  res.json((await lerConfig('produtos', PRODUTOS_INICIAIS)).map(p=>{const {custo,pdf,...publico}=p;return {...publico,digital:produtoEhDigital(p)}}));
 }));
 
 app.get('/api/admin/produtos', auth, soAdmin, wrap(async (req, res) => {
