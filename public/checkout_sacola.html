@@ -1,109 +1,1111 @@
+
 <!doctype html>
 <html lang="pt-BR">
 <head>
-<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+
 <title>Finalizar compra | Loja Tech</title>
+
 <script src="https://cdn.tailwindcss.com"></script>
 <script src="https://sdk.mercadopago.com/js/v2"></script>
-<link rel="preconnect" href="https://fonts.googleapis.com"><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-<style>body{font-family:Inter,system-ui,sans-serif}.field{width:100%;border:1px solid #cbd5e1;border-radius:12px;padding:12px;background:#f8fafc}.field:focus{outline:2px solid #10b981;border-color:#10b981}</style>
-</head>
-<body class="bg-slate-100 text-slate-800 min-h-screen">
-<header class="bg-slate-950 text-white"><div class="max-w-6xl mx-auto px-4 py-4 flex items-center justify-between"><a href="/" class="font-extrabold tracking-wide text-xl">LOJA <span class="text-emerald-400">TECH</span></a><a href="/" class="text-sm text-slate-300 hover:text-white">← Continuar comprando</a></div></header>
-<main class="max-w-6xl mx-auto px-4 py-8">
-<div class="mb-6"><h1 class="text-3xl font-extrabold">Finalizar pedido</h1><p class="text-slate-500 mt-1">Todos os produtos da sua sacola em um único pagamento.</p></div>
-<div class="grid lg:grid-cols-5 gap-6">
-<section class="lg:col-span-3 space-y-6">
-<div class="bg-white rounded-2xl p-6 shadow-sm"><h2 class="font-bold text-lg mb-4">1. Seus produtos <span id="count" class="text-sm font-normal text-slate-500"></span></h2><div id="items" class="divide-y"></div></div>
-<form id="checkoutForm" class="bg-white rounded-2xl p-6 shadow-sm space-y-4">
-<h2 class="font-bold text-lg">2. Dados do comprador</h2>
-<div><label class="text-sm font-semibold">Nome completo</label><input class="field mt-1" id="nome" required maxlength="100" autocomplete="name"></div>
-<div class="grid sm:grid-cols-2 gap-4"><div><label class="text-sm font-semibold">E-mail</label><input class="field mt-1" id="email" type="email" required autocomplete="email"></div><div><label class="text-sm font-semibold">CPF</label><input class="field mt-1" id="cpf" required maxlength="14" placeholder="000.000.000-00"></div></div>
-<div><label class="text-sm font-semibold">Telefone</label><input class="field mt-1" id="telefone" required autocomplete="tel"></div>
-<h2 class="font-bold text-lg pt-3">3. Endereço de entrega</h2>
-<p class="text-xs text-slate-500">Preencha o endereço para produtos físicos. Para produtos digitais, informe seu endereço de cadastro.</p>
-<div class="grid sm:grid-cols-3 gap-3"><div><label class="text-sm font-semibold">CEP</label><input class="field mt-1" id="cep" required maxlength="9"></div><div class="sm:col-span-2"><label class="text-sm font-semibold">Rua</label><input class="field mt-1" id="rua" required></div></div>
-<div class="grid sm:grid-cols-3 gap-3"><div><label class="text-sm font-semibold">Número</label><input class="field mt-1" id="numero" required></div><div><label class="text-sm font-semibold">Complemento</label><input class="field mt-1" id="complemento"></div><div><label class="text-sm font-semibold">Bairro</label><input class="field mt-1" id="bairro" required></div></div>
-<div class="grid sm:grid-cols-2 gap-3"><div><label class="text-sm font-semibold">Cidade</label><input class="field mt-1" id="cidade" required></div><div><label class="text-sm font-semibold">Estado</label><input class="field mt-1" id="estado" required maxlength="2" placeholder="PE"></div></div>
-<div><label class="text-sm font-semibold">Cupom (opcional)</label><input class="field mt-1" id="cupom" maxlength="50" placeholder="Código do cupom"></div>
-<div><label class="text-sm font-semibold">Forma de pagamento</label><select id="forma" class="field mt-1"><option value="pix">Pix</option><option value="cartao">Cartão de crédito</option><option value="debito">Cartão de débito (se habilitado no Mercado Pago)</option></select></div>
-<div class="pt-2"><label class="flex gap-3 items-start text-sm"><input id="aceite" type="checkbox" required class="mt-1"><span>Confirmo que os dados estão corretos e aceito os termos e a política de privacidade da Loja Tech.</span></label></div>
-<button id="submit" class="w-full bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50 text-slate-950 font-extrabold rounded-xl py-4">Continuar para pagamento</button>
-<p id="message" role="status" class="text-sm text-slate-600"></p>
-</form>
-</section>
-<aside class="lg:col-span-2"><div class="bg-white rounded-2xl p-6 shadow-sm sticky top-5"><h2 class="font-bold text-lg mb-4">Resumo do pedido</h2><div class="flex justify-between py-2 text-sm"><span>Subtotal</span><strong id="subtotal">R$ 0,00</strong></div><div class="flex justify-between py-2 text-sm"><span>Desconto</span><strong id="discount">R$ 0,00</strong></div><div class="border-t mt-3 pt-4 flex justify-between text-xl font-extrabold"><span>Total</span><span id="total">R$ 0,00</span></div><p class="text-xs text-slate-500 mt-4">O preço final é validado no servidor. Alterações feitas no navegador não alteram o valor cobrado.</p><div id="cartao" class="hidden mt-5 border-t pt-5"><h3 class="font-bold mb-3">Pagamento seguro com cartão</h3><p class="text-xs text-slate-500 mb-3">As parcelas e os juros são calculados e exibidos pelo Mercado Pago conforme as condições disponíveis.</p><div id="cardPaymentBrick_container"></div><p id="cardStatus" class="text-sm mt-3" role="status"></p></div><div id="acessoStatusCompra" class="hidden mt-4 p-3 bg-blue-50 rounded-xl text-sm"><a id="linkStatusCompra" class="font-bold text-blue-700 underline" href="status_compra.html">Acompanhar pedido em Status da Compra</a></div><div id="pix" class="hidden mt-5 border-t pt-5"><h3 class="font-bold mb-2">Pagamento Pix</h3><p id="pixStatus" class="text-sm mb-3"></p><img id="qr" class="mx-auto max-w-48 hidden" alt="QR Code Pix"><textarea id="pixCode" readonly class="field mt-3 text-xs min-h-24"></textarea><button type="button" id="copyPix" class="w-full mt-2 border border-slate-300 rounded-xl py-3 font-bold">Copiar código Pix</button><button type="button" id="checkStatus" class="w-full mt-2 bg-slate-900 text-white rounded-xl py-3 font-bold">Consultar pagamento</button></div></div></aside>
-</div></main>
-<script>
-const CART_KEY='tech_sacola_geral';
-const params=new URLSearchParams(location.search);
-const affiliateRef=params.get('afiliado')||params.get('afiliado_ref')||(params.get('ref')&&params.get('ref')!=='admin'?params.get('ref'):'')||localStorage.getItem('tech_afiliado_indicador')||localStorage.getItem('afiliado_ref')||'';
-if(affiliateRef){localStorage.setItem('tech_afiliado_indicador',affiliateRef);localStorage.setItem('afiliado_ref',affiliateRef);}
-const money=n=>Number(n||0).toLocaleString('pt-BR',{style:'currency',currency:'BRL'});
-let cart=[], products=[], order=null, mpBrick=null;
-const $=id=>document.getElementById(id);
-function escapeHtml(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
-function loadCart(){try{const raw=JSON.parse(localStorage.getItem(CART_KEY)||'[]');cart=Array.isArray(raw)?raw.filter(x=>x&&x.id).map(x=>({id:String(x.id),qtd:Math.max(1,Math.min(99,parseInt(x.qtd)||1))})):[]}catch{cart=[]}}
-async function init(){
- loadCart(); const r=await fetch('/api/produtos',{cache:'no-store'});if(!r.ok)throw Error('Não foi possível carregar os produtos.');
- products=await r.json();render();
-}
-function render(){
- const normalized=cart.map(c=>{const p=products.find(p=>String(p.id)===c.id);return p?{...p,qtd:c.qtd}:null}).filter(Boolean);
- cart=normalized.map(p=>({id:String(p.id),qtd:p.qtd}));
- const box=$('items');
- if(!cart.length){box.innerHTML='<p class="py-8 text-center text-slate-500">Sua sacola está vazia. <a class="text-emerald-700 font-bold" href="/">Voltar à loja</a></p>';$('submit').disabled=true}
- else {$('submit').disabled=false;box.innerHTML=normalized.map(p=>`<div class="py-4 flex gap-3 items-center"><img class="w-16 h-16 rounded-xl object-cover bg-slate-100" src="${escapeHtml(p.imagem||'')}" alt=""><div class="flex-1 min-w-0"><p class="font-bold text-sm">${escapeHtml(p.nome)}</p><p class="text-emerald-700 font-bold">${money(p.precoPor)}</p><div class="flex gap-3 items-center mt-2"><button type="button" data-id="${escapeHtml(p.id)}" data-delta="-1" class="border rounded px-2">−</button><span>${p.qtd}</span><button type="button" data-id="${escapeHtml(p.id)}" data-delta="1" class="border rounded px-2">+</button><button type="button" data-remove="${escapeHtml(p.id)}" class="text-red-600 text-xs ml-2">Remover</button></div></div><strong>${money(p.precoPor*p.qtd)}</strong></div>`).join('')}
- $('count').textContent=`(${cart.reduce((a,x)=>a+x.qtd,0)} itens)`;
- const subtotal=normalized.reduce((a,p)=>a+Number(p.precoPor)*p.qtd,0);
- $('subtotal').textContent=money(subtotal);$('discount').textContent=money(0);$('total').textContent=money(subtotal);
-}
-$('items').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;let id=b.dataset.id||b.dataset.remove;if(b.dataset.remove!==undefined)cart=cart.filter(x=>x.id!==id);else if(b.dataset.id){const x=cart.find(x=>x.id===id);if(x)x.qtd=Math.max(0,Math.min(99,x.qtd+Number(b.dataset.delta)));cart=cart.filter(x=>x.qtd>0)}localStorage.setItem(CART_KEY,JSON.stringify(cart));render()});
-$('cep').addEventListener('blur',async()=>{const cep=$('cep').value.replace(/\D/g,'');if(cep.length!==8)return;try{const r=await fetch(`https://viacep.com.br/ws/${cep}/json/`);const d=await r.json();if(!d.erro){$('rua').value=d.logradouro||'';$('bairro').value=d.bairro||'';$('cidade').value=d.localidade||'';$('estado').value=d.uf||''}}catch{}});
-$('cpf').addEventListener('input',e=>{let v=e.target.value.replace(/\D/g,'').slice(0,11);v=v.replace(/(\d{3})(\d)/,'$1.$2').replace(/(\d{3})(\d)/,'$1.$2').replace(/(\d{3})(\d{1,2})$/,'$1-$2');e.target.value=v});
-$('checkoutForm').addEventListener('submit',async e=>{
- e.preventDefault();if(!cart.length)return;
- const btn=$('submit'),msg=$('message');btn.disabled=true;btn.textContent='Criando pedido…';msg.textContent='';
- try{
-  const payload={itens:cart.map(x=>({produtoId:x.id,quantidade:x.qtd})),nome:$('nome').value.trim(),email:$('email').value.trim(),cpf:$('cpf').value,telefone:$('telefone').value.trim(),forma:$('forma').value,codigoCupom:$('cupom').value.trim(),afiliado:affiliateRef,afiliado_ref:affiliateRef,endereco:{cep:$('cep').value,rua:$('rua').value,numero:$('numero').value,complemento:$('complemento').value,bairro:$('bairro').value,cidade:$('cidade').value,estado:$('estado').value}};
-  const r=await fetch('/api/checkout/sacola',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});const d=await r.json();if(!r.ok)throw Error(d.erro||'Não foi possível criar o pedido.');
-  order=d;sessionStorage.setItem('loja_tech_pedido_pendente',JSON.stringify({pedidoId:d.pedidoId,downloadToken:d.downloadToken,forma:d.forma}));sessionStorage.setItem('loja_tech_acesso_'+d.pedidoId,d.downloadToken);$('acessoStatusCompra').classList.remove('hidden');$('linkStatusCompra').href='status_compra.html?pedido='+encodeURIComponent(d.pedidoId);
-  if(d.forma==='pix'){
-    const pd=await cobrarPedido({});
-    $('pix').classList.remove('hidden');$('pixStatus').textContent=pd.status==='approved'?'Pagamento aprovado.':'Pix gerado. Aguardando confirmação do pagamento.';
-    $('pixCode').value=pd.qrCode||'';if(pd.qrCodeBase64){$('qr').src=`data:image/png;base64,${pd.qrCodeBase64}`;$('qr').classList.remove('hidden')}
-  }else{
-    $('cartao').classList.remove('hidden');
-    const configResponse=await fetch('/api/pagamento/config');const config=await configResponse.json();
-    if(!config.publicKey)throw Error('Chave pública do Mercado Pago não configurada.');
-    if(typeof MercadoPago==='undefined')throw Error('SDK do Mercado Pago indisponível.');
-    const mp=new MercadoPago(config.publicKey,{locale:'pt-BR'});
-    const bricks=mp.bricks();
-    mpBrick=await bricks.create('cardPayment','cardPaymentBrick_container',{
-      initialization:{amount:Number(d.valor),payer:{email:payload.email}},
-      customization:{visual:{style:{theme:'default'}},paymentMethods:{minInstallments:1,maxInstallments:d.forma==='debito'?1:12}},
-      callbacks:{onReady:()=>{$('cardStatus').textContent='Preencha os dados do cartão para concluir o pagamento.'},
-        onSubmit:async cardFormData=>{
-          try{
-            const data=cardFormData?.formData||cardFormData;
-            const paymentData={token:data.token,payment_method_id:data.payment_method_id,issuer_id:data.issuer_id,installments:Number(data.installments)};
-            const result=await cobrarPedido(paymentData);
-            $('cardStatus').textContent=`Pagamento enviado. Situação: ${result.status||'em análise'}. Pedido ${d.pedidoId}.`;
-            if(result.status==='approved'){localStorage.removeItem(CART_KEY);sessionStorage.removeItem('loja_tech_pedido_pendente');cart=[];render()}
-          }catch(err){$('cardStatus').textContent=err.message;throw err}
-        },onError:err=>{$('cardStatus').textContent='Erro no formulário seguro do cartão. Verifique os dados ou tente novamente.';console.error(err)} }
-    });
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
+<style>
+  body {
+    font-family: Inter, system-ui, sans-serif;
   }
-  msg.textContent=`Pedido ${d.pedidoId} criado. Mantenha o identificador para consultar o pagamento.`;
-  if(d.forma==='pix'){$('submit').disabled=true;btn.textContent='Pedido criado'}else{$('submit').disabled=true;btn.textContent='Finalize no formulário de cartão'}
- }catch(err){msg.textContent=err.message;btn.disabled=false;btn.textContent='Continuar para pagamento'}
-});
-async function cobrarPedido(paymentData){
- if(!order)throw Error('Pedido não criado.');
- const r=await fetch(`/api/checkout/${encodeURIComponent(order.pedidoId)}/pagar`,{method:'POST',headers:{'Content-Type':'application/json','x-download-token':order.downloadToken},body:JSON.stringify({paymentData})});
- const d=await r.json();if(!r.ok)throw Error(d.erro||'Falha ao processar o pagamento.');return d;
+
+  .field {
+    width: 100%;
+    border: 1px solid #cbd5e1;
+    border-radius: 12px;
+    padding: 12px;
+    background: #f8fafc;
+  }
+
+  .field:focus {
+    outline: 2px solid #10b981;
+    border-color: #10b981;
+  }
+</style>
+</head>
+
+<body class="bg-slate-100 text-slate-800 min-h-screen">
+
+<header class="bg-slate-950 text-white">
+  <div class="max-w-6xl mx-auto px-4 py-4 flex items-center justify-between">
+    <a href="/" class="font-extrabold tracking-wide text-xl">
+      LOJA <span class="text-emerald-400">TECH</span>
+    </a>
+
+    <a href="/" class="text-sm text-slate-300 hover:text-white">
+      ← Continuar comprando
+    </a>
+  </div>
+</header>
+
+<main class="max-w-6xl mx-auto px-4 py-8">
+
+  <div class="mb-6">
+    <h1 class="text-3xl font-extrabold">
+      Finalizar pedido
+    </h1>
+
+    <p class="text-slate-500 mt-1">
+      Todos os produtos da sua sacola em um único pagamento.
+    </p>
+  </div>
+
+  <div class="grid lg:grid-cols-5 gap-6">
+
+    <section class="lg:col-span-3 space-y-6">
+
+      <div class="bg-white rounded-2xl p-6 shadow-sm">
+        <h2 class="font-bold text-lg mb-4">
+          1. Seus produtos
+          <span id="count" class="text-sm font-normal text-slate-500"></span>
+        </h2>
+
+        <div id="items" class="divide-y"></div>
+      </div>
+
+      <form id="checkoutForm" class="bg-white rounded-2xl p-6 shadow-sm space-y-4">
+
+        <h2 class="font-bold text-lg">
+          2. Dados do comprador
+        </h2>
+
+        <div>
+          <label class="text-sm font-semibold">
+            Nome completo
+          </label>
+          <input
+            class="field mt-1"
+            id="nome"
+            required
+            maxlength="100"
+            autocomplete="name"
+          >
+        </div>
+
+        <div class="grid sm:grid-cols-2 gap-4">
+          <div>
+            <label class="text-sm font-semibold">E-mail</label>
+            <input
+              class="field mt-1"
+              id="email"
+              type="email"
+              required
+              autocomplete="email"
+            >
+          </div>
+
+          <div>
+            <label class="text-sm font-semibold">CPF</label>
+            <input
+              class="field mt-1"
+              id="cpf"
+              required
+              maxlength="14"
+              placeholder="000.000.000-00"
+            >
+          </div>
+        </div>
+
+        <div>
+          <label class="text-sm font-semibold">Telefone</label>
+          <input
+            class="field mt-1"
+            id="telefone"
+            required
+            autocomplete="tel"
+          >
+        </div>
+
+        <h2 class="font-bold text-lg pt-3">
+          3. Endereço de entrega
+        </h2>
+
+        <p class="text-xs text-slate-500">
+          Preencha o endereço para produtos físicos.
+          Para produtos digitais, informe seu endereço de cadastro.
+        </p>
+
+        <div class="grid sm:grid-cols-3 gap-3">
+          <div>
+            <label class="text-sm font-semibold">CEP</label>
+            <input
+              class="field mt-1"
+              id="cep"
+              required
+              maxlength="9"
+            >
+          </div>
+
+          <div class="sm:col-span-2">
+            <label class="text-sm font-semibold">Rua</label>
+            <input class="field mt-1" id="rua" required>
+          </div>
+        </div>
+
+        <div class="grid sm:grid-cols-3 gap-3">
+          <div>
+            <label class="text-sm font-semibold">Número</label>
+            <input class="field mt-1" id="numero" required>
+          </div>
+
+          <div>
+            <label class="text-sm font-semibold">Complemento</label>
+            <input class="field mt-1" id="complemento">
+          </div>
+
+          <div>
+            <label class="text-sm font-semibold">Bairro</label>
+            <input class="field mt-1" id="bairro" required>
+          </div>
+        </div>
+
+        <div class="grid sm:grid-cols-2 gap-3">
+          <div>
+            <label class="text-sm font-semibold">Cidade</label>
+            <input class="field mt-1" id="cidade" required>
+          </div>
+
+          <div>
+            <label class="text-sm font-semibold">Estado</label>
+            <input
+              class="field mt-1"
+              id="estado"
+              required
+              maxlength="2"
+              placeholder="PE"
+            >
+          </div>
+        </div>
+
+        <!-- FRETE DEFINIDO PELO ADMINISTRADOR -->
+        <div id="blocoFrete" class="bg-blue-50 border border-blue-100 rounded-xl p-4">
+          <h3 class="font-bold text-blue-900 mb-2">
+            Frete da sua compra
+          </h3>
+
+          <p class="text-sm text-slate-600">
+            Valor da transportadora:
+            <strong id="freteFormulario">Consultando...</strong>
+          </p>
+
+          <p id="freteAviso" class="text-xs text-slate-500 mt-2" role="status">
+            Consultando a configuração de frete.
+          </p>
+        </div>
+
+        <div>
+          <label class="text-sm font-semibold">
+            Cupom (opcional)
+          </label>
+          <input
+            class="field mt-1"
+            id="cupom"
+            maxlength="50"
+            placeholder="Código do cupom"
+          >
+        </div>
+
+        <div>
+          <label class="text-sm font-semibold">
+            Forma de pagamento
+          </label>
+
+          <select id="forma" class="field mt-1">
+            <option value="pix">Pix</option>
+            <option value="cartao">Cartão de crédito</option>
+            <option value="debito">
+              Cartão de débito (se habilitado no Mercado Pago)
+            </option>
+          </select>
+        </div>
+
+        <div class="pt-2">
+          <label class="flex gap-3 items-start text-sm">
+            <input
+              id="aceite"
+              type="checkbox"
+              required
+              class="mt-1"
+            >
+
+            <span>
+              Confirmo que os dados estão corretos
+              e aceito os termos e a política de privacidade
+              da Loja Tech.
+            </span>
+          </label>
+        </div>
+
+        <button
+          id="submit"
+          class="w-full bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50 text-slate-950 font-extrabold rounded-xl py-4"
+        >
+          Continuar para pagamento
+        </button>
+
+        <p id="message" role="status" class="text-sm text-slate-600"></p>
+      </form>
+    </section>
+
+    <aside class="lg:col-span-2">
+      <div class="bg-white rounded-2xl p-6 shadow-sm sticky top-5">
+
+        <h2 class="font-bold text-lg mb-4">
+          Resumo do pedido
+        </h2>
+
+        <div class="flex justify-between py-2 text-sm">
+          <span>Subtotal</span>
+          <strong id="subtotal">R$ 0,00</strong>
+        </div>
+
+        <div class="flex justify-between py-2 text-sm">
+          <span>Desconto</span>
+          <strong id="discount">R$ 0,00</strong>
+        </div>
+
+        <div class="flex justify-between py-2 text-sm">
+          <span>Frete</span>
+          <strong id="shipping">Consultando...</strong>
+        </div>
+
+        <div class="border-t mt-3 pt-4 flex justify-between text-xl font-extrabold">
+          <span>Total</span>
+          <span id="total">—</span>
+        </div>
+
+        <p class="text-xs text-slate-500 mt-4">
+          O preço final é validado no servidor.
+          Alterações feitas no navegador não alteram
+          o valor cobrado.
+        </p>
+
+        <p id="resumoFreteAviso" class="text-xs text-blue-700 mt-2"></p>
+
+        <div id="cartao" class="hidden mt-5 border-t pt-5">
+          <h3 class="font-bold mb-3">
+            Pagamento seguro com cartão
+          </h3>
+
+          <p class="text-xs text-slate-500 mb-3">
+            As parcelas e os juros são calculados
+            e exibidos pelo Mercado Pago conforme
+            as condições disponíveis.
+          </p>
+
+          <div id="cardPaymentBrick_container"></div>
+
+          <p id="cardStatus" class="text-sm mt-3" role="status"></p>
+        </div>
+
+        <div
+          id="acessoStatusCompra"
+          class="hidden mt-4 p-3 bg-blue-50 rounded-xl text-sm"
+        >
+          <a
+            id="linkStatusCompra"
+            class="font-bold text-blue-700 underline"
+            href="status_compra.html"
+          >
+            Acompanhar pedido em Status da Compra
+          </a>
+        </div>
+
+        <div id="pix" class="hidden mt-5 border-t pt-5">
+          <h3 class="font-bold mb-2">
+            Pagamento Pix
+          </h3>
+
+          <p id="pixStatus" class="text-sm mb-3"></p>
+
+          <img
+            id="qr"
+            class="mx-auto max-w-48 hidden"
+            alt="QR Code Pix"
+          >
+
+          <textarea
+            id="pixCode"
+            readonly
+            class="field mt-3 text-xs min-h-24"
+          ></textarea>
+
+          <button
+            type="button"
+            id="copyPix"
+            class="w-full mt-2 border border-slate-300 rounded-xl py-3 font-bold"
+          >
+            Copiar código Pix
+          </button>
+
+          <button
+            type="button"
+            id="checkStatus"
+            class="w-full mt-2 bg-slate-900 text-white rounded-xl py-3 font-bold"
+          >
+            Consultar pagamento
+          </button>
+        </div>
+
+      </div>
+    </aside>
+  </div>
+</main>
+
+<script>
+'use strict';
+
+const CART_KEY = 'tech_sacola_geral';
+
+const params = new URLSearchParams(location.search);
+
+const affiliateRef =
+  params.get('afiliado') ||
+  params.get('afiliado_ref') ||
+  (
+    params.get('ref') && params.get('ref') !== 'admin'
+      ? params.get('ref')
+      : ''
+  ) ||
+  localStorage.getItem('tech_afiliado_indicador') ||
+  localStorage.getItem('afiliado_ref') ||
+  '';
+
+if (affiliateRef) {
+  localStorage.setItem('tech_afiliado_indicador', affiliateRef);
+  localStorage.setItem('afiliado_ref', affiliateRef);
 }
-$('copyPix').addEventListener('click',async()=>{try{await navigator.clipboard.writeText($('pixCode').value);$('copyPix').textContent='Código copiado!'}catch{$('pixCode').select();document.execCommand('copy')}});
-$('checkStatus').addEventListener('click',async()=>{if(!order)return;try{const r=await fetch(`/api/checkout/${encodeURIComponent(order.pedidoId)}/status`,{headers:{'x-download-token':order.downloadToken}});const d=await r.json();$('pixStatus').textContent=d.status==='pago'?'Pagamento confirmado!':`Situação: ${d.paymentStatus||d.status||'aguardando'}`;if(d.status==='pago'){$('pixStatus').textContent+=' Seu pedido foi aprovado.';localStorage.removeItem(CART_KEY);sessionStorage.removeItem('loja_tech_pedido_pendente');cart=[];render()}}catch{$('pixStatus').textContent='Não foi possível consultar agora.'}});
-init().catch(e=>{$('items').textContent=e.message;$('submit').disabled=true});
-</script></body></html>
+
+const money = n =>
+  Number(n || 0).toLocaleString('pt-BR', {
+    style: 'currency',
+    currency: 'BRL'
+  });
+
+const $ = id => document.getElementById(id);
+
+let cart = [];
+let products = [];
+let order = null;
+let mpBrick = null;
+
+/*
+  FRETE:
+  - Valor configurado pelo administrador.
+  - Aplicado uma vez por pedido com produto físico.
+  - Produtos exclusivamente digitais: R$ 0,00.
+  - O backend deve recalcular o frete e registrar
+    o valor no pedido antes de cobrar.
+*/
+
+let freteConfig = null;
+let freteCarregando = false;
+let freteErro = '';
+
+function escapeHtml(s) {
+  return String(s ?? '').replace(
+    /[&<>"']/g,
+    c => ({
+      '&': '&amp;',
+      '<': '&lt;',
+      '>': '&gt;',
+      '"': '&quot;',
+      "'": '&#39;'
+    }[c])
+  );
+}
+
+function loadCart() {
+  try {
+    const raw = JSON.parse(
+      localStorage.getItem(CART_KEY) || '[]'
+    );
+
+    cart = Array.isArray(raw)
+      ? raw.filter(x => x && x.id).map(x => ({
+          id: String(x.id),
+          qtd: Math.max(
+            1,
+            Math.min(99, parseInt(x.qtd) || 1)
+          )
+        }))
+      : [];
+  } catch {
+    cart = [];
+  }
+}
+
+function itensNormalizados() {
+  return cart.map(c => {
+    const p = products.find(
+      p => String(p.id) === c.id
+    );
+
+    return p
+      ? { ...p, qtd: c.qtd }
+      : null;
+  }).filter(Boolean);
+}
+
+function produtoDigital(p) {
+  /*
+    Adaptar ao campo real do backend, caso necessário.
+    Somente produtos explicitamente digitais
+    recebem isenção de frete.
+  */
+  return (
+    p.tipo === 'digital' ||
+    p.tipo_produto === 'digital' ||
+    p.tipoProduto === 'digital' ||
+    p.digital === true ||
+    p.isDigital === true
+  );
+}
+
+function temProdutoFisico() {
+  return itensNormalizados().some(
+    p => !produtoDigital(p)
+  );
+}
+
+function freteAplicavel() {
+  if (!temProdutoFisico()) {
+    return 0;
+  }
+
+  if (freteConfig === null) {
+    return null;
+  }
+
+  return freteConfig;
+}
+
+function atualizarFreteVisual() {
+  const valor = freteAplicavel();
+  const existeFisico = temProdutoFisico();
+
+  if (!existeFisico) {
+    $('shipping').textContent = money(0);
+    $('freteFormulario').textContent = money(0);
+    $('freteAviso').textContent =
+      'Pedido digital: sem cobrança de frete.';
+    $('resumoFreteAviso').textContent =
+      'Entrega digital: frete grátis.';
+    return;
+  }
+
+  if (valor === null) {
+    $('shipping').textContent = 'Indisponível';
+    $('freteFormulario').textContent = 'Indisponível';
+    $('freteAviso').textContent =
+      freteCarregando
+        ? 'Consultando frete...'
+        : freteErro ||
+          'Não foi possível obter o valor do frete.';
+
+    $('resumoFreteAviso').textContent =
+      'O frete precisa ser confirmado antes do pagamento.';
+    return;
+  }
+
+  $('shipping').textContent = money(valor);
+  $('freteFormulario').textContent = money(valor);
+  $('freteAviso').textContent =
+    'Frete fixo definido pela administração da loja.';
+
+  $('resumoFreteAviso').textContent =
+    'O frete será confirmado pelo servidor ao criar o pedido.';
+}
+
+async function carregarFrete() {
+  freteCarregando = true;
+  freteErro = '';
+  freteConfig = null;
+
+  atualizarFreteVisual();
+
+  try {
+    const r = await fetch('/api/frete/config', {
+      cache: 'no-store',
+      headers: { Accept: 'application/json' }
+    });
+
+    if (!r.ok) {
+      throw Error('Configuração de frete indisponível.');
+    }
+
+    const tipo = r.headers.get('content-type') || '';
+
+    if (!tipo.includes('application/json')) {
+      throw Error('Rota de frete não configurada no servidor.');
+    }
+
+    const d = await r.json();
+    const valor = Number(d.valor);
+
+    if (!Number.isFinite(valor) || valor < 0) {
+      throw Error('Valor de frete inválido no servidor.');
+    }
+
+    freteConfig = Math.round(valor * 100) / 100;
+  } catch (e) {
+    freteErro = e.message;
+    freteConfig = null;
+  } finally {
+    freteCarregando = false;
+    render();
+  }
+}
+
+async function init() {
+  loadCart();
+
+  const r = await fetch('/api/produtos', {
+    cache: 'no-store'
+  });
+
+  if (!r.ok) {
+    throw Error('Não foi possível carregar os produtos.');
+  }
+
+  products = await r.json();
+
+  render();
+  await carregarFrete();
+}
+
+function render() {
+  const normalized = itensNormalizados();
+
+  cart = normalized.map(p => ({
+    id: String(p.id),
+    qtd: p.qtd
+  }));
+
+  const box = $('items');
+
+  if (!cart.length) {
+    box.innerHTML = `
+      <p class="py-8 text-center text-slate-500">
+        Sua sacola está vazia.
+        <a class="text-emerald-700 font-bold" href="/">
+          Voltar à loja
+        </a>
+      </p>
+    `;
+  } else {
+    box.innerHTML = normalized.map(p => `
+      <div class="py-4 flex gap-3 items-center">
+        <img
+          class="w-16 h-16 rounded-xl object-cover bg-slate-100"
+          src="${escapeHtml(p.imagem || '')}"
+          alt=""
+        >
+
+        <div class="flex-1 min-w-0">
+          <p class="font-bold text-sm">
+            ${escapeHtml(p.nome)}
+          </p>
+
+          <p class="text-emerald-700 font-bold">
+            ${money(p.precoPor)}
+          </p>
+
+          <div class="flex gap-3 items-center mt-2">
+            <button
+              type="button"
+              data-id="${escapeHtml(p.id)}"
+              data-delta="-1"
+              class="border rounded px-2"
+            >−</button>
+
+            <span>${p.qtd}</span>
+
+            <button
+              type="button"
+              data-id="${escapeHtml(p.id)}"
+              data-delta="1"
+              class="border rounded px-2"
+            >+</button>
+
+            <button
+              type="button"
+              data-remove="${escapeHtml(p.id)}"
+              class="text-red-600 text-xs ml-2"
+            >
+              Remover
+            </button>
+          </div>
+        </div>
+
+        <strong>
+          ${money(Number(p.precoPor) * p.qtd)}
+        </strong>
+      </div>
+    `).join('');
+  }
+
+  $('count').textContent =
+    `(${cart.reduce((a, x) => a + x.qtd, 0)} itens)`;
+
+  const subtotal = normalized.reduce(
+    (a, p) => a + Number(p.precoPor) * p.qtd,
+    0
+  );
+
+  const frete = freteAplicavel();
+
+  $('subtotal').textContent = money(subtotal);
+  $('discount').textContent = money(0);
+
+  atualizarFreteVisual();
+
+  if (frete === null) {
+    $('total').textContent = 'A confirmar';
+  } else {
+    $('total').textContent = money(subtotal + frete);
+  }
+
+  $('submit').disabled =
+    !cart.length ||
+    (temProdutoFisico() && frete === null);
+}
+
+$('items').addEventListener('click', e => {
+  const b = e.target.closest('button');
+
+  if (!b) return;
+
+  const id = b.dataset.id || b.dataset.remove;
+
+  if (b.dataset.remove !== undefined) {
+    cart = cart.filter(x => x.id !== id);
+  } else if (b.dataset.id) {
+    const x = cart.find(x => x.id === id);
+
+    if (x) {
+      x.qtd = Math.max(
+        0,
+        Math.min(99, x.qtd + Number(b.dataset.delta))
+      );
+    }
+
+    cart = cart.filter(x => x.qtd > 0);
+  }
+
+  localStorage.setItem(CART_KEY, JSON.stringify(cart));
+  render();
+});
+
+$('cep').addEventListener('blur', async () => {
+  const cep = $('cep').value.replace(/\D/g, '');
+
+  if (cep.length !== 8) return;
+
+  try {
+    const r = await fetch(
+      `https://viacep.com.br/ws/${cep}/json/`
+    );
+
+    const d = await r.json();
+
+    if (!d.erro) {
+      $('rua').value = d.logradouro || '';
+      $('bairro').value = d.bairro || '';
+      $('cidade').value = d.localidade || '';
+      $('estado').value = d.uf || '';
+    }
+  } catch {}
+});
+
+$('cpf').addEventListener('input', e => {
+  let v = e.target.value
+    .replace(/\D/g, '')
+    .slice(0, 11);
+
+  v = v
+    .replace(/(\d{3})(\d)/, '$1.$2')
+    .replace(/(\d{3})(\d)/, '$1.$2')
+    .replace(/(\d{3})(\d{1,2})$/, '$1-$2');
+
+  e.target.value = v;
+});
+
+$('checkoutForm').addEventListener('submit', async e => {
+  e.preventDefault();
+
+  if (!cart.length) return;
+
+  if (temProdutoFisico() && freteAplicavel() === null) {
+    $('message').textContent =
+      'Não foi possível confirmar o frete. ' +
+      'Tente novamente antes de finalizar.';
+
+    await carregarFrete();
+    return;
+  }
+
+  const btn = $('submit');
+  const msg = $('message');
+
+  btn.disabled = true;
+  btn.textContent = 'Criando pedido…';
+  msg.textContent = '';
+
+  try {
+    const payload = {
+      itens: cart.map(x => ({
+        produtoId: x.id,
+        quantidade: x.qtd
+      })),
+
+      nome: $('nome').value.trim(),
+      email: $('email').value.trim(),
+      cpf: $('cpf').value,
+      telefone: $('telefone').value.trim(),
+
+      forma: $('forma').value,
+      codigoCupom: $('cupom').value.trim(),
+
+      afiliado: affiliateRef,
+      afiliado_ref: affiliateRef,
+
+      endereco: {
+        cep: $('cep').value,
+        rua: $('rua').value,
+        numero: $('numero').value,
+        complemento: $('complemento').value,
+        bairro: $('bairro').value,
+        cidade: $('cidade').value,
+        estado: $('estado').value
+      }
+    };
+
+    /*
+      Não enviamos um valor de frete como autoridade.
+
+      O servidor deve consultar sua própria configuração,
+      identificar os produtos físicos, calcular o frete
+      e incluí-lo no total cobrado.
+    */
+
+    const r = await fetch('/api/checkout/sacola', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(payload)
+    });
+
+    const d = await r.json();
+
+    if (!r.ok) {
+      throw Error(
+        d.erro || 'Não foi possível criar o pedido.'
+      );
+    }
+
+    /*
+      O backend precisa devolver o frete registrado
+      no pedido e o total final, já com frete.
+    */
+    const freteEsperado = freteAplicavel();
+
+    if (
+      typeof d.frete !== 'number' ||
+      !Number.isFinite(d.frete) ||
+      typeof d.valor !== 'number' ||
+      !Number.isFinite(d.valor)
+    ) {
+      throw Error(
+        'Pedido criado, mas o servidor não retornou ' +
+        'o frete e o total final. ' +
+        'Não tente pagar novamente antes de verificar ' +
+        'o pedido no sistema.'
+      );
+    }
+
+    order = d;
+
+    $('shipping').textContent = money(d.frete);
+    $('freteFormulario').textContent = money(d.frete);
+    $('total').textContent = money(d.valor);
+
+    if (Math.abs(d.frete - freteEsperado) > 0.009) {
+      $('resumoFreteAviso').textContent =
+        'O frete foi atualizado pelo servidor ao criar o pedido.';
+    }
+
+    sessionStorage.setItem(
+      'loja_tech_pedido_pendente',
+      JSON.stringify({
+        pedidoId: d.pedidoId,
+        downloadToken: d.downloadToken,
+        forma: d.forma
+      })
+    );
+
+    sessionStorage.setItem(
+      'loja_tech_acesso_' + d.pedidoId,
+      d.downloadToken
+    );
+
+    $('acessoStatusCompra').classList.remove('hidden');
+
+    $('linkStatusCompra').href =
+      'status_compra.html?pedido=' +
+      encodeURIComponent(d.pedidoId);
+
+    if (d.forma === 'pix') {
+      const pd = await cobrarPedido({});
+
+      $('pix').classList.remove('hidden');
+
+      $('pixStatus').textContent =
+        pd.status === 'approved'
+          ? 'Pagamento aprovado.'
+          : 'Pix gerado. Aguardando confirmação do pagamento.';
+
+      $('pixCode').value = pd.qrCode || '';
+
+      if (pd.qrCodeBase64) {
+        $('qr').src =
+          `data:image/png;base64,${pd.qrCodeBase64}`;
+
+        $('qr').classList.remove('hidden');
+      }
+    } else {
+      $('cartao').classList.remove('hidden');
+
+      const configResponse = await fetch(
+        '/api/pagamento/config'
+      );
+
+      const config = await configResponse.json();
+
+      if (!config.publicKey) {
+        throw Error(
+          'Chave pública do Mercado Pago não configurada.'
+        );
+      }
+
+      if (typeof MercadoPago === 'undefined') {
+        throw Error('SDK do Mercado Pago indisponível.');
+      }
+
+      const mp = new MercadoPago(
+        config.publicKey,
+        { locale: 'pt-BR' }
+      );
+
+      const bricks = mp.bricks();
+
+      mpBrick = await bricks.create(
+        'cardPayment',
+        'cardPaymentBrick_container',
+        {
+          initialization: {
+            amount: Number(d.valor),
+            payer: {
+              email: payload.email
+            }
+          },
+
+          customization: {
+            visual: {
+              style: {
+                theme: 'default'
+              }
+            },
+
+            paymentMethods: {
+              minInstallments: 1,
+              maxInstallments:
+                d.forma === 'debito' ? 1 : 12
+            }
+          },
+
+          callbacks: {
+            onReady: () => {
+              $('cardStatus').textContent =
+                'Preencha os dados do cartão ' +
+                'para concluir o pagamento.';
+            },
+
+            onSubmit: async cardFormData => {
+              try {
+                const data =
+                  cardFormData?.formData || cardFormData;
+
+                const paymentData = {
+                  token: data.token,
+                  payment_method_id: data.payment_method_id,
+                  issuer_id: data.issuer_id,
+                  installments: Number(data.installments)
+                };
+
+                const result = await cobrarPedido(paymentData);
+
+                $('cardStatus').textContent =
+                  `Pagamento enviado. Situação: ` +
+                  `${result.status || 'em análise'}. ` +
+                  `Pedido ${d.pedidoId}.`;
+
+                if (result.status === 'approved') {
+                  localStorage.removeItem(CART_KEY);
+
+                  sessionStorage.removeItem(
+                    'loja_tech_pedido_pendente'
+                  );
+
+                  cart = [];
+                  render();
+                }
+              } catch (err) {
+                $('cardStatus').textContent = err.message;
+                throw err;
+              }
+            },
+
+            onError: err => {
+              $('cardStatus').textContent =
+                'Erro no formulário seguro do cartão. ' +
+                'Verifique os dados ou tente novamente.';
+
+              console.error(err);
+            }
+          }
+        }
+      );
+    }
+
+    msg.textContent =
+      `Pedido ${d.pedidoId} criado. ` +
+      `Frete: ${money(d.frete)}. ` +
+      `Total: ${money(d.valor)}. ` +
+      `Mantenha o identificador para consultar o pagamento.`;
+
+    if (d.forma === 'pix') {
+      $('submit').disabled = true;
+      btn.textContent = 'Pedido criado';
+    } else {
+      $('submit').disabled = true;
+      btn.textContent = 'Finalize no formulário de cartão';
+    }
+
+  } catch (err) {
+    msg.textContent = err.message;
+
+    /*
+      Se o servidor já criou um pedido, não permitir
+      criar outro automaticamente ao tentar novamente.
+    */
+    if (order) {
+      btn.disabled = true;
+      btn.textContent = 'Pedido já criado';
+    } else {
+      btn.disabled = false;
+      btn.textContent = 'Continuar para pagamento';
+    }
+  }
+});
+
+async function cobrarPedido(paymentData) {
+  if (!order) {
+    throw Error('Pedido não criado.');
+  }
+
+  const r = await fetch(
+    `/api/checkout/${encodeURIComponent(order.pedidoId)}/pagar`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-download-token': order.downloadToken
+      },
+      body: JSON.stringify({ paymentData })
+    }
+  );
+
+  const d = await r.json();
+
+  if (!r.ok) {
+    throw Error(
+      d.erro || 'Falha ao processar o pagamento.'
+    );
+  }
+
+  return d;
+}
+
+$('copyPix').addEventListener('click', async () => {
+  try {
+    await navigator.clipboard.writeText(
+      $('pixCode').value
+    );
+
+    $('copyPix').textContent = 'Código copiado!';
+  } catch {
+    $('pixCode').select();
+    document.execCommand('copy');
+  }
+});
+
+$('checkStatus').addEventListener('click', async () => {
+  if (!order) return;
+
+  try {
+    const r = await fetch(
+      `/api/checkout/${encodeURIComponent(order.pedidoId)}/status`,
+      {
+        headers: {
+          'x-download-token': order.downloadToken
+        }
+      }
+    );
+
+    const d = await r.json();
+
+    $('pixStatus').textContent =
+      d.status === 'pago'
+        ? 'Pagamento confirmado!'
+        : `Situação: ${
+            d.paymentStatus || d.status || 'aguardando'
+          }`;
+
+    if (d.status === 'pago') {
+      $('pixStatus').textContent +=
+        ' Seu pedido foi aprovado.';
+
+      localStorage.removeItem(CART_KEY);
+
+      sessionStorage.removeItem(
+        'loja_tech_pedido_pendente'
+      );
+
+      cart = [];
+      render();
+    }
+  } catch {
+    $('pixStatus').textContent =
+      'Não foi possível consultar agora.';
+  }
+});
+
+init().catch(e => {
+  $('items').textContent = e.message;
+  $('submit').disabled = true;
+});
+</script>
+
+</body>
+</html>

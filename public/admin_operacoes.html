@@ -1,6 +1,528 @@
-<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Operações | Tech Store</title><style>body{font-family:system-ui;background:#f3f6fb;color:#203348;margin:0}header{background:#063e70;color:white;padding:18px}main{max-width:960px;margin:auto;padding:20px}section{background:white;padding:20px;border-radius:15px;margin:18px 0;box-shadow:0 3px 15px #0001}input,select,button{padding:11px;margin:5px;border-radius:8px;border:1px solid #bbcbd9}button{background:#075eaa;color:white;cursor:pointer}.red{color:#c42635}table{width:100%;border-collapse:collapse}td,th{padding:8px;text-align:left;border-bottom:1px solid #e5e9ef}.scroll{overflow:auto}a{color:#075eaa}</style></head><body><header>TECH STORE — Operações exclusivas do administrador</header><main><a href="index.html">← Voltar à loja</a><p id="aviso">Autenticação administrativa obrigatória. Os dados de custo não são públicos.</p>
-<section><h2>Fornecedores</h2><p class="red"><b>Valores devidos são os custos cadastrados na edição de produtos.</b> A Central já é calculada sobre o lucro após custos; não desconte duas vezes.</p><div class="scroll"><table><thead><tr><th>Pedido</th><th>Produto</th><th>Custo devido</th><th>Situação</th><th>Ação</th></tr></thead><tbody id="fornecedores"></tbody></table></div></section>
-<section><h2>Prazo de entrega</h2><label>Dias corridos: <input id="dias" type="number" min="1" max="365"></label><button id="salvarPrazo">Salvar prazo</button><p>Novos pedidos recebem uma cópia do prazo vigente.</p></section>
-<section><h2>Categorias</h2><input id="categoria" maxlength="80" placeholder="Nome da categoria"><button id="addCategoria">Adicionar</button><ul id="categorias"></ul></section>
-<section><h2>Rastreamento de pedido</h2><form id="formEntrega"><input id="pedido" placeholder="ID do pedido" required><select id="status"><option value="preparando">Em preparação</option><option value="postado">Postado</option><option value="em_transporte">Em transporte</option><option value="saiu_para_entrega">Saiu para entrega</option><option value="entregue">Entregue</option><option value="ocorrencia">Ocorrência</option><option value="cancelado">Cancelado</option></select><input id="transportadora" placeholder="Transportadora"><input id="rastreio" placeholder="Código de rastreio"><input id="descricao" placeholder="Observação"><button>Salvar rastreamento</button></form></section>
-</main><script>'use strict';const $=id=>document.getElementById(id),brl=n=>new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(Number(n)||0);const token=localStorage.getItem('tech_token');async function api(method,url,body){const r=await fetch(url,{method,headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},body:body?JSON.stringify(body):undefined,cache:'no-store'});const j=await r.json();if(!r.ok)throw Error(j.erro||'Falha na operação');return j}function msg(s){$('aviso').textContent=s}async function carregar(){try{const [pedidos,prazo,categorias]=await Promise.all([api('GET','/api/admin/fornecedores/pedidos'),api('GET','/api/admin/prazo-entrega'),api('GET','/api/categorias')]);$('dias').value=prazo.dias;$('fornecedores').replaceChildren();pedidos.forEach(p=>{const tr=document.createElement('tr');[p.id,p.produto_nome,brl(p.custo_total),p.fornecedor_status].forEach(v=>{const td=document.createElement('td');td.textContent=v;tr.append(td)});const td=document.createElement('td');if(p.fornecedor_status==='PENDENTE'){const b=document.createElement('button');b.textContent='Registrar repasse pago';b.onclick=async()=>{if(!confirm('Confirma que o repasse ao fornecedor já foi efetuado?'))return;try{await api('POST','/api/admin/fornecedores/'+encodeURIComponent(p.id)+'/pagar');await carregar()}catch(e){msg(e.message)}};td.append(b)}tr.append(td);$('fornecedores').append(tr)});$('categorias').replaceChildren();categorias.forEach(c=>{const li=document.createElement('li');li.textContent=c.nome+' ';const b=document.createElement('button');b.textContent='Excluir';b.onclick=async()=>{if(!confirm('Excluir categoria?'))return;try{await api('DELETE','/api/admin/categorias/'+c.id);await carregar()}catch(e){msg(e.message)}};li.append(b);$('categorias').append(li)});msg('Dados administrativos atualizados.')}catch(e){msg('Acesso negado ou falha: '+e.message)}}$('salvarPrazo').onclick=async()=>{try{await api('PUT','/api/admin/prazo-entrega',{dias:Number($('dias').value)});msg('Prazo salvo')}catch(e){msg(e.message)}};$('addCategoria').onclick=async()=>{try{await api('POST','/api/admin/categorias',{nome:$('categoria').value.trim()});$('categoria').value='';await carregar()}catch(e){msg(e.message)}};$('formEntrega').onsubmit=async e=>{e.preventDefault();try{await api('PUT','/api/admin/pedidos/'+encodeURIComponent($('pedido').value.trim())+'/entrega',{status:$('status').value,transportadora:$('transportadora').value,codigoRastreio:$('rastreio').value,descricao:$('descricao').value});msg('Entrega atualizada')}catch(e){msg(e.message)}};if(token)carregar();else msg('Faça login como administrador na loja antes de abrir esta página.');</script></body></html>
+
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Operações | Tech Store</title>
+<style>
+  body {
+    font-family: system-ui, sans-serif;
+    background: #f3f6fb;
+    color: #203348;
+    margin: 0;
+  }
+  header {
+    background: #063e70;
+    color: white;
+    padding: 18px;
+    font-weight: 800;
+  }
+  main {
+    max-width: 960px;
+    margin: auto;
+    padding: 20px;
+  }
+  section {
+    background: white;
+    padding: 20px;
+    border-radius: 15px;
+    margin: 18px 0;
+    box-shadow: 0 3px 15px #0001;
+  }
+  input, select, button {
+    padding: 11px;
+    margin: 5px;
+    border-radius: 8px;
+    border: 1px solid #bbcbd9;
+  }
+  button {
+    background: #075eaa;
+    color: white;
+    cursor: pointer;
+  }
+  button:disabled {
+    opacity: .5;
+    cursor: not-allowed;
+  }
+  .red { color: #c42635; }
+  .muted { color: #66788b; font-size: 13px; }
+  .success { color: #137a48; }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+  td, th {
+    padding: 8px;
+    text-align: left;
+    border-bottom: 1px solid #e5e9ef;
+  }
+  .scroll { overflow: auto; }
+  a { color: #075eaa; }
+  .valor-frete {
+    font-size: 24px;
+    font-weight: 800;
+    color: #075eaa;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  TECH STORE — Operações exclusivas do administrador
+</header>
+
+<main>
+  <a href="index.html">← Voltar à loja</a>
+
+  <p id="aviso" role="status">
+    Autenticação administrativa obrigatória.
+    Os dados de custo não são públicos.
+  </p>
+
+  <section>
+    <h2>Fornecedores</h2>
+
+    <p class="red">
+      <b>
+        Valores devidos são os custos cadastrados
+        na edição de produtos.
+      </b>
+      A Central já é calculada sobre o lucro após custos;
+      não desconte duas vezes.
+    </p>
+
+    <div class="scroll">
+      <table>
+        <thead>
+          <tr>
+            <th>Pedido</th>
+            <th>Produto</th>
+            <th>Custo devido</th>
+            <th>Situação</th>
+            <th>Ação</th>
+          </tr>
+        </thead>
+        <tbody id="fornecedores"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section>
+    <h2>Prazo de entrega</h2>
+
+    <label for="dias">
+      Dias corridos:
+    </label>
+
+    <input
+      id="dias"
+      type="number"
+      min="1"
+      max="365"
+      step="1"
+    >
+
+    <button id="salvarPrazo" type="button">
+      Salvar prazo
+    </button>
+
+    <p class="muted">
+      Novos pedidos recebem uma cópia do prazo vigente.
+    </p>
+  </section>
+
+  <!-- NOVA IMPLEMENTAÇÃO: FRETE FIXO -->
+  <section>
+    <h2>Frete a pagar</h2>
+
+    <p>
+      Defina o valor fixo de frete que será apresentado
+      ao cliente no checkout da sacola.
+    </p>
+
+    <p class="muted">
+      O valor será aplicado uma única vez por pedido
+      que contenha produtos físicos.
+      Pedidos exclusivamente digitais não terão frete.
+    </p>
+
+    <form id="formFrete">
+      <label for="valorFrete">
+        Valor do frete (R$)
+      </label>
+
+      <input
+        id="valorFrete"
+        type="text"
+        inputmode="decimal"
+        placeholder="Ex.: 19,90"
+        maxlength="20"
+        required
+      >
+
+      <button id="salvarFrete" type="submit">
+        Salvar frete
+      </button>
+    </form>
+
+    <p>
+      Frete atualmente configurado:
+      <span id="freteAtual" class="valor-frete">
+        Aguardando consulta...
+      </span>
+    </p>
+
+    <p id="mensagemFrete" role="status" class="muted"></p>
+
+    <p class="muted">
+      O frete precisa ser salvo no servidor e no Neon.
+      O checkout não deve confiar em valores alterados
+      pelo navegador do cliente.
+    </p>
+  </section>
+
+  <section>
+    <h2>Categorias</h2>
+
+    <input
+      id="categoria"
+      maxlength="80"
+      placeholder="Nome da categoria"
+    >
+
+    <button id="addCategoria" type="button">
+      Adicionar
+    </button>
+
+    <ul id="categorias"></ul>
+  </section>
+
+  <section>
+    <h2>Rastreamento de pedido</h2>
+
+    <form id="formEntrega">
+      <input
+        id="pedido"
+        placeholder="ID do pedido"
+        required
+      >
+
+      <select id="status">
+        <option value="preparando">Em preparação</option>
+        <option value="postado">Postado</option>
+        <option value="em_transporte">Em transporte</option>
+        <option value="saiu_para_entrega">Saiu para entrega</option>
+        <option value="entregue">Entregue</option>
+        <option value="ocorrencia">Ocorrência</option>
+        <option value="cancelado">Cancelado</option>
+      </select>
+
+      <input
+        id="transportadora"
+        placeholder="Transportadora"
+      >
+
+      <input
+        id="rastreio"
+        placeholder="Código de rastreio"
+      >
+
+      <input
+        id="descricao"
+        placeholder="Observação"
+      >
+
+      <button type="submit">
+        Salvar rastreamento
+      </button>
+    </form>
+  </section>
+</main>
+
+<script>
+'use strict';
+
+const $ = id => document.getElementById(id);
+
+const brl = n =>
+  new Intl.NumberFormat('pt-BR', {
+    style: 'currency',
+    currency: 'BRL'
+  }).format(Number(n) || 0);
+
+const token = localStorage.getItem('tech_token');
+
+function msg(s) {
+  $('aviso').textContent = s;
+}
+
+async function api(method, url, body) {
+  if (!token) {
+    throw Error('Faça login como administrador.');
+  }
+
+  const r = await fetch(url, {
+    method,
+    headers: {
+      Authorization: 'Bearer ' + token,
+      'Content-Type': 'application/json'
+    },
+    body: body !== undefined
+      ? JSON.stringify(body)
+      : undefined,
+    cache: 'no-store'
+  });
+
+  const tipo = r.headers.get('content-type') || '';
+
+  if (!tipo.includes('application/json')) {
+    throw Error(
+      'O servidor não retornou JSON. Verifique a rota ' + url
+    );
+  }
+
+  const j = await r.json();
+
+  if (!r.ok) {
+    throw Error(j.erro || j.message || 'Falha na operação');
+  }
+
+  return j;
+}
+
+function interpretarValorBR(valor) {
+  let texto = String(valor).trim()
+    .replace(/^R\$\s*/i, '')
+    .replace(/\s/g, '');
+
+  if (!texto) {
+    throw Error('Informe o valor do frete.');
+  }
+
+  if (texto.includes(',')) {
+    texto = texto.replace(/\./g, '').replace(',', '.');
+  }
+
+  if (!/^\d+(\.\d{1,2})?$/.test(texto)) {
+    throw Error('Digite um valor válido, como 19,90.');
+  }
+
+  const numero = Number(texto);
+
+  if (!Number.isFinite(numero) || numero > 999999.99) {
+    throw Error('Valor de frete inválido.');
+  }
+
+  return Math.round(numero * 100) / 100;
+}
+
+async function carregarFrete() {
+  const dados = await api(
+    'GET',
+    '/api/admin/frete/config'
+  );
+
+  const valor = Number(dados.valor);
+
+  if (!Number.isFinite(valor) || valor < 0) {
+    throw Error('O servidor retornou um frete inválido.');
+  }
+
+  $('valorFrete').value = valor.toFixed(2).replace('.', ',');
+  $('freteAtual').textContent = brl(valor);
+  $('mensagemFrete').textContent = 'Configuração carregada.';
+}
+
+async function carregar() {
+  try {
+    const [pedidos, prazo, categorias] = await Promise.all([
+      api('GET', '/api/admin/fornecedores/pedidos'),
+      api('GET', '/api/admin/prazo-entrega'),
+      api('GET', '/api/categorias')
+    ]);
+
+    $('dias').value = prazo.dias;
+    $('fornecedores').replaceChildren();
+
+    pedidos.forEach(p => {
+      const tr = document.createElement('tr');
+
+      [
+        p.id,
+        p.produto_nome,
+        brl(p.custo_total),
+        p.fornecedor_status
+      ].forEach(v => {
+        const td = document.createElement('td');
+        td.textContent = v;
+        tr.append(td);
+      });
+
+      const td = document.createElement('td');
+
+      if (p.fornecedor_status === 'PENDENTE') {
+        const b = document.createElement('button');
+        b.textContent = 'Registrar repasse pago';
+
+        b.onclick = async () => {
+          if (!confirm(
+            'Confirma que o repasse ao fornecedor já foi efetuado?'
+          )) return;
+
+          try {
+            await api(
+              'POST',
+              '/api/admin/fornecedores/' +
+              encodeURIComponent(p.id) + '/pagar'
+            );
+
+            await carregar();
+          } catch (e) {
+            msg(e.message);
+          }
+        };
+
+        td.append(b);
+      }
+
+      tr.append(td);
+      $('fornecedores').append(tr);
+    });
+
+    $('categorias').replaceChildren();
+
+    categorias.forEach(c => {
+      const li = document.createElement('li');
+      li.textContent = c.nome + ' ';
+
+      const b = document.createElement('button');
+      b.textContent = 'Excluir';
+
+      b.onclick = async () => {
+        if (!confirm('Excluir categoria?')) return;
+
+        try {
+          await api(
+            'DELETE',
+            '/api/admin/categorias/' + encodeURIComponent(c.id)
+          );
+
+          await carregar();
+        } catch (e) {
+          msg(e.message);
+        }
+      };
+
+      li.append(b);
+      $('categorias').append(li);
+    });
+
+    msg('Dados administrativos atualizados.');
+  } catch (e) {
+    msg('Acesso negado ou falha: ' + e.message);
+  }
+
+  try {
+    await carregarFrete();
+  } catch (e) {
+    $('freteAtual').textContent = 'Não disponível';
+    $('mensagemFrete').textContent =
+      'Não foi possível consultar o frete: ' + e.message;
+  }
+}
+
+$('salvarPrazo').onclick = async () => {
+  try {
+    await api(
+      'PUT',
+      '/api/admin/prazo-entrega',
+      { dias: Number($('dias').value) }
+    );
+
+    msg('Prazo salvo.');
+  } catch (e) {
+    msg(e.message);
+  }
+};
+
+$('formFrete').onsubmit = async e => {
+  e.preventDefault();
+
+  const botao = $('salvarFrete');
+  const mensagem = $('mensagemFrete');
+
+  try {
+    const valor = interpretarValorBR($('valorFrete').value);
+
+    botao.disabled = true;
+    mensagem.textContent = 'Salvando frete...';
+
+    await api(
+      'PUT',
+      '/api/admin/frete/config',
+      { valor }
+    );
+
+    await carregarFrete();
+
+    mensagem.textContent =
+      'Frete salvo com sucesso. Valor: ' + brl(valor);
+  } catch (e) {
+    mensagem.textContent =
+      'Não foi possível salvar: ' + e.message;
+  } finally {
+    botao.disabled = false;
+  }
+};
+
+$('addCategoria').onclick = async () => {
+  try {
+    await api(
+      'POST',
+      '/api/admin/categorias',
+      { nome: $('categoria').value.trim() }
+    );
+
+    $('categoria').value = '';
+    await carregar();
+  } catch (e) {
+    msg(e.message);
+  }
+};
+
+$('formEntrega').onsubmit = async e => {
+  e.preventDefault();
+
+  try {
+    await api(
+      'PUT',
+      '/api/admin/pedidos/' +
+      encodeURIComponent($('pedido').value.trim()) +
+      '/entrega',
+      {
+        status: $('status').value,
+        transportadora: $('transportadora').value,
+        codigoRastreio: $('rastreio').value,
+        descricao: $('descricao').value
+      }
+    );
+
+    msg('Entrega atualizada.');
+  } catch (e) {
+    msg(e.message);
+  }
+};
+
+if (token) {
+  carregar();
+} else {
+  msg(
+    'Faça login como administrador na loja antes de abrir esta página.'
+  );
+  $('freteAtual').textContent = 'Acesso restrito';
+}
+</script>
+
+</body>
+</html>
