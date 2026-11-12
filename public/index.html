@@ -256,6 +256,7 @@
                         <i class="fa-solid fa-handshake mr-1.5 text-green-600"></i> Afilie-se
                     </a>
 
+                    <a href="status_compra.html" class="px-4 py-2 text-xs font-bold uppercase text-white bg-blue-700 rounded-xl hover:bg-blue-800 transition flex items-center gap-2"><i class="fa-solid fa-clipboard-check"></i> Status da Compra</a>
                     <!-- BOTÃO DA SACOLA INTEGRADO DIRETAMENTE AO CHECKOUT DA SACOLA -->
                     <button onclick="window.location.href='checkout_sacola.html'" class="relative px-4 py-2 text-xs font-bold uppercase tracking-wider text-slate-800 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 transition shadow-sm flex items-center gap-2">
                         <i class="fa-solid fa-bag-shopping text-emerald-600 text-sm"></i>
@@ -292,6 +293,7 @@
                         <span>Minha Sacola</span>
                         <i class="fa-solid fa-bag-shopping"></i>
                     </a>
+                    <a href="status_compra.html" onclick="fecharMenuMobile()" class="block rounded-xl px-4 py-3 text-sm font-bold text-blue-700 hover:bg-blue-50"><i class="fa-solid fa-clipboard-check mr-2"></i>Status da Compra</a>
                     <a id="mobileLinkAfiliase" href="#afiliase" onclick="fecharMenuMobile()" class="block rounded-xl px-4 py-3 text-sm font-bold text-slate-700 hover:bg-slate-50">Solicitar Afiliação</a>
                     <a id="mobileLinkAreaAfiliado" href="afiliado.html" onclick="fecharMenuMobile()" class="hidden rounded-xl px-4 py-3 text-sm font-bold text-orange-700 hover:bg-orange-50">Área do Afiliado</a>
                     <button id="mobileBtnGerenciaAfiliados" type="button" onclick="fecharMenuMobile(); solicitarSenhaGerenciaAfiliados()" class="hidden w-full rounded-xl px-4 py-3 text-left text-sm font-bold text-emerald-700 hover:bg-emerald-50">Gerência de Afiliados</button>
@@ -480,6 +482,7 @@
                 <button type="button" id="tabEditar" onclick="setModoLojista('editar')" class="flex-1 py-2 text-xs font-bold rounded-lg text-slate-500 hover:text-slate-900"><i class="fa-solid fa-pen-to-square mr-1"></i> Editar</button>
             </div>
             
+            <a href="admin_operacoes.html" class="inline-block mb-4 px-4 py-3 bg-red-50 text-red-700 rounded-xl text-xs font-black">Gestão de fornecedores, categorias e entregas (Administrador)</a>
             <form id="formLojista" onsubmit="salvarProdutoLojista(event)" class="space-y-4 text-xs font-semibold text-slate-700">
                 <input type="hidden" id="editIndex" value="-1">
 
@@ -503,10 +506,11 @@
                     <textarea id="p_desc" required rows="2" placeholder="Módulos do software..." class="w-full px-4 py-3 rounded-xl border border-slate-200 outline-none"></textarea>
                 </div>
 
+                <div><label class="block mb-1 uppercase tracking-wider">Categoria do produto</label><input id="p_categoria" list="categoriasDisponiveis" placeholder="Ex.: Softwares" class="w-full px-4 py-3 rounded-xl border border-slate-200"><datalist id="categoriasDisponiveis"></datalist><p class="text-[10px] text-slate-500">Cadastre categorias no painel de Operações administrativas.</p></div>
                 <div class="grid grid-cols-3 gap-3">
                     <div>
                         <label class="block mb-1 uppercase tracking-wider text-slate-400">Custo (R$)</label>
-                        <input type="number" step="0.01" id="p_custo" required placeholder="10.00" class="w-full px-3 py-3 rounded-xl border border-slate-200 bg-slate-50 outline-none">
+                        <input type="number" min="0" step="0.01" title="Valor devido ao fornecedor por unidade; reservado somente ao administrador" id="p_custo" required placeholder="10.00" class="w-full px-3 py-3 rounded-xl border border-slate-200 bg-slate-50 outline-none">
                     </div>
                     <div>
                         <label class="block mb-1 uppercase tracking-wider text-slate-500">Preço De (R$)</label>
@@ -1122,6 +1126,8 @@
         }
 
         let categoriaAtivaLoja = 'Todos';
+        let categoriasCadastradasLoja = [];
+        fetch('/api/categorias').then(r => r.ok ? r.json() : []).then(lista => { categoriasCadastradasLoja = Array.isArray(lista) ? lista.map(c=>c.nome) : []; const d=document.getElementById('categoriasDisponiveis');if(d)d.replaceChildren(...categoriasCadastradasLoja.map(nome=>{const o=document.createElement('option');o.value=nome;return o}));renderizarProdutos(); }).catch(()=>{});
         function categoriaDoProdutoLoja(p) {
             const explicita = String(p.categoria || p.category || '').trim();
             if (explicita) return explicita;
@@ -1143,7 +1149,7 @@
             const labelCount = document.getElementById('qtdProdutosLabel');
             
             grid.innerHTML = '';
-            const categorias = ['Todos', ...new Set(produtos.map(categoriaDoProdutoLoja))];
+            const categorias = ['Todos', ...new Set([...categoriasCadastradasLoja,...produtos.map(categoriaDoProdutoLoja)])];
             if (!categorias.includes(categoriaAtivaLoja)) categoriaAtivaLoja = 'Todos';
             const lista = document.getElementById('listaCategoriasLoja');
             if (lista) lista.innerHTML = categorias.map(c => `<button type="button" class="tech-cat-btn ${c === categoriaAtivaLoja ? 'ativa' : ''}" onclick="selecionarCategoriaLoja(decodeURIComponent('${encodeURIComponent(c)}'))"><i class="fa-solid ${c === 'Todos' ? 'fa-border-all' : 'fa-tag'}"></i>${esc(c)}</button>`).join('');
@@ -1452,6 +1458,7 @@
             document.getElementById('p_nome').value = p.nome;
             document.getElementById('p_desc').value = p.desc;
             document.getElementById('p_custo').value = p.custo;
+            document.getElementById('p_categoria').value = p.categoria || '';
             document.getElementById('p_preco_de').value = p.precoDe;
             document.getElementById('p_preco_por').value = p.precoPor;
             document.getElementById('p_max_parcelas_sem_juros').value = p.maxParcelasSemJuros ?? 1;
@@ -1482,6 +1489,7 @@
             const maxParcelasSemJuros = parseInt(document.getElementById('p_max_parcelas_sem_juros').value, 10);
             const imagem = document.getElementById('p_imagem').value.trim();
             const pdf = document.getElementById('p_pdf').value.trim();
+            const categoria = document.getElementById('p_categoria').value.trim();
             const repasseJurosComprador = document.getElementById('p_repasse_juros').checked;
 
             if (!Number.isInteger(maxParcelasSemJuros) || maxParcelasSemJuros < 0 || maxParcelasSemJuros > 12) {
@@ -1490,10 +1498,10 @@
             }
 
             if (editIdx >= 0) {
-                produtos[editIdx] = { ...produtos[editIdx], id, nome, desc, custo, precoDe, precoPor, imagem, pdf, repasseJurosComprador, maxParcelasSemJuros };
+                produtos[editIdx] = { ...produtos[editIdx], id, nome, desc, custo, precoDe, precoPor, imagem, pdf, categoria, repasseJurosComprador, maxParcelasSemJuros };
                 alert("Produto atualizado!");
             } else {
-                produtos.push({ id, nome, desc, custo, precoDe, precoPor, imagem, pdf, repasseJurosComprador, maxParcelasSemJuros });
+                produtos.push({ id, nome, desc, custo, precoDe, precoPor, imagem, pdf, categoria, repasseJurosComprador, maxParcelasSemJuros });
                 alert("Produto criado!");
             }
 

@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Área do Afiliado - Tech Software</title>
     <!-- Tailwind CSS CDN -->
+
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- Font Awesome Icons -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
@@ -50,6 +51,8 @@
     </style>
 </head>
 <body class="bg-slate-100 text-slate-800 font-sans antialiased min-h-screen flex flex-col justify-between text-sm">
+<section id="cardFornecedorAdmin" class="hidden max-w-6xl mx-auto my-6 p-6 bg-red-50 border-2 border-red-200 rounded-3xl"><p class="text-red-700 uppercase font-black">Total a pagar aos fornecedores (admin)</p><p id="dashFornecedorAdmin" class="text-3xl font-black text-red-600 mt-3">R$ 0,00</p><a href="admin_operacoes.html" class="text-red-700 underline text-sm font-bold">Gerenciar repasses</a></section>
+
 
     <!-- CABEÇALHO -->
     <header class="fixed top-0 left-0 w-full z-40 glass-header border-b border-slate-200">
@@ -716,6 +719,8 @@
             document.getElementById('dashVendasDiretas').innerText = brl(r.faturado);
             document.getElementById('subCard1').innerText = `${r.vendasPagas} venda(s) confirmada(s)`;
 
+            const fc=document.getElementById('cardFornecedorAdmin');
+            if(fc){fc.classList.remove('hidden');document.getElementById('dashFornecedorAdmin').innerText=brl(r.fornecedoresPendentes||0);}
             document.getElementById('lblCard2').innerText = 'A Central Fica com';
             document.getElementById('dashComissaoRede').innerText = brl(r.comissaoCentral);
             document.getElementById('subCard2').innerText = `${r.totalAfiliados} afiliado(s) em ${r.geracoes} geração(ões)`;

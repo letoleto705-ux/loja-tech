@@ -403,6 +403,17 @@ async function iniciarBanco() {
   await q('ALTER TABLE pedido_itens ADD COLUMN IF NOT EXISTS custo_unitario numeric(12,2) NOT NULL DEFAULT 0');
   await q('ALTER TABLE pedido_itens ADD COLUMN IF NOT EXISTS custo_total numeric(12,2) NOT NULL DEFAULT 0');
   await q('ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS custo_total numeric(12,2) NOT NULL DEFAULT 0');
+  await q("ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS entrega_status text NOT NULL DEFAULT 'preparando'");
+  await q("ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS transportadora text NOT NULL DEFAULT ''");
+  await q("ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS codigo_rastreio text NOT NULL DEFAULT ''");
+  await q('ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS prazo_entrega_dias integer');
+  await q("ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS fornecedor_status text NOT NULL DEFAULT 'PENDENTE'");
+  await q('ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS fornecedor_pago_em timestamptz');
+  await q('ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS previsao_entrega date');
+  await q("ALTER TABLE pedido_itens ADD COLUMN IF NOT EXISTS tipo_produto text NOT NULL DEFAULT 'fisico'");
+  await q(`CREATE TABLE IF NOT EXISTS categorias_loja (id bigserial PRIMARY KEY, nome text NOT NULL UNIQUE, criado_em timestamptz NOT NULL DEFAULT now())`);
+  await q(`CREATE TABLE IF NOT EXISTS historico_entrega (id bigserial PRIMARY KEY, pedido_id text NOT NULL REFERENCES pedidos(id) ON DELETE CASCADE, status text NOT NULL, descricao text NOT NULL DEFAULT '', criado_em timestamptz NOT NULL DEFAULT now())`);
+
   await q('ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS lucro_bruto numeric(12,2) NOT NULL DEFAULT 0');
   await q("ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS cliente_telefone text NOT NULL DEFAULT ''");
   await q("ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS endereco_entrega jsonb NOT NULL DEFAULT '{}'::jsonb");
@@ -734,11 +745,12 @@ app.get('/api/rede', auth, wrap(async (req, res) => {
         COALESCE(sum(comissao), 0) AS vend, COALESCE(sum(comissao_patrocinador), 0) AS pat,
         COALESCE(sum(comissao_avo), 0) AS avo, COALESCE(sum(comissao_central), 0) AS cen
       FROM pedidos WHERE status = 'pago'`)).rows[0];
+    const fornecedor=(await q("SELECT COALESCE(sum(custo_total),0) total, COALESCE(sum(custo_total) FILTER(WHERE fornecedor_status='PENDENTE'),0) pendente FROM pedidos WHERE status='pago'")).rows[0];
     return res.json({
       visao: 'admin', taxas, afiliados: arvore, valorMinimoSaque,
       calendarioSaque,
       resumo: {
-        vendasPagas: t.qtd, faturado: dinheiro(t.faturado), comissaoCentral: dinheiro(t.cen),
+        vendasPagas: t.qtd, faturado: dinheiro(t.faturado), comissaoCentral: dinheiro(t.cen), fornecedoresTotal: dinheiro(fornecedor.total), fornecedoresPendentes: dinheiro(fornecedor.pendente),
         totalADistribuir: dinheiro(Number(t.vend) + Number(t.pat) + Number(t.avo)), totalAfiliados: lista.length,
         geracoes: arvore.reduce((m, a) => Math.max(m, a.nivel), 0)
       }
@@ -974,7 +986,7 @@ app.post('/api/checkout/sacola', limitarTentativas, wrap(async (req, res) => {
     if (!Number.isFinite(preco) || preco < 0) return res.status(400).json({ erro: 'Preço de produto inválido.' });
     const custo = Number(produto.custo);
     if (!Number.isFinite(custo) || custo < 0) return res.status(400).json({ erro: 'Custo de aquisição do produto inválido ou não cadastrado.' });
-    itens.push({ id: String(produto.id), nome: txt(produto.nome, 180), quantidade, preco, custo: dinheiro(custo), imagem: txt(produto.imagem, 500) });
+    itens.push({ id: String(produto.id), nome: txt(produto.nome, 180), quantidade, preco, custo: dinheiro(custo), imagem: txt(produto.imagem, 500), tipo: produto.tipo === 'digital' || produto.tipo === 'software' || !!produto.pdf ? 'digital' : 'fisico' });
   }
   const valorOriginal = dinheiro(itens.reduce((s, i) => s + i.preco * i.quantidade, 0));
   if (valorOriginal <= 0) return res.status(400).json({ erro: 'O total do pedido deve ser maior que zero.' });
@@ -1013,10 +1025,12 @@ app.post('/api/checkout/sacola', limitarTentativas, wrap(async (req, res) => {
     for (const item of itens) {
       const subtotal = dinheiro(item.preco * item.quantidade);
       await client.query(`INSERT INTO pedido_itens
-        (pedido_id, produto_id, produto_nome, quantidade, preco_unitario, subtotal, imagem, custo_unitario, custo_total)
-        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
-        [pedidoId, item.id, item.nome, item.quantidade, item.preco, subtotal, item.imagem, item.custo, dinheiro(item.custo * item.quantidade)]);
+        (pedido_id, produto_id, produto_nome, quantidade, preco_unitario, subtotal, imagem, custo_unitario, custo_total, tipo_produto)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+        [pedidoId, item.id, item.nome, item.quantidade, item.preco, subtotal, item.imagem, item.custo, dinheiro(item.custo * item.quantidade), item.tipo]);
     }
+    const prazo = Number(await lerConfig('prazoEntregaDias',15));
+    await client.query('UPDATE pedidos SET prazo_entrega_dias=$2, previsao_entrega=CURRENT_DATE + $2::integer WHERE id=$1',[pedidoId,prazo]);
     await client.query('COMMIT');
   } catch (err) {
     await client.query('ROLLBACK'); throw err;
@@ -1298,6 +1312,34 @@ async function sincronizarPagamentoMercadoPago(idPagamento, pagamentoRecebido, p
   };
 }
 
+
+// Acesso ao pedido por segredo emitido no checkout, nunca apenas por ID.
+app.get('/api/checkout/:id/detalhes', limitarConsultasStatusCheckout, wrap(async(req,res)=>{
+  const token=txt(req.get('x-download-token'),64);
+  let p=(await q('SELECT * FROM pedidos WHERE id=$1',[req.params.id])).rows[0];
+  if(!p || !token || !igual(token,p.download_token)) return res.status(404).json({erro:'Pedido não encontrado.'});
+  if(p.payment_id){const v=await sincronizarPagamentoMercadoPago(p.payment_id,null,p.id);if(!v?.ok)return res.status(503).json({erro:'Não foi possível validar o pagamento.'});p=(await q('SELECT * FROM pedidos WHERE id=$1',[p.id])).rows[0];}
+  const linhas=(await q('SELECT id,produto_id,produto_nome,quantidade,preco_unitario,imagem,tipo_produto FROM pedido_itens WHERE pedido_id=$1 ORDER BY id',[p.id])).rows;
+  const produtos=await lerConfig('produtos',PRODUTOS_INICIAIS);
+  const itens=linhas.length?linhas.map(i=>({id:String(i.id),nome:i.produto_nome,quantidade:i.quantidade,precoUnitario:Number(i.preco_unitario),imagem:i.imagem,tipo:(i.tipo_produto==='digital'||!!produtos.find(x=>norm(x.id)===norm(i.produto_id))?.pdf)?'digital':'fisico',downloadDisponivel:p.status==='pago'&&!!produtos.find(x=>norm(x.id)===norm(i.produto_id))?.pdf})):[{id:p.produto_id,nome:p.produto_nome,quantidade:1,precoUnitario:Number(p.valor_original),tipo:produtos.find(x=>norm(x.id)===norm(p.produto_id))?.pdf?'digital':'fisico',downloadDisponivel:p.status==='pago'}];
+  const historico=(await q('SELECT status,descricao,criado_em FROM historico_entrega WHERE pedido_id=$1 ORDER BY id',[p.id])).rows.map(h=>({titulo:h.status,descricao:h.descricao,data:h.criado_em,concluido:true}));
+  res.set('Cache-Control','no-store');res.json({id:p.id,numero:p.id,criadoEm:p.criado_em,clienteNome:p.cliente_nome,statusPagamento:p.payment_status||p.status,formaPagamento:p.forma,statusEntrega:p.entrega_status,subtotal:Number(p.valor_original),desconto:Number(p.cupom_desconto),frete:0,total:Number(p.valor),prazoEntregaDias:p.prazo_entrega_dias,previsaoEntrega:p.previsao_entrega,transportadora:p.transportadora,codigoRastreio:p.codigo_rastreio,enderecoEntrega:p.endereco,itens,historico});
+}));
+app.get('/api/admin/fornecedores/pedidos',auth,soAdmin,wrap(async(req,res)=>{
+  const r=await q("SELECT id,produto_nome,custo_total,fornecedor_status,fornecedor_pago_em,pago_em FROM pedidos WHERE status='pago' ORDER BY pago_em DESC LIMIT 300");res.set('Cache-Control','no-store');res.json(r.rows);
+}));
+app.post('/api/admin/fornecedores/:id/pagar',auth,soAdmin,wrap(async(req,res)=>{
+  const r=await q("UPDATE pedidos SET fornecedor_status='PAGO',fornecedor_pago_em=now() WHERE id=$1 AND status='pago' AND fornecedor_status='PENDENTE' RETURNING id",[req.params.id]);res.status(r.rowCount?200:409).json({ok:!!r.rowCount});
+}));
+app.get('/api/categorias',wrap(async(req,res)=>{const r=await q('SELECT id,nome FROM categorias_loja ORDER BY nome');res.json(r.rows)}));
+app.post('/api/admin/categorias',auth,soAdmin,wrap(async(req,res)=>{const nome=txt(req.body?.nome,80);if(!nome||!semTags(nome))return res.status(400).json({erro:'Nome inválido'});const r=await q('INSERT INTO categorias_loja(nome) VALUES($1) ON CONFLICT(nome) DO UPDATE SET nome=EXCLUDED.nome RETURNING id,nome',[nome]);res.json(r.rows[0])}));
+app.delete('/api/admin/categorias/:id',auth,soAdmin,wrap(async(req,res)=>{const r=await q('DELETE FROM categorias_loja WHERE id=$1 RETURNING id',[req.params.id]);res.status(r.rowCount?200:404).json({ok:!!r.rowCount})}));
+app.get('/api/admin/prazo-entrega',auth,soAdmin,wrap(async(req,res)=>res.json({dias:await lerConfig('prazoEntregaDias',15)})));
+app.put('/api/admin/prazo-entrega',auth,soAdmin,wrap(async(req,res)=>{const dias=Number(req.body?.dias);if(!Number.isInteger(dias)||dias<1||dias>365)return res.status(400).json({erro:'Informe 1 a 365 dias'});await gravarConfig('prazoEntregaDias',dias);res.json({dias})}));
+app.put('/api/admin/pedidos/:id/entrega',auth,soAdmin,wrap(async(req,res)=>{
+  const status=txt(req.body?.status,35);if(!['preparando','postado','em_transporte','saiu_para_entrega','entregue','ocorrencia','cancelado'].includes(status))return res.status(400).json({erro:'Status inválido'});
+  const client=await pool.connect();try{await client.query('BEGIN');const r=await client.query('UPDATE pedidos SET entrega_status=$2,transportadora=$3,codigo_rastreio=$4 WHERE id=$1 RETURNING id',[req.params.id,status,txt(req.body?.transportadora,100),txt(req.body?.codigoRastreio,100)]);if(!r.rowCount){await client.query('ROLLBACK');return res.status(404).json({erro:'Pedido não encontrado'})}await client.query('INSERT INTO historico_entrega(pedido_id,status,descricao) VALUES($1,$2,$3)',[req.params.id,status,txt(req.body?.descricao,500)]);await client.query('COMMIT');res.json({ok:true})}catch(e){await client.query('ROLLBACK');throw e}finally{client.release()}
+}));
 app.get('/api/checkout/:id/status', limitarConsultasStatusCheckout, wrap(async (req, res) => {
   const token = txt(req.get('x-download-token'), 64);
   let pedido = (await q('SELECT id, status, payment_id, payment_status, payment_approved_at, download_token FROM pedidos WHERE id = $1', [req.params.id])).rows[0];
@@ -1339,6 +1381,13 @@ app.get('/api/checkout/:id/download', wrap(async (req, res) => {
   const pedido = (await q('SELECT id, status, produto_id, download_token FROM pedidos WHERE id = $1', [req.params.id])).rows[0];
   if (!pedido || !igual(token, pedido.download_token)) return res.status(404).json({ erro: 'Pedido não encontrado.' });
   if (pedido.status !== 'pago') return res.status(409).json({ erro: 'Pagamento ainda não confirmado.' });
+  const pg=(await q('SELECT payment_id,payment_approved_at FROM pedidos WHERE id=$1',[pedido.id])).rows[0];
+  if(!pg?.payment_id||!pg.payment_approved_at||segundosParaLiberacao(pg.payment_approved_at)>0)return res.status(409).json({erro:'Aguardando validação'});
+  const v=await sincronizarPagamentoMercadoPago(pg.payment_id,null,pedido.id);
+  if(!v?.ok||v.statusPagamento!=='approved')return res.status(503).json({erro:'Pagamento não validado agora'});
+  const atual=(await q('SELECT status FROM pedidos WHERE id=$1',[pedido.id])).rows[0];
+  if(atual?.status!=='pago')return res.status(409).json({erro:'Download não autorizado'});
+
 
   const produtos = await lerConfig('produtos', PRODUTOS_INICIAIS);
   const itensPedido = (await q('SELECT produto_id, produto_nome, quantidade FROM pedido_itens WHERE pedido_id = $1 ORDER BY id', [pedido.id])).rows;
@@ -1422,7 +1471,7 @@ async function confirmarPedido(id, paymentIdRecebido) {
 // ----- Produtos, Configurações e Exclusões -----
 app.get('/api/produtos', wrap(async (req, res) => {
   res.set('Cache-Control', 'no-store');
-  res.json(await lerConfig('produtos', PRODUTOS_INICIAIS));
+  res.json((await lerConfig('produtos', PRODUTOS_INICIAIS)).map(({custo,pdf,...publico})=>publico));
 }));
 
 app.get('/api/admin/produtos', auth, soAdmin, wrap(async (req, res) => {
