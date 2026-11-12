@@ -1,22 +1,916 @@
 <!doctype html>
-<html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Status da Compra | Tech Store</title>
-<style>:root{font-family:system-ui,Arial;color:#173047;background:#f1f6fc}*{box-sizing:border-box}body{margin:0}header{background:#073b70;color:white;padding:20px}main{max-width:1050px;margin:auto;padding:20px}.hero{background:linear-gradient(110deg,#073b70,#087ac9);color:white;padding:28px;border-radius:18px}h1{margin:0 0 8px}section{background:white;border:1px solid #dce7f2;border-radius:16px;padding:22px;margin:18px 0;box-shadow:0 3px 12px #001b3010}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:16px}.row{display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap;border-bottom:1px solid #edf1f5;padding:10px 0}input{width:100%;padding:12px;border:1px solid #b6cbdc;border-radius:10px}button,.btn{border:0;border-radius:10px;background:#0867b3;color:white;padding:12px 18px;cursor:pointer;font-weight:700;text-decoration:none;display:inline-block}button:disabled{opacity:.5}small,.muted{color:#607489}.danger{color:#b02030}.success{color:#08784c}.hidden{display:none}a{color:#0867b3}header a{color:white}.tag{padding:5px 10px;background:#e7f1ff;border-radius:30px;font-weight:700;font-size:12px}@media(max-width:600px){main{padding:12px}section{padding:16px}}</style></head>
-<body><header><a href="index.html">← Voltar à Tech Store</a></header><main><div class="hero"><h1>Status da Compra</h1><p>Acompanhe pagamento, entrega, rastreamento e seus softwares adquiridos.</p></div>
-<section><form id="form"><label for="pedido">Número do pedido</label><div class="grid"><input id="pedido" required maxlength="64" placeholder="Número informado no checkout"><button id="consultar">Consultar pedido</button></div></form><p class="muted">Por segurança, a consulta requer a chave privada recebida no checkout, guardada nesta sessão do navegador.</p><div id="aviso" role="status">Informe seu pedido para consultar.</div></section>
-<div id="resultado" class="hidden"><section><h2>Pedido <span id="numero"></span></h2><div class="grid"><div><b>Cliente:</b> <span id="cliente"></span><p><b>Data:</b> <span id="data"></span></p></div><div><b>Pagamento:</b> <span id="pagamento" class="tag"></span><p><b>Forma:</b> <span id="forma"></span></p></div></div></section>
-<div class="grid"><section><h2>Produtos comprados</h2><div id="itens"></div></section><section><h2>Resumo financeiro</h2><div id="valores"></div></section></div>
-<section><h2>Entrega e rastreamento</h2><div id="entrega"></div></section>
-<section><h2>Downloads digitais</h2><p class="muted">O servidor verifica novamente o pagamento antes de autorizar cada acesso. O prazo mínimo de 15 segundos não impede estornos futuros.</p><div id="downloads"></div></section>
-<section><h2>Histórico do pedido</h2><div id="historico"></div></section><button type="button" id="atualizar">Atualizar informações</button></div></main>
-<script>'use strict';
-const el=id=>document.getElementById(id);const fmt=n=>new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(Number(n)||0);const dt=s=>s?new Date(s).toLocaleString('pt-BR'):'A definir';
-function linha(a,b){const d=document.createElement('div');d.className='row';const l=document.createElement('span'),r=document.createElement('strong');l.textContent=a;r.textContent=b;d.append(l,r);return d}
-function token(id){return sessionStorage.getItem('loja_tech_acesso_'+id)||(()=>{try{const p=JSON.parse(sessionStorage.getItem('loja_tech_pedido_pendente')||'{}');return p.pedidoId===id?p.downloadToken:null}catch{return null}})()}
-function mensagem(t,erro=false){el('aviso').textContent=t;el('aviso').className=erro?'danger':''}
-async function consultar(){const id=el('pedido').value.trim();if(!id)return;const chave=token(id);if(!chave){el('resultado').classList.add('hidden');mensagem('Chave do pedido não encontrada nesta sessão. Acesse pelo checkout em que a compra foi criada.',true);return}
- el('consultar').disabled=true;mensagem('Consultando o servidor...');try{const r=await fetch('/api/checkout/'+encodeURIComponent(id)+'/detalhes',{headers:{'x-download-token':chave},cache:'no-store'});const p=await r.json();if(!r.ok)throw Error(p.erro||'Falha na consulta');render(p,chave);history.replaceState(null,'','?pedido='+encodeURIComponent(id));mensagem('Informações atualizadas.')}catch(e){el('resultado').classList.add('hidden');mensagem(e.message,true)}finally{el('consultar').disabled=false}}
-function render(p,chave){el('resultado').classList.remove('hidden');el('numero').textContent=p.numero;el('cliente').textContent=p.clienteNome||'Não informado';el('data').textContent=dt(p.criadoEm);el('pagamento').textContent=p.statusPagamento;el('forma').textContent=p.formaPagamento||'Não informada';const itens=el('itens'),val=el('valores'),ent=el('entrega'),down=el('downloads'),hist=el('historico');[itens,val,ent,down,hist].forEach(x=>x.replaceChildren());(p.itens||[]).forEach(i=>{itens.append(linha(i.nome+' × '+i.quantidade,fmt(Number(i.precoUnitario)*Number(i.quantidade))))});[['Subtotal',p.subtotal],['Desconto',p.desconto],['Frete',p.frete],['Total',p.total]].forEach(([k,v])=>val.append(linha(k,fmt(v))));
- const fisicos=(p.itens||[]).some(i=>i.tipo!=='digital');if(fisicos){[['Status',p.statusEntrega],['Prazo em dias corridos',p.prazoEntregaDias],['Previsão',p.previsaoEntrega?new Date(p.previsaoEntrega+'T12:00:00').toLocaleDateString('pt-BR'):'A definir'],['Transportadora',p.transportadora],['Código de rastreio',p.codigoRastreio],['Endereço',typeof p.enderecoEntrega==='object'?Object.values(p.enderecoEntrega||{}).filter(Boolean).join(', '):p.enderecoEntrega]].forEach(([k,v])=>ent.append(linha(k,String(v??'Não informado'))));if((p.transportadora||'').toLowerCase().includes('correios')&&p.codigoRastreio){const a=document.createElement('a');a.href='https://rastreamento.correios.com.br/app/index.php';a.target='_blank';a.rel='noopener noreferrer';a.textContent='Consultar no site dos Correios';ent.append(a)}}else ent.textContent='Pedido com entrega digital.';
- const digitais=(p.itens||[]).filter(i=>i.tipo==='digital');if(!digitais.length)down.textContent='Este pedido não contém software digital.';digitais.forEach(i=>{const d=document.createElement('div');d.className='row';const b=document.createElement('button');b.textContent=i.downloadDisponivel?'Verificar e abrir download':'Aguardando liberação';b.disabled=!i.downloadDisponivel;b.addEventListener('click',async()=>{b.disabled=true;try{const r=await fetch('/api/checkout/'+encodeURIComponent(p.id)+'/download',{headers:{'x-download-token':chave},cache:'no-store'});const j=await r.json();if(!r.ok)throw Error(j.erro||'Não autorizado');const lista=j.downloads||[j];const produto=lista.find(x=>x.produtoId===i.id||x.produto_id===i.id||x.nome===i.nome)||lista[0];if(!produto?.url)throw Error('Link não disponível');const url=new URL(produto.url,location.origin);if(!['https:','http:'].includes(url.protocol))throw Error('Link inválido');const a=document.createElement('a');a.href=url.href;a.target='_blank';a.rel='noopener noreferrer';a.textContent='Abrir arquivo autorizado';d.append(a)}catch(e){alert(e.message)}finally{b.disabled=false}});d.append(document.createTextNode(i.nome+' '),b);down.append(d)});(p.historico||[]).forEach(h=>hist.append(linha(h.titulo,dt(h.data))));if(!(p.historico||[]).length)hist.textContent='Nenhum evento de entrega registrado ainda.'}
-el('form').addEventListener('submit',e=>{e.preventDefault();consultar()});el('atualizar').addEventListener('click',consultar);const id=new URLSearchParams(location.search).get('pedido');if(id){el('pedido').value=id;consultar()}
-</script></body></html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Minhas Compras — Status da Compra | Tech Store</title>
+<style>
+  :root {
+    font-family: Inter, system-ui, -apple-system, Arial, sans-serif;
+    color: #173047;
+    background: #f1f6fc;
+  }
+  * {
+    box-sizing: border-box;
+  }
+  body {
+    margin: 0;
+  }
+  header {
+    background: #073b70;
+    color: white;
+    padding: 18px 20px;
+  }
+  .header-inner {
+    max-width: 1050px;
+    margin: auto;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 16px;
+    flex-wrap: wrap;
+  }
+  main {
+    max-width: 1050px;
+    margin: auto;
+    padding: 20px;
+  }
+  .hero {
+    background: linear-gradient(110deg, #073b70, #087ac9);
+    color: white;
+    padding: 28px;
+    border-radius: 18px;
+  }
+  .hero h1 {
+    margin: 0 0 6px;
+    font-size: 28px;
+  }
+  .hero p {
+    margin: 0;
+    opacity: 0.92;
+  }
+  section {
+    background: white;
+    border: 1px solid #dce7f2;
+    border-radius: 16px;
+    padding: 22px;
+    margin: 18px 0;
+    box-shadow: 0 3px 12px #001b3010;
+  }
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 16px;
+  }
+  .row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 16px;
+    flex-wrap: wrap;
+    border-bottom: 1px solid #edf1f5;
+    padding: 11px 0;
+  }
+  .row:last-child {
+    border-bottom: 0;
+  }
+  .pedido-card {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 16px;
+    flex-wrap: wrap;
+    border: 1px solid #dce7f2;
+    border-radius: 14px;
+    padding: 16px 18px;
+    margin-bottom: 12px;
+    background: #ffffff;
+    cursor: pointer;
+    transition: all 0.18s ease;
+  }
+  .pedido-card:hover {
+    border-color: #087ac9;
+    background: #f8fbff;
+    transform: translateY(-1px);
+  }
+  .pedido-card.ativo {
+    border: 2px solid #0867b3;
+    background: #eef6ff;
+  }
+  .pedido-titulo {
+    font-weight: 800;
+    font-size: 16px;
+    color: #073b70;
+    margin: 0 0 4px;
+  }
+  .pedido-sub {
+    font-size: 14px;
+    color: #51677d;
+    margin: 0;
+  }
+  .badge {
+    padding: 6px 12px;
+    border-radius: 999px;
+    font-weight: 700;
+    font-size: 12px;
+    display: inline-block;
+  }
+  .badge-pago {
+    background: #dcfce7;
+    color: #166534;
+  }
+  .badge-transporte {
+    background: #dbeafe;
+    color: #1e40af;
+  }
+  .badge-pendente {
+    background: #fef3c7;
+    color: #92400e;
+  }
+  .badge-cancelado {
+    background: #fee2e2;
+    color: #991b1b;
+  }
+  .alerta-checkout {
+    background: #ecfdf5;
+    border: 1px solid #6ee7b7;
+    color: #065f46;
+    padding: 16px 20px;
+    border-radius: 14px;
+    margin: 18px 0;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+  .login-box {
+    background: #fffbeb;
+    border: 1px solid #fde68a;
+    color: #92400e;
+    padding: 18px;
+    border-radius: 14px;
+    margin: 18px 0;
+  }
+  button, .btn {
+    border: 0;
+    border-radius: 10px;
+    background: #0867b3;
+    color: white;
+    padding: 11px 18px;
+    cursor: pointer;
+    font-weight: 700;
+    text-decoration: none;
+    display: inline-block;
+    font-size: 14px;
+  }
+  button.btn-sec {
+    background: #e2e8f0;
+    color: #1e293b;
+  }
+  button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+  small, .muted {
+    color: #607489;
+  }
+  .danger {
+    color: #b02030;
+  }
+  .success {
+    color: #08784c;
+  }
+  .hidden {
+    display: none !important;
+  }
+  a {
+    color: #0867b3;
+  }
+  header a {
+    color: white;
+    text-decoration: none;
+    font-weight: 600;
+  }
+  .tag {
+    padding: 5px 10px;
+    background: #e7f1ff;
+    border-radius: 30px;
+    font-weight: 700;
+    font-size: 12px;
+  }
+  .lista-scroll {
+    max-height: 540px;
+    overflow-y: auto;
+    padding-right: 4px;
+  }
+  @media (max-width: 600px) {
+    main {
+      padding: 12px;
+    }
+    section {
+      padding: 16px;
+    }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="header-inner">
+    <a href="index.html">← Voltar à Tech Store</a>
+    <span id="usuarioHeader" class="muted" style="color:#dbeafe;font-size:14px;"></span>
+  </div>
+</header>
+
+<main>
+  <div class="hero">
+    <h1>Minhas compras</h1>
+    <p>Histórico de pedidos da Tech Store — acompanhe pagamentos, entregas, rastreamento e downloads digitais.</p>
+  </div>
+
+  <!-- Banner de comunicação em tempo real vindo do Checkout / Mercado Pago -->
+  <div id="bannerCheckout" class="alerta-checkout hidden" role="status">
+    <div>
+      <strong id="bannerCheckoutTitulo">Atualização recebida do Checkout</strong>
+      <p id="bannerCheckoutTexto" style="margin:4px 0 0;font-size:14px;"></p>
+    </div>
+    <button type="button" id="btnFecharBanner" class="btn-sec">Fechar aviso</button>
+  </div>
+
+  <!-- Aviso caso o cliente ainda não esteja logado -->
+  <div id="avisoLogin" class="login-box hidden">
+    <strong>Identifique-se para sincronizar todas as suas compras</strong>
+    <p style="margin:6px 0 12px;font-size:14px;">
+      Faça login na sua conta da Tech Store para visualizar automaticamente todos os pedidos vinculados ao seu cadastro.
+      Pedidos realizados nesta sessão do navegador continuam listados abaixo.
+    </p>
+    <a href="index.html" class="btn">Fazer login na Tech Store</a>
+  </div>
+
+  <!-- Lista automática de todos os pedidos do cliente -->
+  <section>
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:14px;">
+      <div>
+        <h2 style="margin:0;">Histórico de pedidos da Tech Store</h2>
+        <small id="subtituloLista">Carregando suas compras...</small>
+      </div>
+      <button type="button" id="btnRecarregarLista">Atualizar lista</button>
+    </div>
+
+    <div id="avisoLista" role="status" class="muted" style="margin-bottom:10px;"></div>
+    <div id="listaPedidos" class="lista-scroll"></div>
+  </section>
+
+  <!-- Detalhes individuais do pedido selecionado -->
+  <div id="resultado" class="hidden">
+    <section>
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:12px;">
+        <h2 style="margin:0;">Pedido #<span id="numero"></span></h2>
+        <button type="button" id="atualizar">Atualizar detalhes deste pedido</button>
+      </div>
+
+      <div class="grid">
+        <div>
+          <p style="margin:6px 0;"><b>Cliente:</b> <span id="cliente"></span></p>
+          <p style="margin:6px 0;"><b>Data do pedido:</b> <span id="data"></span></p>
+        </div>
+        <div>
+          <p style="margin:6px 0;"><b>Status do pagamento:</b> <span id="pagamento" class="tag"></span></p>
+          <p style="margin:6px 0;"><b>Forma de pagamento:</b> <span id="forma"></span></p>
+        </div>
+      </div>
+    </section>
+
+    <div class="grid">
+      <section>
+        <h2>Produtos comprados</h2>
+        <div id="itens"></div>
+      </section>
+
+      <section>
+        <h2>Resumo financeiro</h2>
+        <div id="valores"></div>
+      </section>
+    </div>
+
+    <section>
+      <h2>Entrega e rastreamento</h2>
+      <div id="entrega"></div>
+    </section>
+
+    <section>
+      <h2>Downloads digitais</h2>
+      <p class="muted">
+        O servidor verifica novamente o pagamento antes de autorizar cada acesso.
+      </p>
+      <div id="downloads"></div>
+    </section>
+
+    <section>
+      <h2>Histórico do pedido</h2>
+      <div id="historico"></div>
+    </section>
+  </div>
+</main>
+
+<script>
+'use strict';
+
+const HISTORICO_PEDIDOS_KEY = 'tech_historico_compras';
+const CANAL_PEDIDOS = 'tech_store_pedidos';
+
+const el = id => document.getElementById(id);
+
+const fmt = n =>
+  new Intl.NumberFormat('pt-BR', {
+    style: 'currency',
+    currency: 'BRL'
+  }).format(Number(n) || 0);
+
+const dt = s =>
+  s ? new Date(s).toLocaleString('pt-BR') : 'A definir';
+
+const dtCurta = s =>
+  s ? new Date(s).toLocaleDateString('pt-BR') : 'Data não informada';
+
+let pedidosLista = [];
+let pedidoSelecionadoId = null;
+
+function linha(a, b) {
+  const d = document.createElement('div');
+  d.className = 'row';
+  const l = document.createElement('span');
+  const r = document.createElement('strong');
+  l.textContent = a;
+  r.textContent = b;
+  d.append(l, r);
+  return d;
+}
+
+function obterSessaoCliente() {
+  const tokenKeys = ['tech_token', 'token', 'auth_token', 'loja_tech_token'];
+  const userKeys = ['tech_user', 'user', 'usuario', 'loja_tech_user', 'auth_user'];
+
+  let token = '';
+  for (const k of tokenKeys) {
+    token = localStorage.getItem(k) || sessionStorage.getItem(k) || '';
+    if (token) break;
+  }
+
+  let user = null;
+  for (const k of userKeys) {
+    try {
+      const raw = localStorage.getItem(k) || sessionStorage.getItem(k);
+      if (!raw) continue;
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === 'object') {
+        user = parsed;
+        break;
+      }
+    } catch {}
+  }
+
+  if (!user && token && token.split('.').length === 3) {
+    try {
+      const payload = JSON.parse(atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
+      if (payload && payload.usuario) {
+        user = { usuario: payload.usuario, perfil: payload.perfil };
+      }
+    } catch {}
+  }
+
+  return { token, user };
+}
+
+function tokenDoPedido(id) {
+  const pedidoId = String(id || '').trim();
+  if (!pedidoId) return null;
+
+  const direto =
+    sessionStorage.getItem('loja_tech_acesso_' + pedidoId) ||
+    localStorage.getItem('loja_tech_acesso_' + pedidoId);
+  if (direto) return direto;
+
+  try {
+    const pendente = JSON.parse(sessionStorage.getItem('loja_tech_pedido_pendente') || '{}');
+    if (String(pendente.pedidoId) === pedidoId && pendente.downloadToken) {
+      return pendente.downloadToken;
+    }
+  } catch {}
+
+  try {
+    const hist = JSON.parse(localStorage.getItem(HISTORICO_PEDIDOS_KEY) || '[]');
+    if (Array.isArray(hist)) {
+      const encontrado = hist.find(x => String(x.pedidoId) === pedidoId);
+      if (encontrado && encontrado.downloadToken) return encontrado.downloadToken;
+    }
+  } catch {}
+
+  return null;
+}
+
+function lerPedidosArmazenadosLocalmente() {
+  const mapa = new Map();
+
+  try {
+    const hist = JSON.parse(localStorage.getItem(HISTORICO_PEDIDOS_KEY) || '[]');
+    if (Array.isArray(hist)) {
+      hist.forEach(item => {
+        if (item && item.pedidoId) {
+          mapa.set(String(item.pedidoId), {
+            pedidoId: String(item.pedidoId),
+            downloadToken: item.downloadToken || tokenDoPedido(item.pedidoId) || '',
+            produtoNome: item.produtoNome || 'Pedido Loja Tech',
+            valor: Number(item.valor || 0),
+            frete: Number(item.frete || 0),
+            forma: item.forma || '',
+            status: item.status || 'aguardando',
+            paymentStatus: item.paymentStatus || '',
+            statusEntrega: item.statusEntrega || '',
+            criadoEm: item.criadoEm || item.atualizadoEm || '',
+            clienteEmail: item.clienteEmail || '',
+            clienteCpf: item.clienteCpf || '',
+            clienteUsuario: item.clienteUsuario || ''
+          });
+        }
+      });
+    }
+  } catch {}
+
+  try {
+    const pendente = JSON.parse(sessionStorage.getItem('loja_tech_pedido_pendente') || '{}');
+    if (pendente && pendente.pedidoId && !mapa.has(String(pendente.pedidoId))) {
+      mapa.set(String(pendente.pedidoId), {
+        pedidoId: String(pendente.pedidoId),
+        downloadToken: pendente.downloadToken || '',
+        produtoNome: 'Pedido em andamento',
+        valor: 0,
+        forma: pendente.forma || '',
+        status: 'aguardando',
+        paymentStatus: 'pending',
+        criadoEm: new Date().toISOString()
+      });
+    }
+  } catch {}
+
+  const idUrl = new URLSearchParams(location.search).get('pedido');
+  if (idUrl && !mapa.has(String(idUrl))) {
+    mapa.set(String(idUrl), {
+      pedidoId: String(idUrl),
+      downloadToken: tokenDoPedido(idUrl) || '',
+      produtoNome: 'Pedido consultado',
+      valor: 0,
+      status: 'aguardando',
+      criadoEm: ''
+    });
+  }
+
+  return Array.from(mapa.values());
+}
+
+function salvarPedidosLocais(lista) {
+  try {
+    localStorage.setItem(HISTORICO_PEDIDOS_KEY, JSON.stringify(lista));
+  } catch {}
+}
+
+function rotuloStatusResumo(p) {
+  const statusPg = String(p.paymentStatus || p.status || '').toLowerCase();
+  const statusEnt = String(p.statusEntrega || '').toLowerCase();
+
+  if (['cancelled', 'cancelado', 'refunded', 'reembolsado', 'charged_back'].includes(statusPg)) {
+    return { texto: 'Cancelado / Estornado', classe: 'badge-cancelado' };
+  }
+  if (statusEnt === 'entregue') {
+    return { texto: 'Entregue', classe: 'badge-pago' };
+  }
+  if (['em_transporte', 'postado', 'saiu_para_entrega'].includes(statusEnt)) {
+    return { texto: 'Em transporte', classe: 'badge-transporte' };
+  }
+  if (statusPg === 'pago' || statusPg === 'approved') {
+    return { texto: 'Pago', classe: 'badge-pago' };
+  }
+  return { texto: 'Pagamento pendente', classe: 'badge-pendente' };
+}
+
+function renderizarListaPedidos() {
+  const container = el('listaPedidos');
+  container.replaceChildren();
+
+  if (!pedidosLista.length) {
+    el('subtituloLista').textContent = 'Nenhum pedido encontrado para esta conta até o momento.';
+    const vazio = document.createElement('p');
+    vazio.className = 'muted';
+    vazio.textContent = 'Quando você finalizar uma compra na Tech Store, o pedido aparecerá automaticamente aqui.';
+    container.append(vazio);
+    return;
+  }
+
+  el('subtituloLista').textContent =
+    `${pedidosLista.length} ${pedidosLista.length === 1 ? 'pedido encontrado' : 'pedidos encontrados'} — clique em um pedido para ver os detalhes.`;
+
+  pedidosLista.forEach(p => {
+    const card = document.createElement('div');
+    card.className = 'pedido-card' + (String(p.pedidoId) === String(pedidoSelecionadoId) ? ' ativo' : '');
+    card.setAttribute('role', 'button');
+    card.setAttribute('tabindex', '0');
+
+    const esquerda = document.createElement('div');
+    const titulo = document.createElement('p');
+    titulo.className = 'pedido-titulo';
+    titulo.textContent = `Pedido #${p.pedidoId}`;
+
+    const info = document.createElement('p');
+    info.className = 'pedido-sub';
+    const dataTexto = dtCurta(p.criadoEm);
+    const valorTexto = p.valor > 0 ? ` · ${fmt(p.valor)}` : '';
+    info.textContent = `${dataTexto}${valorTexto}`;
+
+    esquerda.append(titulo, info);
+
+    if (p.produtoNome && p.produtoNome !== 'Pedido Loja Tech') {
+      const prod = document.createElement('small');
+      prod.style.display = 'block';
+      prod.style.marginTop = '4px';
+      prod.textContent = p.produtoNome;
+      esquerda.append(prod);
+    }
+
+    const direita = document.createElement('div');
+    const badgeInfo = rotuloStatusResumo(p);
+    const badge = document.createElement('span');
+    badge.className = `badge ${badgeInfo.classe}`;
+    badge.textContent = badgeInfo.texto;
+    direita.append(badge);
+
+    card.append(esquerda, direita);
+
+    const abrir = () => selecionarPedido(p.pedidoId);
+    card.addEventListener('click', abrir);
+    card.addEventListener('keydown', e => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        abrir();
+      }
+    });
+
+    container.append(card);
+  });
+}
+
+async function sincronizarTodosOsPedidos() {
+  const { token, user } = obterSessaoCliente();
+
+  if (user && (user.nome || user.usuario || user.email)) {
+    el('usuarioHeader').textContent = `Conta: ${user.nome || user.usuario || user.email}`;
+    el('avisoLogin').classList.add('hidden');
+  } else {
+    el('usuarioHeader').textContent = 'Visitante';
+    el('avisoLogin').classList.remove('hidden');
+  }
+
+  let locais = lerPedidosArmazenadosLocalmente();
+
+  if (user) {
+    const emailUser = String(user.email || '').trim().toLowerCase();
+    const cpfUser = String(user.cpf || '').replace(/\D/g, '');
+    const usuarioUser = String(user.usuario || '').trim().toLowerCase();
+
+    const filtrados = locais.filter(p => {
+      if (!p.clienteEmail && !p.clienteCpf && !p.clienteUsuario) return true;
+      if (emailUser && p.clienteEmail === emailUser) return true;
+      if (cpfUser && p.clienteCpf === cpfUser) return true;
+      if (usuarioUser && p.clienteUsuario === usuarioUser) return true;
+      return false;
+    });
+
+    if (filtrados.length) locais = filtrados;
+  }
+
+  // Tenta consultar rota autenticada caso disponível no backend
+  if (token) {
+    try {
+      const resp = await fetch('/api/cliente/pedidos', {
+        headers: { Authorization: 'Bearer ' + token },
+        cache: 'no-store'
+      });
+      if (resp.ok) {
+        const remotos = await resp.json();
+        if (Array.isArray(remotos)) {
+          const mapa = new Map(locais.map(x => [String(x.pedidoId), x]));
+          remotos.forEach(r => {
+            const id = String(r.id || r.pedidoId);
+            const atual = mapa.get(id) || {};
+            mapa.set(id, {
+              ...atual,
+              pedidoId: id,
+              downloadToken: r.downloadToken || r.download_token || atual.downloadToken || '',
+              produtoNome: r.produtoNome || r.produto_nome || atual.produtoNome || '',
+              valor: Number(r.valor ?? atual.valor ?? 0),
+              frete: Number(r.frete ?? atual.frete ?? 0),
+              forma: r.forma || atual.forma || '',
+              status: r.status || atual.status || 'aguardando',
+              paymentStatus: r.paymentStatus || r.payment_status || atual.paymentStatus || '',
+              statusEntrega: r.statusEntrega || r.entrega_status || atual.statusEntrega || '',
+              criadoEm: r.criadoEm || r.criado_em || atual.criadoEm || ''
+            });
+          });
+          locais = Array.from(mapa.values());
+        }
+      }
+    } catch {}
+  }
+
+  // Atualiza status real no servidor para cada pedido que possui chave de acesso
+  await Promise.all(
+    locais.map(async item => {
+      const chave = item.downloadToken || tokenDoPedido(item.pedidoId);
+      if (!chave) return;
+      try {
+        const r = await fetch('/api/checkout/' + encodeURIComponent(item.pedidoId) + '/detalhes', {
+          headers: { 'x-download-token': chave },
+          cache: 'no-store'
+        });
+        if (!r.ok) return;
+        const det = await r.json();
+        item.valor = Number(det.total ?? item.valor ?? 0);
+        item.frete = Number(det.frete ?? item.frete ?? 0);
+        item.forma = det.formaPagamento || item.forma;
+        item.status = det.statusPagamento === 'approved' || det.statusPagamento === 'pago' ? 'pago' : det.statusPagamento || item.status;
+        item.paymentStatus = det.statusPagamento || item.paymentStatus;
+        item.statusEntrega = det.statusEntrega || item.statusEntrega;
+        item.criadoEm = det.criadoEm || item.criadoEm;
+        if (Array.isArray(det.itens) && det.itens.length) {
+          item.produtoNome = det.itens.map(i => `${i.quantidade}x ${i.nome}`).join(' | ');
+        }
+      } catch {}
+    })
+  );
+
+  locais.sort((a, b) => new Date(b.criadoEm || 0) - new Date(a.criadoEm || 0));
+  pedidosLista = locais;
+  salvarPedidosLocais(pedidosLista);
+  renderizarListaPedidos();
+
+  const paramPedido = new URLSearchParams(location.search).get('pedido');
+  const paramAprovado = new URLSearchParams(location.search).get('aprovado');
+
+  if (paramAprovado === '1' && paramPedido) {
+    mostrarBannerCheckout(
+      `Pagamento aprovado — Pedido #${paramPedido}`,
+      `O Mercado Pago confirmou sua compra. Confira abaixo todos os detalhes e liberações do Pedido #${paramPedido}.`
+    );
+  }
+
+  if (paramPedido) {
+    await selecionarPedido(paramPedido);
+  } else if (pedidosLista.length && !pedidoSelecionadoId) {
+    await selecionarPedido(pedidosLista[0].pedidoId);
+  }
+}
+
+async function selecionarPedido(id) {
+  const pedidoId = String(id || '').trim();
+  if (!pedidoId) return;
+
+  pedidoSelecionadoId = pedidoId;
+  renderizarListaPedidos();
+
+  const chave = tokenDoPedido(pedidoId);
+  if (!chave) {
+    el('resultado').classList.add('hidden');
+    el('avisoLista').textContent =
+      `Não foi possível abrir os detalhes do Pedido #${pedidoId} porque a chave privada deste pedido não está salva neste navegador.`;
+    el('avisoLista').className = 'danger';
+    return;
+  }
+
+  el('atualizar').disabled = true;
+  el('avisoLista').textContent = `Carregando detalhes do Pedido #${pedidoId}...`;
+  el('avisoLista').className = 'muted';
+
+  try {
+    const r = await fetch('/api/checkout/' + encodeURIComponent(pedidoId) + '/detalhes', {
+      headers: { 'x-download-token': chave },
+      cache: 'no-store'
+    });
+    const p = await r.json();
+    if (!r.ok) throw Error(p.erro || 'Falha na consulta do pedido.');
+
+    renderDetalhes(p, chave);
+    history.replaceState(null, '', '?pedido=' + encodeURIComponent(pedidoId));
+    el('avisoLista').textContent = '';
+
+    // Sincroniza resumo atualizado na lista
+    const idx = pedidosLista.findIndex(x => String(x.pedidoId) === pedidoId);
+    if (idx >= 0) {
+      pedidosLista[idx].valor = Number(p.total ?? pedidosLista[idx].valor);
+      pedidosLista[idx].frete = Number(p.frete ?? pedidosLista[idx].frete);
+      pedidosLista[idx].paymentStatus = p.statusPagamento;
+      pedidosLista[idx].status = p.statusPagamento === 'approved' || p.statusPagamento === 'pago' ? 'pago' : p.statusPagamento;
+      pedidosLista[idx].statusEntrega = p.statusEntrega;
+      salvarPedidosLocais(pedidosLista);
+      renderizarListaPedidos();
+    }
+  } catch (e) {
+    el('resultado').classList.add('hidden');
+    el('avisoLista').textContent = e.message;
+    el('avisoLista').className = 'danger';
+  } finally {
+    el('atualizar').disabled = false;
+  }
+}
+
+function renderDetalhes(p, chave) {
+  el('resultado').classList.remove('hidden');
+  el('numero').textContent = p.numero;
+  el('cliente').textContent = p.clienteNome || 'Não informado';
+  el('data').textContent = dt(p.criadoEm);
+
+  const infoBadge = rotuloStatusResumo({
+    paymentStatus: p.statusPagamento,
+    statusEntrega: p.statusEntrega
+  });
+  el('pagamento').textContent = infoBadge.texto;
+  el('pagamento').className = `badge ${infoBadge.classe}`;
+  el('forma').textContent = p.formaPagamento ? p.formaPagamento.toUpperCase() : 'Não informada';
+
+  const itens = el('itens');
+  const val = el('valores');
+  const ent = el('entrega');
+  const down = el('downloads');
+  const hist = el('historico');
+
+  [itens, val, ent, down, hist].forEach(x => x.replaceChildren());
+
+  (p.itens || []).forEach(i => {
+    itens.append(
+      linha(`${i.nome} × ${i.quantidade}`, fmt(Number(i.precoUnitario) * Number(i.quantidade)))
+    );
+  });
+
+  [
+    ['Subtotal', p.subtotal],
+    ['Desconto', p.desconto],
+    ['Frete', p.frete],
+    ['Total pago', p.total]
+  ].forEach(([k, v]) => val.append(linha(k, fmt(v))));
+
+  const fisicos = (p.itens || []).some(i => i.tipo !== 'digital');
+  if (fisicos) {
+    const enderecoFormatado =
+      typeof p.enderecoEntrega === 'object' && p.enderecoEntrega !== null
+        ? Object.values(p.enderecoEntrega).filter(Boolean).join(', ')
+        : p.enderecoEntrega || 'Não informado';
+
+    [
+      ['Status da entrega', p.statusEntrega || 'Preparando'],
+      ['Prazo estimado (dias corridos)', p.prazoEntregaDias ? `${p.prazoEntregaDias} dias` : 'A definir'],
+      ['Previsão de entrega', p.previsaoEntrega ? new Date(p.previsaoEntrega + 'T12:00:00').toLocaleDateString('pt-BR') : 'A definir'],
+      ['Transportadora', p.transportadora || 'A definir'],
+      ['Código de rastreio', p.codigoRastreio || 'Aguardando postagem'],
+      ['Endereço de entrega', enderecoFormatado]
+    ].forEach(([k, v]) => ent.append(linha(k, String(v))));
+
+    if ((p.transportadora || '').toLowerCase().includes('correios') && p.codigoRastreio) {
+      const a = document.createElement('a');
+      a.href = 'https://rastreamento.correios.com.br/app/index.php';
+      a.target = '_blank';
+      a.rel = 'noopener noreferrer';
+      a.className = 'btn';
+      a.style.marginTop = '12px';
+      a.textContent = 'Rastrear no site dos Correios';
+      ent.append(a);
+    }
+  } else {
+    ent.textContent = 'Pedido 100% digital — não requer envio físico.';
+  }
+
+  const digitais = (p.itens || []).filter(i => i.tipo === 'digital');
+  if (!digitais.length) {
+    down.textContent = 'Este pedido não contém software ou arquivo digital.';
+  }
+
+  digitais.forEach(i => {
+    const d = document.createElement('div');
+    d.className = 'row';
+
+    const nomeProd = document.createElement('span');
+    nomeProd.textContent = i.nome;
+
+    const acoes = document.createElement('div');
+    acoes.style.display = 'flex';
+    acoes.style.gap = '10px';
+    acoes.style.alignItems = 'center';
+
+    const b = document.createElement('button');
+    b.textContent = i.downloadDisponivel ? 'Acessar download autorizado' : 'Aguardando liberação';
+    b.disabled = !i.downloadDisponivel;
+
+    b.addEventListener('click', async () => {
+      b.disabled = true;
+      try {
+        const r = await fetch('/api/checkout/' + encodeURIComponent(p.id) + '/download', {
+          headers: { 'x-download-token': chave },
+          cache: 'no-store'
+        });
+        const j = await r.json();
+        if (!r.ok) throw Error(j.erro || 'Download não autorizado no momento.');
+
+        const lista = j.downloads || [j];
+        const produto =
+          lista.find(x => x.produtoId === i.id || x.produto_id === i.id || x.produto === i.nome || x.nome === i.nome) ||
+          lista[0];
+
+        if (!produto?.url) throw Error('Link de download ainda não disponível.');
+
+        const url = new URL(produto.url, location.origin);
+        if (!['https:', 'http:'].includes(url.protocol)) throw Error('Link inválido.');
+
+        const existente = acoes.querySelector('a');
+        if (existente) existente.remove();
+
+        const a = document.createElement('a');
+        a.href = url.href;
+        a.target = '_blank';
+        a.rel = 'noopener noreferrer';
+        a.className = 'btn';
+        a.textContent = 'Baixar agora';
+        acoes.append(a);
+      } catch (e) {
+        alert(e.message);
+      } finally {
+        b.disabled = false;
+      }
+    });
+
+    acoes.append(b);
+    d.append(nomeProd, acoes);
+    down.append(d);
+  });
+
+  (p.historico || []).forEach(h => hist.append(linha(h.titulo, dt(h.data))));
+  if (!(p.historico || []).length) {
+    hist.textContent = 'Nenhum evento de entrega registrado ainda.';
+  }
+}
+
+function mostrarBannerCheckout(titulo, texto) {
+  el('bannerCheckoutTitulo').textContent = titulo;
+  el('bannerCheckoutTexto').textContent = texto;
+  el('bannerCheckout').classList.remove('hidden');
+}
+
+el('btnFecharBanner').addEventListener('click', () => {
+  el('bannerCheckout').classList.add('hidden');
+});
+
+el('btnRecarregarLista').addEventListener('click', () => {
+  sincronizarTodosOsPedidos();
+});
+
+el('atualizar').addEventListener('click', () => {
+  if (pedidoSelecionadoId) selecionarPedido(pedidoSelecionadoId);
+});
+
+// Escuta comunicação em tempo real vinda de checkout_sacola.html (mesma sessão ou outra aba)
+if (typeof BroadcastChannel !== 'undefined') {
+  const canal = new BroadcastChannel(CANAL_PEDIDOS);
+  canal.onmessage = async ev => {
+    const msg = ev.data || {};
+    if (msg.tipo === 'PEDIDO_APROVADO' && msg.pedido?.pedidoId) {
+      mostrarBannerCheckout(
+        `Compra aprovada pelo Mercado Pago — Pedido #${msg.pedido.pedidoId}`,
+        `O pagamento do Pedido #${msg.pedido.pedidoId} foi confirmado e os detalhes já estão disponíveis abaixo.`
+      );
+      await sincronizarTodosOsPedidos();
+      await selecionarPedido(msg.pedido.pedidoId);
+    } else if (msg.tipo === 'PEDIDO_CRIADO' && msg.pedido?.pedidoId) {
+      await sincronizarTodosOsPedidos();
+    }
+  };
+}
+
+window.addEventListener('storage', async e => {
+  if (e.key === 'loja_tech_ultimo_evento_pedido' && e.newValue) {
+    try {
+      const evento = JSON.parse(e.newValue);
+      if (evento.tipo === 'PEDIDO_APROVADO' && evento.pedidoId) {
+        mostrarBannerCheckout(
+          `Compra aprovada pelo Mercado Pago — Pedido #${evento.pedidoId}`,
+          `O pagamento do Pedido #${evento.pedidoId} foi confirmado e os detalhes já estão disponíveis abaixo.`
+        );
+        await sincronizarTodosOsPedidos();
+        await selecionarPedido(evento.pedidoId);
+      } else if (evento.tipo === 'PEDIDO_CRIADO') {
+        await sincronizarTodosOsPedidos();
+      }
+    } catch {}
+  }
+});
+
+sincronizarTodosOsPedidos();
+</script>
+</body>
+</html>

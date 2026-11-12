@@ -1,4 +1,3 @@
-
 <!doctype html>
 <html lang="pt-BR">
 <head>
@@ -36,14 +35,19 @@
 <body class="bg-slate-100 text-slate-800 min-h-screen">
 
 <header class="bg-slate-950 text-white">
-  <div class="max-w-6xl mx-auto px-4 py-4 flex items-center justify-between">
+  <div class="max-w-6xl mx-auto px-4 py-4 flex items-center justify-between gap-4">
     <a href="/" class="font-extrabold tracking-wide text-xl">
       LOJA <span class="text-emerald-400">TECH</span>
     </a>
 
-    <a href="/" class="text-sm text-slate-300 hover:text-white">
-      ← Continuar comprando
-    </a>
+    <div class="flex items-center gap-4 text-sm">
+      <a href="status_compra.html" class="text-emerald-400 hover:text-emerald-300 font-semibold">
+        Minhas compras
+      </a>
+      <a href="/" class="text-slate-300 hover:text-white">
+        ← Continuar comprando
+      </a>
+    </div>
   </div>
 </header>
 
@@ -309,14 +313,17 @@
 
         <div
           id="acessoStatusCompra"
-          class="hidden mt-4 p-3 bg-blue-50 rounded-xl text-sm"
+          class="hidden mt-4 p-4 bg-blue-50 border border-blue-200 rounded-xl text-sm space-y-2"
         >
+          <p id="statusComunicacaoTexto" class="text-slate-700 font-medium">
+            Pedido registrado e enviado para sua aba Minhas Compras.
+          </p>
           <a
             id="linkStatusCompra"
-            class="font-bold text-blue-700 underline"
+            class="inline-block font-bold text-blue-700 underline"
             href="status_compra.html"
           >
-            Acompanhar pedido em Status da Compra
+            Acompanhar pedido em Status da Compra →
           </a>
         </div>
 
@@ -365,6 +372,8 @@
 'use strict';
 
 const CART_KEY = 'tech_sacola_geral';
+const HISTORICO_PEDIDOS_KEY = 'tech_historico_compras';
+const CANAL_PEDIDOS = 'tech_store_pedidos';
 
 const params = new URLSearchParams(location.search);
 
@@ -397,15 +406,121 @@ let cart = [];
 let products = [];
 let order = null;
 let mpBrick = null;
+let pollInterval = null;
 
-/*
-  FRETE:
-  - Valor configurado pelo administrador.
-  - Aplicado uma vez por pedido com produto físico.
-  - Produtos exclusivamente digitais: R$ 0,00.
-  - O backend deve recalcular o frete e registrar
-    o valor no pedido antes de cobrar.
-*/
+const canalComunicacao =
+  typeof BroadcastChannel !== 'undefined'
+    ? new BroadcastChannel(CANAL_PEDIDOS)
+    : null;
+
+function obterUsuarioLogado() {
+  const chaves = ['tech_user', 'user', 'usuario', 'loja_tech_user', 'auth_user'];
+  for (const chave of chaves) {
+    try {
+      const raw = localStorage.getItem(chave) || sessionStorage.getItem(chave);
+      if (!raw) continue;
+      const obj = JSON.parse(raw);
+      if (obj && (obj.email || obj.usuario || obj.cpf)) return obj;
+    } catch {}
+  }
+  return null;
+}
+
+function preencherDadosUsuarioLogado() {
+  const u = obterUsuarioLogado();
+  if (!u) return;
+  if (u.nome && !$('nome').value) $('nome').value = u.nome;
+  if (u.email && !$('email').value) $('email').value = u.email;
+  if (u.cpf && !$('cpf').value) {
+    let v = String(u.cpf).replace(/\D/g, '').slice(0, 11);
+    v = v.replace(/(\d{3})(\d)/, '$1.$2').replace(/(\d{3})(\d)/, '$1.$2').replace(/(\d{3})(\d{1,2})$/, '$1-$2');
+    $('cpf').value = v;
+  }
+  if (u.telefone && !$('telefone').value) $('telefone').value = u.telefone;
+}
+
+function registrarPedidoParaStatusCompra(dadosPedido, extras = {}) {
+  if (!dadosPedido || !dadosPedido.pedidoId) return;
+
+  const user = obterUsuarioLogado();
+  const registro = {
+    pedidoId: String(dadosPedido.pedidoId),
+    downloadToken: String(dadosPedido.downloadToken || ''),
+    produtoNome: dadosPedido.produtoNome || '',
+    valor: Number(dadosPedido.valor || 0),
+    frete: Number(dadosPedido.frete || 0),
+    forma: dadosPedido.forma || '',
+    status: extras.status || 'aguardando',
+    paymentStatus: extras.paymentStatus || (extras.status === 'pago' ? 'approved' : 'pending'),
+    criadoEm: extras.criadoEm || new Date().toISOString(),
+    clienteEmail: (extras.email || $('email')?.value || user?.email || '').trim().toLowerCase(),
+    clienteCpf: (extras.cpf || $('cpf')?.value || user?.cpf || '').replace(/\D/g, ''),
+    clienteUsuario: (user?.usuario || '').trim().toLowerCase(),
+    atualizadoEm: new Date().toISOString()
+  };
+
+  if (registro.downloadToken) {
+    sessionStorage.setItem('loja_tech_acesso_' + registro.pedidoId, registro.downloadToken);
+    localStorage.setItem('loja_tech_acesso_' + registro.pedidoId, registro.downloadToken);
+  }
+
+  try {
+    const listaAtual = JSON.parse(localStorage.getItem(HISTORICO_PEDIDOS_KEY) || '[]');
+    const lista = Array.isArray(listaAtual) ? listaAtual : [];
+    const idx = lista.findIndex(item => String(item.pedidoId) === registro.pedidoId);
+
+    if (idx >= 0) {
+      lista[idx] = {
+        ...lista[idx],
+        ...registro,
+        downloadToken: registro.downloadToken || lista[idx].downloadToken,
+        criadoEm: lista[idx].criadoEm || registro.criadoEm
+      };
+    } else {
+      lista.unshift(registro);
+    }
+
+    localStorage.setItem(HISTORICO_PEDIDOS_KEY, JSON.stringify(lista));
+  } catch (e) {
+    console.error('Erro ao salvar histórico local do pedido:', e);
+  }
+
+  localStorage.setItem(
+    'loja_tech_ultimo_evento_pedido',
+    JSON.stringify({
+      tipo: extras.aprovado ? 'PEDIDO_APROVADO' : 'PEDIDO_CRIADO',
+      pedidoId: registro.pedidoId,
+      status: registro.status,
+      paymentStatus: registro.paymentStatus,
+      timestamp: Date.now()
+    })
+  );
+
+  if (canalComunicacao) {
+    canalComunicacao.postMessage({
+      tipo: extras.aprovado ? 'PEDIDO_APROVADO' : 'PEDIDO_CRIADO',
+      pedido: registro
+    });
+  }
+}
+
+function notificarAprovacaoNoCheckout(pedidoId, downloadToken) {
+  const box = $('acessoStatusCompra');
+  const texto = $('statusComunicacaoTexto');
+  const link = $('linkStatusCompra');
+
+  box.classList.remove('hidden');
+  box.classList.remove('bg-blue-50', 'border-blue-200');
+  box.classList.add('bg-emerald-50', 'border-emerald-300');
+
+  texto.innerHTML =
+    `Pagamento aprovado! Pedido <strong>#${escapeHtml(pedidoId)}</strong> ` +
+    `sincronizado automaticamente com a aba <strong>Status da Compra</strong>.`;
+
+  link.className = 'inline-block font-bold text-emerald-800 underline';
+  link.textContent = `Ver detalhes do Pedido #${pedidoId} em Status da Compra →`;
+  link.href = `status_compra.html?pedido=${encodeURIComponent(pedidoId)}&aprovado=1`;
+}
 
 let freteConfig = null;
 let freteCarregando = false;
@@ -457,11 +572,6 @@ function itensNormalizados() {
 }
 
 function produtoDigital(p) {
-  /*
-    O servidor envia "digital" em /api/produtos, calculado com a
-    mesma regra usada para cobrar o frete (tipo digital/software
-    ou produto com arquivo). Os demais campos ficam como reforço.
-  */
   return (
     p.digital === true ||
     p.tipo === 'digital' ||
@@ -569,6 +679,7 @@ async function carregarFrete() {
 
 async function init() {
   loadCart();
+  preencherDadosUsuarioLogado();
 
   const r = await fetch('/api/produtos', {
     cache: 'no-store'
@@ -741,6 +852,79 @@ $('cpf').addEventListener('input', e => {
   e.target.value = v;
 });
 
+function iniciarMonitoramentoAutomaticoPix() {
+  if (pollInterval) clearInterval(pollInterval);
+  let tentativas = 0;
+
+  pollInterval = setInterval(async () => {
+    if (!order) {
+      clearInterval(pollInterval);
+      return;
+    }
+    tentativas++;
+    if (tentativas > 120) {
+      clearInterval(pollInterval);
+      return;
+    }
+    await consultarStatusAtual(true);
+  }, 4000);
+}
+
+async function consultarStatusAtual(silencioso = false) {
+  if (!order) return;
+
+  try {
+    const r = await fetch(
+      `/api/checkout/${encodeURIComponent(order.pedidoId)}/status`,
+      {
+        headers: {
+          'x-download-token': order.downloadToken
+        },
+        cache: 'no-store'
+      }
+    );
+
+    const d = await r.json();
+    if (!r.ok) return;
+
+    const aprovado =
+      d.status === 'pago' || d.paymentStatus === 'approved';
+
+    if ($('pixStatus')) {
+      $('pixStatus').textContent =
+        d.status === 'pago'
+          ? 'Pagamento confirmado! Seu pedido foi aprovado.'
+          : d.paymentStatus === 'approved'
+          ? `Pagamento aprovado no Mercado Pago! Finalizando liberação (${d.segundosParaVerificacao || 0}s)...`
+          : `Situação: ${d.paymentStatus || d.status || 'aguardando'}`;
+    }
+
+    registrarPedidoParaStatusCompra(order, {
+      status: d.status || (aprovado ? 'pago' : 'aguardando'),
+      paymentStatus: d.paymentStatus || (aprovado ? 'approved' : 'pending'),
+      aprovado
+    });
+
+    if (aprovado) {
+      notificarAprovacaoNoCheckout(order.pedidoId, order.downloadToken);
+      localStorage.removeItem(CART_KEY);
+      sessionStorage.removeItem('loja_tech_pedido_pendente');
+      cart = [];
+      render();
+
+      if (d.status === 'pago' && pollInterval) {
+        clearInterval(pollInterval);
+        pollInterval = null;
+      }
+    }
+  } catch {
+    if (!silencioso && $('pixStatus')) {
+      $('pixStatus').textContent =
+        'Não foi possível consultar agora.';
+    }
+  }
+}
+
 $('checkoutForm').addEventListener('submit', async e => {
   e.preventDefault();
 
@@ -791,14 +975,6 @@ $('checkoutForm').addEventListener('submit', async e => {
       }
     };
 
-    /*
-      Não enviamos um valor de frete como autoridade.
-
-      O servidor deve consultar sua própria configuração,
-      identificar os produtos físicos, calcular o frete
-      e incluí-lo no total cobrado.
-    */
-
     const r = await fetch('/api/checkout/sacola', {
       method: 'POST',
       headers: {
@@ -815,10 +991,6 @@ $('checkoutForm').addEventListener('submit', async e => {
       );
     }
 
-    /*
-      O backend precisa devolver o frete registrado
-      no pedido e o total final, já com frete.
-    */
     const freteEsperado = freteAplicavel();
 
     if (
@@ -855,10 +1027,13 @@ $('checkoutForm').addEventListener('submit', async e => {
       })
     );
 
-    sessionStorage.setItem(
-      'loja_tech_acesso_' + d.pedidoId,
-      d.downloadToken
-    );
+    registrarPedidoParaStatusCompra(d, {
+      status: 'aguardando',
+      paymentStatus: 'pending',
+      email: payload.email,
+      cpf: payload.cpf,
+      aprovado: false
+    });
 
     $('acessoStatusCompra').classList.remove('hidden');
 
@@ -871,9 +1046,11 @@ $('checkoutForm').addEventListener('submit', async e => {
 
       $('pix').classList.remove('hidden');
 
+      const pixAprovado = pd.status === 'approved';
+
       $('pixStatus').textContent =
-        pd.status === 'approved'
-          ? 'Pagamento aprovado.'
+        pixAprovado
+          ? 'Pagamento aprovado!'
           : 'Pix gerado. Aguardando confirmação do pagamento.';
 
       $('pixCode').value = pd.qrCode || '';
@@ -883,6 +1060,23 @@ $('checkoutForm').addEventListener('submit', async e => {
           `data:image/png;base64,${pd.qrCodeBase64}`;
 
         $('qr').classList.remove('hidden');
+      }
+
+      if (pixAprovado) {
+        registrarPedidoParaStatusCompra(d, {
+          status: 'pago',
+          paymentStatus: 'approved',
+          email: payload.email,
+          cpf: payload.cpf,
+          aprovado: true
+        });
+        notificarAprovacaoNoCheckout(d.pedidoId, d.downloadToken);
+        localStorage.removeItem(CART_KEY);
+        sessionStorage.removeItem('loja_tech_pedido_pendente');
+        cart = [];
+        render();
+      } else {
+        iniciarMonitoramentoAutomaticoPix();
       }
     } else {
       $('cartao').classList.remove('hidden');
@@ -955,13 +1149,23 @@ $('checkoutForm').addEventListener('submit', async e => {
                 };
 
                 const result = await cobrarPedido(paymentData);
+                const aprovado = result.status === 'approved';
 
                 $('cardStatus').textContent =
                   `Pagamento enviado. Situação: ` +
                   `${result.status || 'em análise'}. ` +
-                  `Pedido ${d.pedidoId}.`;
+                  `Pedido #${d.pedidoId}.`;
 
-                if (result.status === 'approved') {
+                registrarPedidoParaStatusCompra(d, {
+                  status: aprovado ? 'pago' : 'aguardando',
+                  paymentStatus: result.status || 'in_process',
+                  email: payload.email,
+                  cpf: payload.cpf,
+                  aprovado
+                });
+
+                if (aprovado) {
+                  notificarAprovacaoNoCheckout(d.pedidoId, d.downloadToken);
                   localStorage.removeItem(CART_KEY);
 
                   sessionStorage.removeItem(
@@ -990,10 +1194,10 @@ $('checkoutForm').addEventListener('submit', async e => {
     }
 
     msg.textContent =
-      `Pedido ${d.pedidoId} criado. ` +
+      `Pedido #${d.pedidoId} criado. ` +
       `Frete: ${money(d.frete)}. ` +
       `Total: ${money(d.valor)}. ` +
-      `Mantenha o identificador para consultar o pagamento.`;
+      `Você já pode acompanhar este pedido em Status da Compra.`;
 
     if (d.forma === 'pix') {
       $('submit').disabled = true;
@@ -1006,10 +1210,6 @@ $('checkoutForm').addEventListener('submit', async e => {
   } catch (err) {
     msg.textContent = err.message;
 
-    /*
-      Se o servidor já criou um pedido, não permitir
-      criar outro automaticamente ao tentar novamente.
-    */
     if (order) {
       btn.disabled = true;
       btn.textContent = 'Pedido já criado';
@@ -1062,44 +1262,7 @@ $('copyPix').addEventListener('click', async () => {
 });
 
 $('checkStatus').addEventListener('click', async () => {
-  if (!order) return;
-
-  try {
-    const r = await fetch(
-      `/api/checkout/${encodeURIComponent(order.pedidoId)}/status`,
-      {
-        headers: {
-          'x-download-token': order.downloadToken
-        }
-      }
-    );
-
-    const d = await r.json();
-
-    $('pixStatus').textContent =
-      d.status === 'pago'
-        ? 'Pagamento confirmado!'
-        : `Situação: ${
-            d.paymentStatus || d.status || 'aguardando'
-          }`;
-
-    if (d.status === 'pago') {
-      $('pixStatus').textContent +=
-        ' Seu pedido foi aprovado.';
-
-      localStorage.removeItem(CART_KEY);
-
-      sessionStorage.removeItem(
-        'loja_tech_pedido_pendente'
-      );
-
-      cart = [];
-      render();
-    }
-  } catch {
-    $('pixStatus').textContent =
-      'Não foi possível consultar agora.';
-  }
+  await consultarStatusAtual(false);
 });
 
 init().catch(e => {
